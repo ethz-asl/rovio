@@ -101,7 +101,8 @@ class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<S
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
     for(unsigned int i=0;i<mtState::nMax_;i++){
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)+dt*(state.template get<mtState::_nor>(i).transpose()*state.template get<mtState::_vel>()+noise.template get<mtNoise::_dep>(i)/sqrt(dt));
-//      output.template get<mtState::_nor>(i) = state.template get<mtState::_cla>(i); // todo
+      output.template get<mtState::_nor>(i) = state.template get<mtState::_nor>(i).boxplus(state.template get<mtState::_nor>(i).getM().transpose()
+          *(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i) - output.template get<mtState::_aux>().MwIMest_.cross(state.template get<mtState::_nor>(i))));
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
