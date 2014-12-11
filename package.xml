@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rovio</name>
+  <version>0.0.0</version>
+  <description>
+
+	rovio
+
+  </description>
+  <url></url>
+  <author>bloeschm</author>
+  <maintainer email="bloeschm@ethz.ch">bloeschm</maintainer>
+  <license>Propriatary</license>
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>cmake_modules</depend>
+  <depend>lightweight_filtering</depend>
+  <depend>roscpp</depend>
+  <depend>cv_bridge</depend>
+  
+</package>
