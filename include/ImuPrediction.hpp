@@ -52,11 +52,13 @@ class PredictionMeas: public State<VectorElement<3>,VectorElement<3>>{
 };
 
 template<typename STATE>
-class PredictionNoise: public State<TH_multiple_elements<VectorElement<3>,5+STATE::nMax_>,
-      TH_multiple_elements<ScalarElement,STATE::nMax_>,
-      TH_multiple_elements<VectorElement<2>,STATE::nMax_>>{
+class PredictionNoise: public State<TH_multiple_elements<VectorElement<3>,5>,
+      ArrayElement<ScalarElement,STATE::nMax_>,
+      ArrayElement<VectorElement<2>,STATE::nMax_>>{
  public:
-  using State<TH_multiple_elements<VectorElement<3>,5+STATE::nMax_>>::E_;
+  using State<TH_multiple_elements<VectorElement<3>,5>,
+      ArrayElement<ScalarElement,STATE::nMax_>,
+      ArrayElement<VectorElement<2>,STATE::nMax_>>::E_;
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _vel = _pos+1;
   static constexpr unsigned int _acb = _vel+1;
@@ -71,7 +73,7 @@ class PredictionNoise: public State<TH_multiple_elements<VectorElement<3>,5+STAT
 };
 
 template<typename STATE>
-class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STATE>>{
+class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STATE>>{
  public:
   typedef Prediction<STATE,PredictionMeas,PredictionNoise<STATE>> Base;
   using Base::eval;
@@ -83,8 +85,8 @@ class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<S
   typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtCovMat mtCovMat;
   const Eigen::Vector3d g_;
-  DeevioPrediction():g_(0,0,-9.81){};
-  ~DeevioPrediction(){};
+  ImuPrediction():g_(0,0,-9.81){};
+  ~ImuPrediction(){};
   mtState eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
     mtState output;
     output.template get<mtState::_aux>().MwIMmeas_ = meas.template get<mtMeas::_gyr>();
@@ -99,10 +101,14 @@ class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<S
         *state.template get<mtState::_vel>()-dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
+    NormalVectorElement nIn, nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
-      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)+dt*(state.template get<mtState::_nor>(i).transpose()*state.template get<mtState::_vel>()+noise.template get<mtNoise::_dep>(i)/sqrt(dt));
-      output.template get<mtState::_nor>(i) = state.template get<mtState::_nor>(i).boxplus(state.template get<mtState::_nor>(i).getM().transpose()
-          *(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i) - output.template get<mtState::_aux>().MwIMest_.cross(state.template get<mtState::_nor>(i))));
+      nIn.n_ = state.template get<mtState::_nor>(i);
+      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)+dt*(nIn.get().transpose()*state.template get<mtState::_vel>()
+          + noise.template get<mtNoise::_dep>(i)/sqrt(dt));
+      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
+          - output.template get<mtState::_aux>().MwIMest_.cross(nIn.get()))*dt+noise.template get<mtNoise::_nor>(i)/sqrt(dt)),nOut);
+      output.template get<mtState::_nor>(i) = nOut.get();
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
@@ -139,6 +145,26 @@ class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<S
         dt*rot::RotationMatrixPD(state.template get<mtState::_att>()).matrix()*Lmat(dOmega);
     J.template block<3,3>(mtState::template getId<mtState::_att>(),mtState::template getId<mtState::_att>()) =
         Eigen::Matrix3d::Identity();
+    NormalVectorElement nIn, nOut;
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      nIn.n_ = state.template get<mtState::_nor>(i);
+      J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0;
+      J.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
+          dt*nIn.get().transpose();
+      J.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
+          dt*state.template get<mtState::_vel>().transpose()*nIn.getM();
+      J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
+          Eigen::Matrix2d::Identity();
+      J.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)) =
+          nIn.getM().transpose()*state.template get<mtState::_vel>()/std::pow(state.template get<mtState::_dep>(i),2)*dt;
+      J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vel>()) =
+          nIn.getM().transpose()/state.template get<mtState::_dep>(i)*dt;
+      J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_gyb>()) =
+          nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*dt;
+//      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
+//          - output.template get<mtState::_aux>().MwIMest_.cross(nIn.get()))+noise.template get<mtNoise::_nor>(i)/sqrt(dt)),nOut);
+//      output.template get<mtState::_nor>(i) = nOut.get();
+    }
     return J;
   }
   mtJacNoise jacNoise(const mtState& state, const mtMeas& meas, double dt) const{
@@ -155,13 +181,10 @@ class DeevioPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<S
     J.template block<3,3>(mtState::template getId<mtState::_gyb>(),mtNoise::template getId<mtNoise::_gyb>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
     J.template block<3,3>(mtState::template getId<mtState::_att>(),mtNoise::template getId<mtNoise::_att>()) =
         -rot::RotationMatrixPD(state.template get<mtState::_att>()).matrix()*Lmat(dOmega)*sqrt(dt);
-    if(STATE::calVE_){
-      J.template block<3,3>(mtState::template getId<mtState::_vep>(),mtNoise::template getId<mtNoise::_vep>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
-      J.template block<3,3>(mtState::template getId<mtState::_vea>(),mtNoise::template getId<mtNoise::_vea>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
-    }
-    if(STATE::calPI_){
-      J.template block<3,3>(mtState::template getId<mtState::_pip>(),mtNoise::template getId<mtNoise::_pip>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
-      J.template block<3,3>(mtState::template getId<mtState::_pia>(),mtNoise::template getId<mtNoise::_pia>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      J(mtState::template getId<mtState::_dep>(i),mtNoise::template getId<mtNoise::_dep>(i)) = sqrt(dt);
+      J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) =
+          Eigen::Matrix2d::Identity()*sqrt(dt);
     }
     return J;
   }
