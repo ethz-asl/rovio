@@ -106,8 +106,11 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       nIn.n_ = state.template get<mtState::_nor>(i);
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)+dt*(nIn.get().transpose()*state.template get<mtState::_vel>()
           + noise.template get<mtNoise::_dep>(i)/sqrt(dt));
-      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
-          - output.template get<mtState::_aux>().MwIMest_.cross(nIn.get()))*dt+noise.template get<mtNoise::_nor>(i)/sqrt(dt)),nOut);
+      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(
+              dt*state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
+              + dOmega.cross(nIn.get()))
+              + noise.template get<mtNoise::_nor>(i)*sqrt(dt)
+          ),nOut);
       output.template get<mtState::_nor>(i) = nOut.get();
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
@@ -148,22 +151,24 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     NormalVectorElement nIn, nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       nIn.n_ = state.template get<mtState::_nor>(i);
+      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(
+              dt*state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
+              + dOmega.cross(nIn.get())
+          )),nOut);
       J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0;
       J.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
           dt*nIn.get().transpose();
       J.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
           dt*state.template get<mtState::_vel>().transpose()*nIn.getM();
       J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-          Eigen::Matrix2d::Identity();
+          nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(dOmega)*nIn.getM()
+          + nOut.getM().transpose()*(Eigen::Matrix3d::Identity())*nIn.getM();
       J.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)) =
-          nIn.getM().transpose()*state.template get<mtState::_vel>()/std::pow(state.template get<mtState::_dep>(i),2)*dt;
+          -nIn.getM().transpose()*state.template get<mtState::_vel>()/std::pow(state.template get<mtState::_dep>(i),2)*dt;
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vel>()) =
-          nIn.getM().transpose()/state.template get<mtState::_dep>(i)*dt;
+          nIn.getM().transpose()*dt/state.template get<mtState::_dep>(i);
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_gyb>()) =
-          nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*dt;
-//      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
-//          - output.template get<mtState::_aux>().MwIMest_.cross(nIn.get()))+noise.template get<mtNoise::_nor>(i)/sqrt(dt)),nOut);
-//      output.template get<mtState::_nor>(i) = nOut.get();
+          -nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*dt;
     }
     return J;
   }
