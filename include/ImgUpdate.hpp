@@ -100,6 +100,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       ImgOutlierDetection<STATE>,DummyPrediction,false> Base;
   using typename Base::eval;
   using Base::doubleRegister_;
+  using Base::intRegister_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtCovMat mtCovMat;
   typedef typename Base::mtInnovation mtInnovation;
@@ -112,16 +113,19 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     MrMV_.setZero();
     initCovFeature_.setIdentity();
     initDepth_ = 0;
+    countForRemoval_ = 100;
     doubleRegister_.registerScaledUnitMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
+    intRegister_.registerScalar("countForRemoval",countForRemoval_);
   };
   ~ImgUpdate(){};
   rot::RotationQuaternionPD qVM_;
   Eigen::Vector3d MrMV_;
   Eigen::Matrix3d initCovFeature_;
   double initDepth_;
+  int countForRemoval_;
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     mtInnovation y;
 //    /* Bearing vector error
@@ -182,6 +186,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     return J;
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
+    // Check visible features and add new ones
+    state.template get<mtState::_aux>().resetVisible();
     unsigned int stateInd, ID;
     for(unsigned int i=0;i<STATE::nMax_;i++){
       ID = meas.template get<mtMeas::_aux>().ID_[i];
@@ -190,7 +196,18 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
           state.template get<mtState::_aux>().addIndex(ID);
           stateInd = state.template get<mtState::_aux>().indFeature_.at(ID);
           state.initializeFeature(cov,stateInd,meas.template get<mtMeas::_nor>(i),initDepth_,initCovFeature_);
+        } else {
+          state.template get<mtState::_aux>().isVisible_[state.template get<mtState::_aux>().indFeature_[ID]] = true;
         }
+      }
+    }
+
+    // Count how long a feature hasn't been visible and remove if above threshold
+    state.template get<mtState::_aux>().countSinceVisible();
+    for(unsigned int i=0;i<STATE::nMax_;i++){
+      ID = state.template get<mtState::_aux>().ID_[i];
+      if(ID != 0 && state.template get<mtState::_aux>().countSinceVisible_[i] > countForRemoval_){
+        state.template get<mtState::_aux>().removeIndex(ID);
       }
     }
   };

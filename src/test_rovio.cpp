@@ -48,28 +48,28 @@ int main(){
   }
 
 
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << filter_.mPrediction_.jacInput(testState,predictionMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << filter_.mPrediction_.jacInputFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << filter_.mPrediction_.jacNoise(testState,predictionMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << filter_.mPrediction_.jacNoiseFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << filter_.mPrediction_.jacInput(testState,predictionMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << filter_.mPrediction_.jacInputFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << filter_.mPrediction_.jacNoise(testState,predictionMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << filter_.mPrediction_.jacNoiseFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(filter_.mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(filter_.mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(filter_.mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(filter_.mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
 
-
-  filter_.mPrediction_.testJacs();
-  std::get<0>(filter_.mUpdates_).testJacs();
+  filter_.mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
+  std::get<0>(filter_.mUpdates_).testJacs(testState,imgUpdateMeas_,1e-6,1e-6,0,0.1);
 
   return 0;
 }
