@@ -104,9 +104,9 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     NormalVectorElement nIn, nOut; // TODO: delete nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       nIn.n_ = state.template get<mtState::_nor>(i);
-      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt/pow(state.template get<mtState::_dep>(i),2) // TODO: check (probably wrong)
-          *(nIn.get().transpose()*state.template get<mtState::_vel>()
-          + noise.template get<mtNoise::_dep>(i)/sqrt(dt));
+      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt/pow(state.template get<mtState::_dep>(i),2)
+          *nIn.get().transpose()*state.template get<mtState::_vel>()
+          + noise.template get<mtNoise::_dep>(i)*sqrt(dt);
       Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
           + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega
           + nIn.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
@@ -155,7 +155,8 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega;
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
       nOut.get() = qm.rotate(nIn.get());
-      J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0;
+      J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0 + (2.0*dt/pow(state.template get<mtState::_dep>(i),3)
+              *nIn.get().transpose()*state.template get<mtState::_vel>());
       J.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
           -dt/pow(state.template get<mtState::_dep>(i),2)*nIn.get().transpose();
       J.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
