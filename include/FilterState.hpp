@@ -32,6 +32,9 @@
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
 #include "State.hpp"
+#include <cv_bridge/cv_bridge.h>
+#include <map>
+#include <unordered_set>
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -39,18 +42,40 @@ namespace rovio {
 
 using namespace LWF;
 
-class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary>{
+template<unsigned int nMax>
+class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
  public:
   StateAuxiliary(){
     MwIMest_.setZero();
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
+    for(unsigned int i=0;i<nMax;i++){
+      ID_[i] = 0;
+      indEmpty_.insert(i);
+    }
   };
   ~StateAuxiliary(){};
   cv::Mat img_;
+  std::map<unsigned int,unsigned int> indFeature_;
+  std::unordered_set<unsigned int> indEmpty_;
+  unsigned int ID_[nMax];
   Eigen::Vector3d MwIMest_;
   Eigen::Vector3d MwIMmeas_;
   Eigen::Matrix3d wMeasCov_;
+  void addIndex(unsigned int ID){
+    if(indEmpty_.empty()){
+      std::cout << "STATE: maximal number of feature reached" << std::endl;
+    } else {
+      ID_[*indEmpty_.begin()] = ID;
+      indFeature_[ID] = *indEmpty_.begin();
+      indEmpty_.erase(indEmpty_.begin());
+    }
+  }
+  void removeIndex(unsigned int ID){
+    ID_[indFeature_.at(ID)] = 0;
+    indEmpty_.insert(indFeature_.at(ID));
+    indFeature_.erase (ID);
+  }
 };
 
 template<unsigned int nMax>
@@ -59,14 +84,14 @@ class FilterState: public State<
     QuaternionElement,
     ArrayElement<ScalarElement,nMax>,
     ArrayElement<NormalVectorElement,nMax>,
-    StateAuxiliary>{
+    StateAuxiliary<nMax>>{
  public:
   typedef State<
       TH_multiple_elements<VectorElement<3>,4>,
       QuaternionElement,
       ArrayElement<ScalarElement,nMax>,
       ArrayElement<NormalVectorElement,nMax>,
-      StateAuxiliary> Base;
+      StateAuxiliary<nMax>> Base;
   typedef typename Base::mtCovMat mtCovMat;
   using Base::D_;
   using Base::E_;
@@ -102,6 +127,18 @@ class FilterState: public State<
     } else {
       this->template get<_att>().setIdentity();
     }
+  }
+  void initializeFeature(mtCovMat& stateCov, unsigned int i, Eigen::Vector3d n, double d,const Eigen::Matrix<double,3,3>& initCov){
+    this->template get<_dep>(i) = d;
+    this->template get<_nor>(i) = n;
+    stateCov.template block<D_,1>(0,this->template getId<_dep>(i)).setZero();
+    stateCov.template block<1,D_>(this->template getId<_dep>(i),0).setZero();
+    stateCov.template block<D_,2>(0,this->template getId<_nor>(i)).setZero();
+    stateCov.template block<2,D_>(this->template getId<_nor>(i),0).setZero();
+    stateCov.template block<1,1>(this->template getId<_dep>(i),this->template getId<_dep>(i)) = initCov.block<1,1>(0,0);
+    stateCov.template block<1,2>(this->template getId<_dep>(i),this->template getId<_nor>(i)) = initCov.block<1,2>(0,1);
+    stateCov.template block<2,1>(this->template getId<_nor>(i),this->template getId<_dep>(i)) = initCov.block<2,1>(1,0);
+    stateCov.template block<2,2>(this->template getId<_nor>(i),this->template getId<_nor>(i)) = initCov.block<2,2>(1,1);
   }
 };
 

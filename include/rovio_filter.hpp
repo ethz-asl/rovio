@@ -26,28 +26,27 @@
 *
 */
 
-#ifndef DEEVIO_FILTER_HPP_
-#define DEEVIO_FILTER_HPP_
+#ifndef ROVIO_FILTER_HPP_
+#define ROVIO_FILTER_HPP_
 
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
 #include "FilterBase.hpp"
 #include "State.hpp"
 #include "FilterState.hpp"
-#include "DeevioUpdate.hpp"
-#include "KinUpdate.hpp"
-#include "DeevioPrediction.hpp"
+#include "ImgUpdate.hpp"
+#include "ImuPrediction.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
-namespace deevio {
+namespace rovio {
 
 using namespace LWF;
 
 template<typename STATE>
-class Filter:public FilterBase<DeevioPrediction<STATE>,DeevioUpdate<STATE>,KinUpdate<STATE>>{
+class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
  public:
-  typedef FilterBase<DeevioPrediction<STATE>,DeevioUpdate<STATE>,KinUpdate<STATE>> Base;
+  typedef FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
@@ -57,42 +56,33 @@ class Filter:public FilterBase<DeevioPrediction<STATE>,DeevioUpdate<STATE>,KinUp
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtPrediction mtPrediction;
   Filter(){
-    readFromInfo("deevio.info");
+    readFromInfo("rovio.info");
     std::get<0>(init_.outlierDetectionTuple_).setEnabledAll(true);
-    std::get<1>(init_.outlierDetectionTuple_).setEnabledAll(true);
     reset(0.0);
   }
   ~Filter(){};
-  bool getSlipFlag(const mtFilterState& filterState,unsigned int legId){
-    assert(legId<nFeet);
-    return std::get<1>(filterState.outlierDetectionTuple_).isOutlier(legId);
-  }
-  bool getDeevioOutlierFlag(const mtFilterState& filterState){
-    assert(legId<nFeet);
-    return std::get<0>(filterState.outlierDetectionTuple_).isOutlier(0);
-  }
-  void resetToImuPose(Eigen::Vector3d IrIM, rot::RotationQuaternionPD qMI, double t = 0.0){
-    init_.state_.initWithImuPose(IrIM,qMI);
-    reset(t);
-  }
-  void resetWithAccelerometer(const Eigen::Vector3d& fMeasInit, double t = 0.0){
-    init_.state_.initWithAccelerometer(fMeasInit);
-    reset(t);
-  }
-  void resetToKeyframe(double t = 0.0) {
-    std::cout << "Reseting to keyframe" << std::endl;
-    double imuMeasTime = 0.0;
-    if(predictionTimeline_.getNextTime(t,imuMeasTime)){  // Find close accelerometer measurement
-      resetWithAccelerometer(predictionTimeline_.measMap_[imuMeasTime].template get<mtPrediction::mtMeas::_acc>(),t); // Initialize with accelerometer
-    } else {
-      reset(t);
-    }
-    safe_.state_.cloneCurrentToKeyframe(safe_.cov_,t);
-    front_ = safe_;
-  }
+//  void resetToImuPose(Eigen::Vector3d IrIM, rot::RotationQuaternionPD qMI, double t = 0.0){
+//    init_.state_.initWithImuPose(IrIM,qMI);
+//    reset(t);
+//  }
+//  void resetWithAccelerometer(const Eigen::Vector3d& fMeasInit, double t = 0.0){
+//    init_.state_.initWithAccelerometer(fMeasInit);
+//    reset(t);
+//  }
+//  void resetToKeyframe(double t = 0.0) {
+//    std::cout << "Reseting to keyframe" << std::endl;
+//    double imuMeasTime = 0.0;
+//    if(predictionTimeline_.getNextTime(t,imuMeasTime)){  // Find close accelerometer measurement
+//      resetWithAccelerometer(predictionTimeline_.measMap_[imuMeasTime].template get<mtPrediction::mtMeas::_acc>(),t); // Initialize with accelerometer
+//    } else {
+//      reset(t);
+//    }
+//    safe_.state_.cloneCurrentToKeyframe(safe_.cov_,t);
+//    front_ = safe_;
+//  }
 };
 
 }
 
 
-#endif /* DEEVIO_FILTER_HPP_ */
+#endif /* ROVIO_FILTER_HPP_ */

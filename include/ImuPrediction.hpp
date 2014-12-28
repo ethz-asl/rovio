@@ -101,17 +101,17 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
         *state.template get<mtState::_vel>()-dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
-    NormalVectorElement nIn, nOut;
+    NormalVectorElement nIn, nOut; // TODO: delete nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       nIn.n_ = state.template get<mtState::_nor>(i);
-      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)+dt*(nIn.get().transpose()*state.template get<mtState::_vel>()
+      output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt/pow(state.template get<mtState::_dep>(i),2) // TODO: check (probably wrong)
+          *(nIn.get().transpose()*state.template get<mtState::_vel>()
           + noise.template get<mtNoise::_dep>(i)/sqrt(dt));
-      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(
-              dt*state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
-              + dOmega.cross(nIn.get()))
-              + noise.template get<mtNoise::_nor>(i)*sqrt(dt)
-          ),nOut);
-      output.template get<mtState::_nor>(i) = nOut.get();
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega
+          + nIn.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
+      rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
+      output.template get<mtState::_nor>(i) = qm.rotate(nIn.get());
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
@@ -122,7 +122,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     meas.template get<mtMeas::_acc>() = state.template get<mtState::_gyb>();
     meas.template get<mtMeas::_gyr>() = state.template get<mtState::_acb>()-state.template get<mtState::_att>().inverseRotate(g_);
   }
-  mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt) const{
+  mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt) const{ // TODO: correct for inverse depth
     mtJacInput J;
     Eigen::Vector3d dOmega = -dt*(meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>());
     J.setIdentity(); // Handles clone and calibrations
@@ -151,24 +151,31 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     NormalVectorElement nIn, nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       nIn.n_ = state.template get<mtState::_nor>(i);
-      nIn.boxPlus(Eigen::Vector2d(nIn.getM().transpose()*(
-              dt*state.template get<mtState::_vel>()/state.template get<mtState::_dep>(i)
-              + dOmega.cross(nIn.get())
-          )),nOut);
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega;
+      rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
+      nOut.get() = qm.rotate(nIn.get());
       J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0;
       J.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
-          dt*nIn.get().transpose();
+          -dt/pow(state.template get<mtState::_dep>(i),2)*nIn.get().transpose();
       J.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
-          dt*state.template get<mtState::_vel>().transpose()*nIn.getM();
+          -dt/pow(state.template get<mtState::_dep>(i),2)*state.template get<mtState::_vel>().transpose()*nIn.getM();
       J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-          nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(dOmega)*nIn.getM()
-          + nOut.getM().transpose()*(Eigen::Matrix3d::Identity())*nIn.getM();
+          nOut.getM().transpose()*(
+                  kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)*(
+                      -dt*state.template get<mtState::_dep>(i)*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_vel>())
+                      -Eigen::Matrix3d::Identity()*(nIn.get().dot(dOmega))-nIn.get()*dOmega.transpose())
+                  +rot::RotationMatrixPD(qm).matrix()
+          )*nIn.getM();
       J.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)) =
-          -nIn.getM().transpose()*state.template get<mtState::_vel>()/std::pow(state.template get<mtState::_dep>(i),2)*dt;
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
+              *dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>();
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vel>()) =
-          nIn.getM().transpose()*dt/state.template get<mtState::_dep>(i);
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
+              *dt*state.template get<mtState::_dep>(i)*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get());
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_gyb>()) =
-          -nIn.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*dt;
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
+              *(Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dt;
     }
     return J;
   }
@@ -186,10 +193,19 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     J.template block<3,3>(mtState::template getId<mtState::_gyb>(),mtNoise::template getId<mtNoise::_gyb>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
     J.template block<3,3>(mtState::template getId<mtState::_att>(),mtNoise::template getId<mtNoise::_att>()) =
         -rot::RotationMatrixPD(state.template get<mtState::_att>()).matrix()*Lmat(dOmega)*sqrt(dt);
+    NormalVectorElement nIn, nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
+      nIn.n_ = state.template get<mtState::_nor>(i);
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega;
+      rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
+      nOut.get() = qm.rotate(nIn.get());
       J(mtState::template getId<mtState::_dep>(i),mtNoise::template getId<mtNoise::_dep>(i)) = sqrt(dt);
       J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) =
-          Eigen::Matrix2d::Identity()*sqrt(dt);
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)*nIn.getN()*sqrt(dt);
+      J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_att>()) =
+          -nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
+          *(Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*sqrt(dt);
     }
     return J;
   }
