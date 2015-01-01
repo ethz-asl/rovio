@@ -26,8 +26,8 @@
 *
 */
 
-#ifndef STARLETH_FILTER_HPP_
-#define STARLETH_FILTER_HPP_
+#ifndef ROVIO_NODE_HPP_
+#define ROVIO_NODE_HPP_
 
 #include <Eigen/Dense>
 
@@ -43,6 +43,9 @@
 #include <opencv2/video/tracking.hpp>
 //#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+
+#include <ros-camera.h>
+#include <unordered_set>
 
 namespace rovio{
 
@@ -118,7 +121,7 @@ inline float FindShiTomasiScoreAtPoint(const cv::Mat& image, int nHalfBoxSize,
           - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
 }
 template<typename Compare>
-void distributeUniformly(std::vector<cv::KeyPoint>& keypoints, int imgwidth,
+void distributeUniformly(std::vector<cv::KeyPoint>& keypoints, std::vector<cv::Point2f>& current_keypoints, int imgwidth,
                          int imgheight, double radius, Compare compare) {
 
   cv::Mat _LUT = cv::Mat::zeros(2 * 16 - 1, 2 * 16 - 1, CV_32F);
@@ -130,6 +133,8 @@ void distributeUniformly(std::vector<cv::KeyPoint>& keypoints, int imgwidth,
 
   // Sort.
   std::sort(keypoints.begin(), keypoints.end(), compare);
+  std::cout << "Max score: " << keypoints.begin()->response << std::endl;
+  std::cout << "Min score: " << keypoints.rbegin()->response << std::endl;
 
   std::vector<cv::KeyPoint> keypoints_new;
   keypoints_new.reserve(keypoints.size());
@@ -196,6 +201,75 @@ void distributeUniformly(std::vector<cv::KeyPoint>& keypoints, int imgwidth,
   keypoints.swap(keypoints_new);
 }
 
+void distributeUniformlyMic(std::vector<cv::KeyPoint>& keypoints, std::vector<cv::Point2f>& current_keypoints) {
+  float maxResponse = -1.0;
+  for (auto it = keypoints.begin(); it != keypoints.end(); ++it) {
+    if(it->response > maxResponse) maxResponse = it->response;
+  }
+
+  const unsigned int nBuckets = 100; // TODO param
+  std::unordered_set<cv::KeyPoint*> buckets[nBuckets];
+
+  unsigned int newBucketID;
+  for (auto it = keypoints.begin(); it != keypoints.end(); ++it) {
+    if(it->response > 0.0){
+      newBucketID = std::ceil(nBuckets*(it->response/maxResponse))-1;
+      if(newBucketID>nBuckets-1) newBucketID = nBuckets-1;
+      buckets[newBucketID].insert(&(*it));
+    }
+  }
+
+  double distance;
+  double maxDistance = 100; // TODO param
+  double zeroDistancePenalty = nBuckets*1.0; // TODO param
+  cv::KeyPoint* mpKeyPoint;
+  for (auto it_current = current_keypoints.begin(); it_current != current_keypoints.end(); ++it_current) {
+    for (unsigned int bucketID = 1;bucketID < nBuckets;bucketID++) {
+      auto it = buckets[bucketID].begin();
+      while(it != buckets[bucketID].end()) {
+        mpKeyPoint = *it;
+        it++;
+        distance = std::sqrt(std::pow(it_current->x - mpKeyPoint->pt.x,2) + std::pow(it_current->y - mpKeyPoint->pt.y,2));
+        if(distance<maxDistance){
+          newBucketID = std::max((int)(bucketID - (maxDistance-distance)/maxDistance*zeroDistancePenalty),0);
+          if(bucketID != newBucketID){
+            buckets[newBucketID].insert(mpKeyPoint);
+            buckets[bucketID].erase(mpKeyPoint);
+          }
+        }
+      }
+    }
+  }
+
+  std::vector<cv::KeyPoint> keypoints_new;
+  keypoints_new.reserve(keypoints.size());
+  cv::KeyPoint* mpKeyPoint2;
+  for (int bucketID = nBuckets-1;bucketID >= 0;bucketID--) {
+    while(!buckets[bucketID].empty()) {
+      mpKeyPoint = *(buckets[bucketID].begin());
+      buckets[bucketID].erase(mpKeyPoint);
+      keypoints_new.push_back(*mpKeyPoint);
+      for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
+        auto it = buckets[bucketID2].begin();
+        while(it != buckets[bucketID2].end()) {
+          mpKeyPoint2 = *it;
+          it++;
+          distance = std::sqrt(std::pow(mpKeyPoint->pt.x - mpKeyPoint2->pt.x,2) + std::pow(mpKeyPoint->pt.y - mpKeyPoint2->pt.y,2));
+          if(distance<maxDistance){
+            newBucketID = std::max((int)(bucketID2 - (maxDistance-distance)/maxDistance*zeroDistancePenalty),0);
+            if(bucketID2 != newBucketID){
+              buckets[newBucketID].insert(mpKeyPoint2);
+              buckets[bucketID2].erase(mpKeyPoint2);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  keypoints.swap(keypoints_new);
+}
+
 class TestNode{
  public:
   ros::NodeHandle nh_;
@@ -217,9 +291,10 @@ class TestNode{
   std::shared_ptr<lk_landmark> landmarks_prev_image_, landmarks_curr_image_;
   std::shared_ptr<cv::FeatureDetector> feature_detector_fast_;
   std::vector<TrackedKeypointWithID> feature_and_index_vec_;
-//  std::shared_ptr<RosCamera> camera_;
+  std::shared_ptr<RosCamera> camera_;
   TestNode(ros::NodeHandle& nh): nh_(nh), termcrit_(cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 20,0.03)),
       sub_pix_win_size_(cv::Size(10, 10)),win_size_(cv::Size(31, 31)){
+    camera_.reset(new RosCamera("fpga21_cam0.yaml"));
     subImu_ = nh_.subscribe("imuMeas", 1000, &TestNode::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestNode::imgCallback,this);
     pubPose_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("filterPose", 1000);
@@ -227,7 +302,7 @@ class TestNode{
     draw_matches_ = true;
     use_fast_corners_ = true;
     min_feature_count_ = 150;
-    max_feature_count_ = 100; // Maximal number of feature which is added at a time (not total)
+    max_feature_count_ = 20; // Maximal number of feature which is added at a time (not total)
     fast_threshold_ = 10;
     uniformity_radius_ = 50;
     need_init_ = false;
@@ -275,7 +350,7 @@ class TestNode{
       if (!use_fast_corners_)
         DetectGfttCorners(prev_image_, points_temp);
       else
-        DetectFastCorners(prev_image_, points_temp);
+        DetectFastCorners(prev_image_, points_temp, landmarks_prev_image_->landmarks_);
 
       // Assign IDs to points and add them to vectors
       for (size_t i = 0; i < points_temp.size(); ++i) {
@@ -330,13 +405,13 @@ class TestNode{
         landmarks_curr_image_->idx_[k] = landmarks_curr_image_->idx_[i];
         ++k;
 
-//        Eigen::Vector3d dirvec_f2 = camera_->camToWorld(
-//            feature_and_index_vec_.back().location_current_frame.x(),
-//            feature_and_index_vec_.back().location_current_frame.y());
-//        Eigen::Vector3d dirvec_f1 = camera_->camToWorld(
-//            feature_and_index_vec_.back().location_previous_frame.x(),
-//            feature_and_index_vec_.back().location_previous_frame.y());
-//
+        Eigen::Vector3d dirvec_f2 = camera_->camToWorld(
+            feature_and_index_vec_.back().location_current_frame.x(),
+            feature_and_index_vec_.back().location_current_frame.y());
+        Eigen::Vector3d dirvec_f1 = camera_->camToWorld(
+            feature_and_index_vec_.back().location_previous_frame.x(),
+            feature_and_index_vec_.back().location_previous_frame.y());
+
 //        fprintf(pFile, "%.6f\t%.6f\t%.6f\t\t%.6f\t%.6f\t%.6f\t\n", dirvec_f1[0],
 //                dirvec_f1[1], dirvec_f1[2], dirvec_f2[0], dirvec_f2[1],
 //                dirvec_f2[2]);
@@ -406,7 +481,7 @@ class TestNode{
   }
 
 
-  void DetectFastCorners(cv::Mat& img, std::vector<cv::Point2f>& detected_keypoints) {
+  void DetectFastCorners(cv::Mat& img, std::vector<cv::Point2f>& detected_keypoints, std::vector<cv::Point2f>& current_keypoints) {
     std::vector<cv::KeyPoint> keypoints;
     double t1 = (double) cv::getTickCount();
     feature_detector_fast_->detect(img, keypoints);
@@ -421,7 +496,8 @@ class TestNode{
       it->response = FindShiTomasiScoreAtPoint(img, 3, it->pt);
     }
     double t3 = cv::getTickCount();
-    distributeUniformly(keypoints, img.cols, img.rows, uniformity_radius_, [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {return a.response > b.response;});
+    distributeUniformlyMic(keypoints, current_keypoints);
+//    distributeUniformly(keypoints, current_keypoints, img.cols, img.rows, uniformity_radius_, [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {return a.response > b.response;});
     double t4 = cv::getTickCount();
 
     if (keypoints.size() > max_feature_count_) {
@@ -449,4 +525,4 @@ class TestNode{
 }
 
 
-#endif /* STARLETH_FILTER_HPP_ */
+#endif /* ROVIO_NODE_HPP_ */

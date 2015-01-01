@@ -42,13 +42,21 @@ namespace rovio {
 
 using namespace LWF;
 
+template<int size>
+struct Patch {
+  static const int size_ = size;
+  uint8_t data_[size_*size_] __attribute__ ((aligned (16)));
+};
+
 template<unsigned int nMax>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
  public:
   StateAuxiliary(){
+    imgTime_ = 0.0;
     MwIMest_.setZero();
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
+    maxID_ = 0;
     for(unsigned int i=0;i<nMax;i++){
       ID_[i] = 0;
       countSinceVisible_[i] = 0;
@@ -57,24 +65,33 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
     }
   };
   ~StateAuxiliary(){};
-  cv::Mat img_;
+  cv::Mat img_; // TODO: handle empty img_.empty()
+  double imgTime_;
   std::map<unsigned int,unsigned int> indFeature_;
   std::unordered_set<unsigned int> indEmpty_;
   unsigned int ID_[nMax];
+  Patch<10> patchesWithBorder_[nMax];
   bool isVisible_[nMax];
-  unsigned int countSinceVisible_[nMax];
+  unsigned int countSinceVisible_[nMax]; // TODO -> time (dt in prediction)
+  Eigen::Vector3d norInCurrentFrame_[nMax];
   Eigen::Vector3d MwIMest_;
   Eigen::Vector3d MwIMmeas_;
   Eigen::Matrix3d wMeasCov_;
-  void addIndex(unsigned int ID){
+  unsigned int maxID_;
+  unsigned int addIndex(unsigned int ID){ // todo rename
+    assert(ID>0);
     if(indEmpty_.empty()){
       std::cout << "STATE: maximal number of feature reached" << std::endl;
+      return 0;
     } else {
-      ID_[*indEmpty_.begin()] = ID;
-      indFeature_[ID] = *indEmpty_.begin();
-      countSinceVisible_[indFeature_[ID]] = 0;
-      isVisible_[indFeature_[ID]] = false;
-      indEmpty_.erase(indEmpty_.begin());
+      unsigned int ind = *(indEmpty_.begin());
+      ID_[ind] = ID;
+      indFeature_[ID] = ind;
+      countSinceVisible_[ind] = 0;
+      isVisible_[ind] = false;
+      indEmpty_.erase(ind);
+      if(ID > maxID_) maxID_ = ID;
+      return ind;
     }
   }
   void removeIndex(unsigned int ID){
@@ -95,6 +112,9 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
         countSinceVisible_[i] = 0;
       }
     }
+  }
+  unsigned int getTotFeatureNo(){
+    return indFeature_.size();
   }
 };
 
@@ -148,7 +168,7 @@ class FilterState: public State<
       this->template get<_att>().setIdentity();
     }
   }
-  void initializeFeature(mtCovMat& stateCov, unsigned int i, Eigen::Vector3d n, double d,const Eigen::Matrix<double,3,3>& initCov){
+  void initializeFeatureState(mtCovMat& stateCov, unsigned int i, Eigen::Vector3d n, double d,const Eigen::Matrix<double,3,3>& initCov){
     this->template get<_dep>(i) = d;
     this->template get<_nor>(i) = n;
     stateCov.template block<D_,1>(0,this->template getId<_dep>(i)).setZero();

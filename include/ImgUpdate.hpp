@@ -35,6 +35,8 @@
 #include "State.hpp"
 #include "FilterState.hpp"
 #include <cv_bridge/cv_bridge.h>
+#include "common_vision.hpp"
+#include <ros-camera.h>
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -58,20 +60,19 @@ class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<n
  public:
   ImgUpdateMeasAuxiliary(){
     for(unsigned int i=0;i<nMax;i++){
-      ID_[i] = 0;
+      imgTime_ = 0.0;
     }
   };
   ~ImgUpdateMeasAuxiliary(){};
   cv::Mat img_;
-  unsigned int ID_[nMax];
+  double imgTime_;
 };
 template<typename STATE>
-class ImgUpdateMeas: public State<ArrayElement<NormalVectorElement,STATE::nMax_>,ImgUpdateMeasAuxiliary<STATE::nMax_>>{
+class ImgUpdateMeas: public State<ImgUpdateMeasAuxiliary<STATE::nMax_>>{
  public:
-  typedef State<ArrayElement<NormalVectorElement,STATE::nMax_>,ImgUpdateMeasAuxiliary<STATE::nMax_>> Base;
+  typedef State<ImgUpdateMeasAuxiliary<STATE::nMax_>> Base;
   using Base::E_;
-  static constexpr unsigned int _nor = 0;
-  static constexpr unsigned int _aux = _nor+1;
+  static constexpr unsigned int _aux = 0;
   ImgUpdateMeas(){
     static_assert(_aux+1==E_,"Error with indices");
   };
@@ -109,6 +110,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
   ImgUpdate(){
+    camera_.reset(new RosCamera("fpga21_cam0.yaml"));
     qVM_.setIdentity();
     MrMV_.setZero();
     initCovFeature_.setIdentity();
@@ -126,19 +128,17 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   Eigen::Matrix3d initCovFeature_;
   double initDepth_;
   int countForRemoval_;
+  std::shared_ptr<RosCamera> camera_;
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     mtInnovation y;
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
 //     */
     NormalVectorElement m_est, m_meas;
-    unsigned int stateInd, ID;
     for(unsigned int i=0;i<STATE::nMax_;i++){
-      ID = meas.template get<mtMeas::_aux>().ID_[i];
-      if(ID != 0){
-        stateInd = state.template get<mtState::_aux>().indFeature_.at(ID);
-        m_est.n_ = state.template get<mtState::_nor>(stateInd);
-        m_meas.n_ = meas.template get<mtMeas::_nor>(i);
+      if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
+        m_est.n_ = state.template get<mtState::_nor>(i);
+        m_meas.n_ = state.template get<mtState::_aux>().norInCurrentFrame_[i];
         m_est.boxMinus(m_meas,y.template get<mtInnovation::_nor>(i));
         y.template get<mtInnovation::_nor>(i) += noise.template get<mtNoise::_nor>(i);
       } else {
@@ -151,15 +151,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     mtJacInput J;
     J.setZero();
     NormalVectorElement m_est, m_meas;
-    unsigned int stateInd, ID;
     Eigen::Vector3d vec;
-    double vecNorm,a; // todo
+    double a; // todo
     for(unsigned int i=0;i<STATE::nMax_;i++){
-      ID = meas.template get<mtMeas::_aux>().ID_[i];
-      if(ID != 0){
-        stateInd = state.template get<mtState::_aux>().indFeature_.at(ID);
-        m_est.n_ = state.template get<mtState::_nor>(stateInd);
-        m_meas.n_ = meas.template get<mtMeas::_nor>(i);
+      if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
+        m_est.n_ = state.template get<mtState::_nor>(i);
+        m_meas.n_ = state.template get<mtState::_aux>().norInCurrentFrame_[i];
         rot::RotationQuaternionPD q;
         q.setFromVectors(m_meas.n_,m_est.n_);
         vec = -q.logarithmicMap(); // vec*std::asin(vecNorm)/vecNorm
@@ -168,7 +165,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 //        vec = -m_meas.n_.cross(m_est.n_);
 //        vecNorm = vec.norm();
 //        std::cout << vec*std::asin(vecNorm)/vecNorm << std::endl;
-        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(stateInd)) =
+        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
             -m_meas.getN().transpose()*(
                 Eigen::Matrix3d::Identity()*a/std::sin(a)
                 +(vec*vec.transpose())*(1/(std::sqrt(1-std::pow(std::sin(a),2))*pow(a,2))-1/std::sin(a)/a) // TODO: handle special cases
@@ -186,23 +183,63 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     return J;
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
-    // Check visible features and add new ones
     state.template get<mtState::_aux>().resetVisible();
-    unsigned int stateInd, ID;
-    for(unsigned int i=0;i<STATE::nMax_;i++){
-      ID = meas.template get<mtMeas::_aux>().ID_[i];
-      if(ID != 0){
-        if(state.template get<mtState::_aux>().indFeature_.count(ID)==0){
-          state.template get<mtState::_aux>().addIndex(ID);
-          stateInd = state.template get<mtState::_aux>().indFeature_.at(ID);
-          state.initializeFeature(cov,stateInd,meas.template get<mtMeas::_nor>(i),initDepth_,initCovFeature_);
-        } else {
-          state.template get<mtState::_aux>().isVisible_[state.template get<mtState::_aux>().indFeature_[ID]] = true;
+    if(meas.template get<mtMeas::_aux>().img_.empty()){
+      std::cout << "Img Update Error: Image is empty" << std::endl;
+      return;
+    } else {
+      // Search visible features
+      unsigned int ID;
+      Eigen::Vector2d vec2;
+      Eigen::Vector3d vec3;
+      bool converged;
+      uint8_t patch[64] __attribute__ ((aligned (16)));
+      for(unsigned int i=0;i<STATE::nMax_;i++){
+        ID = state.template get<mtState::_aux>().ID_[i];
+        if(ID != 0){
+          vec2 = camera_->worldToCam(state.template get<mtState::_nor>(i));
+          // TODO: reject feature which are not in image
+          createPatchFromPatchWithBorder(state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch);
+          // TODO: make multiple samples depending on covariance
+          converged = align2D(meas.template get<mtMeas::_aux>().img_,state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch,10,vec2);
+          if(converged){
+            state.template get<mtState::_aux>().isVisible_[i] = true;
+            vec3 = camera_->camToWorld(vec2.x(),vec2.y());
+            vec3.normalize();
+            state.template get<mtState::_aux>().norInCurrentFrame_[i] = vec3;
+          }
         }
       }
     }
-
-    // Count how long a feature hasn't been visible and remove if above threshold
+  };
+  void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
+    // Check if new feature should be added to the state
+    state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
+    state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
+    std::vector<cv::Point2f> points_current;
+    Eigen::Vector2d vec2;
+    for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
+      vec2 = camera_->worldToCam(state.template get<mtState::_nor>(it->second));
+      points_current.emplace_back(vec2(0),vec2(1));
+    }
+    std::vector<cv::Point2f> points_temp;
+    const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
+    if(missingFeatureCount > 0){ // TODO: param
+      DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
+    }
+    Eigen::Vector3d vec3;
+    unsigned int stateInd, ID;
+    for(auto it = points_temp.begin();it != points_temp.end();++it){
+      vec3 = camera_->camToWorld(it->x,it->y);
+      vec3.normalize();
+      ID = state.template get<mtState::_aux>().maxID_;
+      stateInd = state.template get<mtState::_aux>().addIndex(ID);
+      if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
+        state.initializeFeatureState(cov,stateInd,vec3,initDepth_,initCovFeature_);
+      } else {
+        state.template get<mtState::_aux>().removeIndex(ID);
+      }
+    }
     state.template get<mtState::_aux>().countSinceVisible();
     for(unsigned int i=0;i<STATE::nMax_;i++){
       ID = state.template get<mtState::_aux>().ID_[i];
@@ -210,6 +247,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         state.template get<mtState::_aux>().removeIndex(ID);
       }
     }
+
+    // TODO: get newest patch
   };
 };
 

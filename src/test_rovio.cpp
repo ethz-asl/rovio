@@ -37,15 +37,20 @@ int main(){
   mtState testState;
   testState.setRandom(1);
   for(unsigned int i=0;i<nMax_;i++){
-    testState.template get<mtState::_aux>().addIndex(i);
+    testState.template get<mtState::_aux>().addIndex(i+1);
+  }
+  for(unsigned int i=0;i<nMax_;i++){
+    testState.template get<mtState::_aux>().isVisible_[i] = true;
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i] = testState.template get<mtState::_nor>(i);
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i] += Eigen::Vector3d(i*0.1,-(i*0.3)+0.03,0.1);
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i].normalize();
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i] = Eigen::Vector3d(1.0,0.3,0.5);
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i].normalize();
   }
   mtPredictionMeas predictionMeas_;
   predictionMeas_.setRandom(1);
   mtImgMeas imgUpdateMeas_;
   imgUpdateMeas_.setRandom(1);
-  for(unsigned int i=0;i<nMax_;i++){
-    imgUpdateMeas_.template get<mtImgMeas::_aux>().ID_[i] = i;
-  }
 
 
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
@@ -56,15 +61,15 @@ int main(){
 //  std::cout << filter_.mPrediction_.jacNoise(testState,predictionMeas_,0.1) << std::endl;
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
 //  std::cout << filter_.mPrediction_.jacNoiseFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
-//
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << std::get<0>(filter_.mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << std::get<0>(filter_.mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << std::get<0>(filter_.mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << std::get<0>(filter_.mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
+
+  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+  std::cout << std::get<0>(filter_.mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
+  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+  std::cout << std::get<0>(filter_.mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
+  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+  std::cout << std::get<0>(filter_.mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
+  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+  std::cout << std::get<0>(filter_.mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
 
 

@@ -112,9 +112,18 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           + nIn.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
       output.template get<mtState::_nor>(i) = qm.rotate(nIn.get());
+      output.template get<mtState::_aux>().countSinceVisible_[i] = state.template get<mtState::_aux>().countSinceVisible_[i];
+      output.template get<mtState::_aux>().isVisible_[i] = state.template get<mtState::_aux>().isVisible_[i];
+      output.template get<mtState::_aux>().patchesWithBorder_[i] = state.template get<mtState::_aux>().patchesWithBorder_[i];
+      output.template get<mtState::_aux>().ID_[i] = state.template get<mtState::_aux>().ID_[i];
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
+    output.template get<mtState::_aux>().maxID_ = state.template get<mtState::_aux>().maxID_;
+    output.template get<mtState::_aux>().indEmpty_ = state.template get<mtState::_aux>().indEmpty_;
+    output.template get<mtState::_aux>().indFeature_ = state.template get<mtState::_aux>().indFeature_;
+    output.template get<mtState::_aux>().imgTime_ = state.template get<mtState::_aux>().imgTime_;
+    // todo: change to avoid copy
     output.fix();
     return output;
   }

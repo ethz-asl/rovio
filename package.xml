@@ -17,5 +17,6 @@
   <depend>lightweight_filtering</depend>
   <depend>roscpp</depend>
   <depend>cv_bridge</depend>
+  <depend>camera_calibration_parsers</depend>
   
 </package>
