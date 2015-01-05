@@ -101,7 +101,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
         *state.template get<mtState::_vel>()-dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
-    NormalVectorElement nIn, nOut; // TODO: delete nOut;
+    NormalVectorElement nIn;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       nIn.n_ = state.template get<mtState::_nor>(i);
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt/pow(state.template get<mtState::_dep>(i),2)
@@ -112,7 +112,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           + nIn.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
       output.template get<mtState::_nor>(i) = qm.rotate(nIn.get());
-      output.template get<mtState::_aux>().countSinceVisible_[i] = state.template get<mtState::_aux>().countSinceVisible_[i];
+      output.template get<mtState::_aux>().timeSinceVisible_[i] = state.template get<mtState::_aux>().timeSinceVisible_[i]+dt;
       output.template get<mtState::_aux>().isVisible_[i] = state.template get<mtState::_aux>().isVisible_[i];
       output.template get<mtState::_aux>().patchesWithBorder_[i] = state.template get<mtState::_aux>().patchesWithBorder_[i];
       output.template get<mtState::_aux>().ID_[i] = state.template get<mtState::_aux>().ID_[i];
@@ -131,7 +131,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     meas.template get<mtMeas::_acc>() = state.template get<mtState::_gyb>();
     meas.template get<mtMeas::_gyr>() = state.template get<mtState::_acb>()-state.template get<mtState::_att>().inverseRotate(g_);
   }
-  mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt) const{ // TODO: correct for inverse depth
+  mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt) const{
     mtJacInput J;
     Eigen::Vector3d dOmega = -dt*(meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>());
     J.setIdentity(); // Handles clone and calibrations

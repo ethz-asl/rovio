@@ -29,15 +29,15 @@
 #include "rovio_filter.hpp"
 
 int main(){
-  static const unsigned int nMax_ = 2;
+  static const unsigned int nMax_ = 20;
   typedef rovio::FilterState<nMax_> mtState;
   typedef rovio::PredictionMeas mtPredictionMeas;
   typedef rovio::ImgUpdateMeas<mtState> mtImgMeas;
-  rovio::Filter<mtState> filter_;
+  rovio::Filter<mtState>* mpFilter = new rovio::Filter<mtState>();
   mtState testState;
   testState.setRandom(1);
   for(unsigned int i=0;i<nMax_;i++){
-    testState.template get<mtState::_aux>().addIndex(i+1);
+    testState.template get<mtState::_aux>().addID(i+1);
   }
   for(unsigned int i=0;i<nMax_;i++){
     testState.template get<mtState::_aux>().isVisible_[i] = true;
@@ -54,27 +54,29 @@ int main(){
 
 
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << filter_.mPrediction_.jacInput(testState,predictionMeas_,0.1) << std::endl;
+//  std::cout << mpFilter->mPrediction_.jacInput(testState,predictionMeas_,0.1) << std::endl;
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << filter_.mPrediction_.jacInputFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//  std::cout << mpFilter->mPrediction_.jacInputFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << filter_.mPrediction_.jacNoise(testState,predictionMeas_,0.1) << std::endl;
+//  std::cout << mpFilter->mPrediction_.jacNoise(testState,predictionMeas_,0.1) << std::endl;
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << filter_.mPrediction_.jacNoiseFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//  std::cout << mpFilter->mPrediction_.jacNoiseFD(testState,predictionMeas_,0.1,1e-6) << std::endl;
+//
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(mpFilter->mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(mpFilter->mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(mpFilter->mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
+//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+//  std::cout << std::get<0>(mpFilter->mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacInput(testState,imgUpdateMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacInputFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacNoise(testState,imgUpdateMeas_,0.1) << std::endl;
-  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-  std::cout << std::get<0>(filter_.mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
 
+  mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
+  std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-6,0,0.1);
 
-  filter_.mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
-  std::get<0>(filter_.mUpdates_).testJacs(testState,imgUpdateMeas_,1e-6,1e-6,0,0.1);
+  delete mpFilter;
 
   return 0;
 }

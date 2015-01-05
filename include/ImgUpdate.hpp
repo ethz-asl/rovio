@@ -27,7 +27,7 @@
 */
 
 #ifndef IMGUPDATE_HPP_
-#define IMGUPDATE_HPP_ // TODO
+#define IMGUPDATE_HPP_
 
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
@@ -115,19 +115,22 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     MrMV_.setZero();
     initCovFeature_.setIdentity();
     initDepth_ = 0;
-    countForRemoval_ = 100;
+    timeForRemoval_ = 10.0;
+    minFeatureForDetection_ = 10;
     doubleRegister_.registerScaledUnitMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
-    intRegister_.registerScalar("countForRemoval",countForRemoval_);
+    doubleRegister_.registerScalar("timeForRemoval",timeForRemoval_);
+    intRegister_.registerScalar("minFeatureForDetection",minFeatureForDetection_);
   };
   ~ImgUpdate(){};
   rot::RotationQuaternionPD qVM_;
   Eigen::Vector3d MrMV_;
   Eigen::Matrix3d initCovFeature_;
   double initDepth_;
-  int countForRemoval_;
+  double timeForRemoval_;
+  int minFeatureForDetection_;
   std::shared_ptr<RosCamera> camera_;
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     mtInnovation y;
@@ -152,24 +155,29 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     J.setZero();
     NormalVectorElement m_est, m_meas;
     Eigen::Vector3d vec;
-    double a; // todo
+    double a, vecNorm, c;
     for(unsigned int i=0;i<STATE::nMax_;i++){
       if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
         m_est.n_ = state.template get<mtState::_nor>(i);
         m_meas.n_ = state.template get<mtState::_aux>().norInCurrentFrame_[i];
-        rot::RotationQuaternionPD q;
-        q.setFromVectors(m_meas.n_,m_est.n_);
-        vec = -q.logarithmicMap(); // vec*std::asin(vecNorm)/vecNorm
-        a = vec.norm(); // std::asin(vecNorm)
-//        std::cout << -q.logarithmicMap() << std::endl;
-//        vec = -m_meas.n_.cross(m_est.n_);
-//        vecNorm = vec.norm();
-//        std::cout << vec*std::asin(vecNorm)/vecNorm << std::endl;
-        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-            -m_meas.getN().transpose()*(
-                Eigen::Matrix3d::Identity()*a/std::sin(a)
-                +(vec*vec.transpose())*(1/(std::sqrt(1-std::pow(std::sin(a),2))*pow(a,2))-1/std::sin(a)/a) // TODO: handle special cases
-            )*kindr::linear_algebra::getSkewMatrixFromVector(m_meas.n_)*m_est.getM();
+        vec = -m_meas.n_.cross(m_est.n_);
+        vecNorm = vec.norm();
+        c = m_meas.n_.dot(m_est.n_);
+        a = std::acos(c);
+        if(vecNorm<1e-6){
+          if(c>0){
+            J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
+                -m_meas.getN().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(m_meas.n_)*m_est.getM();
+          } else { // TODO: imprecise
+            J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)).setZero();
+          }
+        } else {
+          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
+              m_meas.getN().transpose()*(
+                  -(Eigen::Matrix3d::Identity()*a/vecNorm - (vec*vec.transpose())*a/pow(vecNorm,3))*kindr::linear_algebra::getSkewMatrixFromVector(m_meas.n_)
+                  -(vec*m_meas.n_.transpose())/(std::sqrt(1-std::pow(c,2))*vecNorm)
+              )*m_est.getM();
+        }
       }
     }
     return J;
@@ -192,13 +200,14 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       unsigned int ID;
       Eigen::Vector2d vec2;
       Eigen::Vector3d vec3;
+      const Eigen::Vector3d e3(0,0,1);
       bool converged;
       uint8_t patch[64] __attribute__ ((aligned (16)));
       for(unsigned int i=0;i<STATE::nMax_;i++){
         ID = state.template get<mtState::_aux>().ID_[i];
-        if(ID != 0){
-          vec2 = camera_->worldToCam(state.template get<mtState::_nor>(i));
-          // TODO: reject feature which are not in image
+        vec3 = state.template get<mtState::_nor>(i);
+        if(ID != 0 && e3.dot(vec3)>0){ // check if on front side of camera
+          vec2 = camera_->worldToCam(vec3);
           createPatchFromPatchWithBorder(state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch);
           // TODO: make multiple samples depending on covariance
           converged = align2D(meas.template get<mtMeas::_aux>().img_,state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch,10,vec2);
@@ -214,41 +223,52 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   };
   void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
     // Check if new feature should be added to the state
-    state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
-    state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
-    std::vector<cv::Point2f> points_current;
-    Eigen::Vector2d vec2;
-    for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
-      vec2 = camera_->worldToCam(state.template get<mtState::_nor>(it->second));
-      points_current.emplace_back(vec2(0),vec2(1));
-    }
-    std::vector<cv::Point2f> points_temp;
-    const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
-    if(missingFeatureCount > 0){ // TODO: param
-      DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
-    }
-    Eigen::Vector3d vec3;
-    unsigned int stateInd, ID;
-    for(auto it = points_temp.begin();it != points_temp.end();++it){
-      vec3 = camera_->camToWorld(it->x,it->y);
-      vec3.normalize();
-      ID = state.template get<mtState::_aux>().maxID_;
-      stateInd = state.template get<mtState::_aux>().addIndex(ID);
-      if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
-        state.initializeFeatureState(cov,stateInd,vec3,initDepth_,initCovFeature_);
-      } else {
-        state.template get<mtState::_aux>().removeIndex(ID);
+    if(meas.template get<mtMeas::_aux>().img_.empty()){
+      std::cout << "Img Update Error: Image is empty" << std::endl;
+      return;
+    } else {
+      state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
+      state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
+      std::vector<cv::Point2f> points_current;
+      Eigen::Vector2d vec2;
+      for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
+        vec2 = camera_->worldToCam(state.template get<mtState::_nor>(it->second));
+        points_current.emplace_back(vec2(0),vec2(1));
       }
-    }
-    state.template get<mtState::_aux>().countSinceVisible();
-    for(unsigned int i=0;i<STATE::nMax_;i++){
-      ID = state.template get<mtState::_aux>().ID_[i];
-      if(ID != 0 && state.template get<mtState::_aux>().countSinceVisible_[i] > countForRemoval_){
-        state.template get<mtState::_aux>().removeIndex(ID);
+      std::vector<cv::Point2f> points_temp;
+      const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
+      if(missingFeatureCount > minFeatureForDetection_){
+        DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
       }
-    }
+      Eigen::Vector3d vec3;
+      unsigned int stateInd, ID;
+      for(auto it = points_temp.begin();it != points_temp.end();++it){
+        vec3 = camera_->camToWorld(it->x,it->y);
+        vec3.normalize();
+        ID = state.template get<mtState::_aux>().maxID_;
+        stateInd = state.template get<mtState::_aux>().addID(ID);
+        if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
+          state.initializeFeatureState(cov,stateInd,vec3,initDepth_,initCovFeature_);
+        } else {
+          state.template get<mtState::_aux>().removeID(ID);
+        }
+      }
+      for(unsigned int i=0;i<STATE::nMax_;i++){
+        ID = state.template get<mtState::_aux>().ID_[i];
+        if(ID != 0 && state.template get<mtState::_aux>().timeSinceVisible_[i] > timeForRemoval_){
+          state.template get<mtState::_aux>().removeID(ID);
+        }
+      }
 
-    // TODO: get newest patch
+      // Get newest patch
+      for(unsigned int i=0;i<STATE::nMax_;i++){
+        ID = state.template get<mtState::_aux>().ID_[i];
+        if(ID != 0){
+          vec2 = camera_->worldToCam(state.template get<mtState::_nor>(i));
+          getPatchInterpolated(state.template get<mtState::_aux>().img_,vec2,5,state.template get<mtState::_aux>().patchesWithBorder_[i].data_);
+        }
+      }
+    }
   };
 };
 
