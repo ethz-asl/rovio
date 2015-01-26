@@ -35,6 +35,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <map>
 #include <unordered_set>
+#include "common_vision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -43,12 +44,6 @@ namespace rovio {
 using namespace LWF;
 
 // todo: feature manager
-
-template<int size>
-struct Patch {
-  static const int size_ = size;
-  uint8_t data_[size_*size_] __attribute__ ((aligned (16)));
-};
 
 template<unsigned int nMax>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{

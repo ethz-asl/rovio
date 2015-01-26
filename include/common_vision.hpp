@@ -41,7 +41,7 @@
 
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/video/tracking.hpp>
-//#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
 #include <ros-camera.h>
@@ -50,6 +50,12 @@
 using namespace Eigen;
 
 namespace rovio{
+
+template<int size>
+struct Patch {
+  static const int size_ = size;
+  uint8_t data_[size_*size_] __attribute__ ((aligned (16)));
+};
 
 inline bool in_image_with_border(const cv::Mat& im, const cv::Point2f& point, float border) { // Feature_tracker code
   return point.x >= border && point.y >= border && point.x < im.cols - border
@@ -93,6 +99,87 @@ inline float FindShiTomasiScoreAtPoint(const cv::Mat& image, int nHalfBoxSize, c
 
   // Find and return smaller eigenvalue:
   return 0.5f * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+}
+
+template<typename Compare>
+void distributeUniformly(std::vector<cv::KeyPoint>& keypoints, std::vector<cv::Point2f>& current_keypoints, int imgwidth,
+                         int imgheight, double radius, Compare compare) {
+
+  cv::Mat _LUT = cv::Mat::zeros(2 * 16 - 1, 2 * 16 - 1, CV_32F);
+  for (int x = 0; x < 2 * 16 - 1; ++x) {
+    for (int y = 0; y < 2 * 16 - 1; ++y) {
+      _LUT.at<float>(y, x) = std::max(1- double((radius / 2.0 - x) * (radius / 2.0 - x) + (radius / 2.0 - y) * (radius / 2.0 - y)) / double(radius / 2.0 * radius / 2.0), 0.0);
+    }
+  }
+
+  // Sort.
+  std::sort(keypoints.begin(), keypoints.end(), compare);
+  std::cout << "Max score: " << keypoints.begin()->response << std::endl;
+  std::cout << "Min score: " << keypoints.rbegin()->response << std::endl;
+
+  std::vector<cv::KeyPoint> keypoints_new;
+  keypoints_new.reserve(keypoints.size());
+
+  // Store occupancy.
+  cv::Mat occupancy;
+  occupancy = cv::Mat::zeros((imgheight) / 2 + 32, (imgwidth) / 2 + 32, CV_8U);
+
+  // Go through the sorted keypoints and reject too close ones.
+  for (std::vector<cv::KeyPoint>::iterator it = keypoints.begin();
+      it != keypoints.end(); ++it) {
+    const int cy = (it->pt.y / 2 + 16);
+    const int cx = (it->pt.x / 2 + 16);
+
+    // Check if this is a high enough score.
+    const double s0 = double(occupancy.at<uchar>(cy, cx));
+    const double s1 = s0 * s0;
+    if (short(it->response) < s1 * s1)
+      continue;
+
+    // Masks.
+    const float nsc = sqrt(sqrt(it->response));
+    for (int y = 0; y < 2 * 16 - 1; ++y) {
+      __m128i mem1 = _mm_loadu_si128((__m128i *) &occupancy.at<uchar>(cy + y - 15, cx - 15));
+      __m128i mem2 = _mm_loadu_si128((__m128i *) &occupancy.at<uchar>(cy + y - 15, cx + 1));
+      __m128i mask1 = _mm_set_epi8(
+          static_cast<uint8_t>(_LUT.at<float>(y, 15) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 14) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 13) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 12) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 11) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 10) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 9) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 8) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 7) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 6) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 5) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 4) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 3) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 2) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 1) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 0) * nsc));
+      __m128i mask2 = _mm_set_epi8(
+          static_cast<uint8_t>(_LUT.at<float>(y, 30) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 29) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 28) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 27) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 26) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 25) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 24) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 23) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 22) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 21) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 20) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 19) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 18) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 17) * nsc),
+          static_cast<uint8_t>(_LUT.at<float>(y, 16) * nsc), 0);
+      _mm_storeu_si128((__m128i *) &occupancy.at<uchar>(cy + y - 15, cx - 15),_mm_adds_epu8(mem1, mask1));
+      _mm_storeu_si128((__m128i *) &occupancy.at<uchar>(cy + y - 15, cx + 1),_mm_adds_epu8(mem2, mask2));
+    }
+    keypoints_new.push_back(*it);
+  }
+  keypoints.swap(keypoints_new);
 }
 
 void distributeUniformlyMic(std::vector<cv::KeyPoint>& keypoints, std::vector<cv::Point2f>& current_keypoints) {
@@ -181,7 +268,7 @@ void DetectFastCorners(cv::Mat& img, std::vector<cv::Point2f>& detected_keypoint
   }
   double t3 = cv::getTickCount();
   distributeUniformlyMic(keypoints, current_keypoints);
-//    distributeUniformly(keypoints, current_keypoints, img.cols, img.rows, uniformity_radius_, [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {return a.response > b.response;});
+//  distributeUniformly(keypoints, current_keypoints, img.cols, img.rows, 50, [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {return a.response > b.response;});
   double t4 = cv::getTickCount();
 
   if (keypoints.size() > maxN) {
@@ -281,6 +368,8 @@ bool align2D( // SVO code
     }
 
     update = Hinv * Jres;
+    if(fabs(update[0])>1.0) update[0] = update[0]/fabs(update[0]);
+    if(fabs(update[1])>1.0) update[1] = update[1]/fabs(update[1]);
     u += update[0];
     v += update[1];
     mean_diff += update[2];

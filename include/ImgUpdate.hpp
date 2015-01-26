@@ -109,6 +109,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtNoise mtNoise;
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
+  typedef typename Base::mtOutlierDetection mtOutlierDetection;
   ImgUpdate(){
     camera_.reset(new RosCamera("fpga21_cam0.yaml"));
     qVM_.setIdentity();
@@ -221,7 +222,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
     }
   };
-  void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
+  void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas, mtOutlierDetection* mpOutlierDetection){
     // Check if new feature should be added to the state
     if(meas.template get<mtMeas::_aux>().img_.empty()){
       std::cout << "Img Update Error: Image is empty" << std::endl;
