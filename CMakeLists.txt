@@ -9,10 +9,9 @@ SET(CMAKE_BUILD_TYPE "Release")
 
 ##################### Find, include, and compile library #####################
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen REQUIRED)
+find_package(Eigen3 REQUIRED)
 find_package(Kindr REQUIRED)
 include_directories(./include)
-include_directories(${EIGEN_INCLUDE_DIRS})
 include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(${Kindr_INCLUDE_DIRS})
 

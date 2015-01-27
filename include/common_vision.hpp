@@ -97,7 +97,7 @@ inline float FindShiTomasiScoreAtPoint(const cv::Mat& image, int nHalfBoxSize, c
   dYY = dYY / (2.0f * nPixels);
   dXY = dXY / (2.0f * nPixels);
 
-  // Find and return smaller eigenvalue:
+  // Find and return smaller eigenvalue: // TODO: this could be adapted to multiple levels, maybe not smaller eigenvalue
   return 0.5f * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
 }
 
@@ -201,7 +201,7 @@ void distributeUniformlyMic(std::vector<cv::KeyPoint>& keypoints, std::vector<cv
   }
 
   double distance;
-  double maxDistance = 100; // TODO param
+  double maxDistance = 20; // TODO param
   double zeroDistancePenalty = nBuckets*1.0; // TODO param
   cv::KeyPoint* mpKeyPoint;
   for (auto it_current = current_keypoints.begin(); it_current != current_keypoints.end(); ++it_current) {

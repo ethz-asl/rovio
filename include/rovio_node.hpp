@@ -181,7 +181,7 @@ class TestNode{
 
     // Initialize new features (on prev image)
     if (need_init_) {
-      int detect_level = 2;
+      int detect_level = 1;
       ROS_INFO_STREAM("adding keypoints");
 
       // Get points from detector
@@ -218,7 +218,7 @@ class TestNode{
       landmarks_curr_image_->landmarks_.clear();
       landmarks_curr_image_->idx_.clear();
       int start_level = 3;
-      int end_level = 2;
+      int end_level = 1;
       bool success = true;
       // Feature matches and indices, used for plotting
       feature_and_index_vec_.clear();
