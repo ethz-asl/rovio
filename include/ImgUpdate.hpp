@@ -223,26 +223,33 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
   };
   void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas, mtOutlierDetection* mpOutlierDetection){
+    unsigned int stateInd, ID; // TODO: improve feature handling, keep some feature for relocalization (depending on amount of tracked features)
+    for(unsigned int i=0;i<STATE::nMax_;i++){
+      ID = state.template get<mtState::_aux>().ID_[i];
+      if(ID != 0 && state.template get<mtState::_aux>().timeSinceVisible_[i] > timeForRemoval_){
+        state.template get<mtState::_aux>().removeID(ID);
+      }
+    }
+
     // Check if new feature should be added to the state
     if(meas.template get<mtMeas::_aux>().img_.empty()){
       std::cout << "Img Update Error: Image is empty" << std::endl;
       return;
     } else {
+      Eigen::Vector2d vec2;
+      Eigen::Vector3d vec3;
+      std::vector<cv::Point2f> points_current;
+      std::vector<cv::Point2f> points_temp;
       state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
       state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
-      std::vector<cv::Point2f> points_current;
-      Eigen::Vector2d vec2;
       for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
         vec2 = camera_->worldToCam(state.template get<mtState::_nor>(it->second));
         points_current.emplace_back(vec2(0),vec2(1));
       }
-      std::vector<cv::Point2f> points_temp;
       const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
       if(missingFeatureCount > minFeatureForDetection_){
         DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
       }
-      Eigen::Vector3d vec3;
-      unsigned int stateInd, ID;
       for(auto it = points_temp.begin();it != points_temp.end();++it){
         vec3 = camera_->camToWorld(it->x,it->y);
         vec3.normalize();
@@ -251,12 +258,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
           state.initializeFeatureState(cov,stateInd,vec3,initDepth_,initCovFeature_);
         } else {
-          state.template get<mtState::_aux>().removeID(ID);
-        }
-      }
-      for(unsigned int i=0;i<STATE::nMax_;i++){
-        ID = state.template get<mtState::_aux>().ID_[i];
-        if(ID != 0 && state.template get<mtState::_aux>().timeSinceVisible_[i] > timeForRemoval_){
           state.template get<mtState::_aux>().removeID(ID);
         }
       }
