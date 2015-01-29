@@ -53,8 +53,72 @@ namespace rovio{
 
 template<int size>
 struct Patch {
-  static const int size_ = size;
-  uint8_t data_[size_*size_] __attribute__ ((aligned (16)));
+  static constexpr int size_ = size;
+  static constexpr int area_ = size_*size_;
+  uint8_t data_[area_] __attribute__ ((aligned (16)));
+};
+
+template<int size>
+class PatchFeature {
+ public:
+  static constexpr int size_ = size;
+  static constexpr int area_ = size_*size_;
+  typedef Patch<size_> mtPatch;
+  typedef Patch<size_+2> mtPatchWithBorder;
+  mtPatch patch_;
+  mtPatchWithBorder patchWithBorder_;
+  float dx_[area_] __attribute__ ((aligned (16)));
+  float dy_[area_] __attribute__ ((aligned (16)));
+  Matrix3f H_;
+  bool validGradientParameters;
+  PatchFeature(){
+    validGradientParameters = false;
+  }
+  ~PatchFeature(){}
+  void computeGradientParameters(){
+    H_.setZero();
+    const int refStep = size_+2;
+    float* it_dx = dx_;
+    float* it_dy = dy_;
+    uint8_t* it;
+    Vector3f J;
+    for(int y=0; y<size_; ++y){
+      it = patchWithBorder_.data_ + (y+1)*refStep + 1;
+      for(int x=0; x<size_; ++x, ++it, ++it_dx, ++it_dy)
+      {
+        J[0] = 0.5 * (it[1] - it[-1]);
+        J[1] = 0.5 * (it[refStep] - it[-refStep]);
+        J[2] = 1;
+        *it_dx = J[0];
+        *it_dy = J[1];
+        H_ += J*J.transpose();
+      }
+    }
+    validGradientParameters = true;
+  }
+  void setPatch(const mtPatchWithBorder& patchWithBorder){
+    patchWithBorder_ = patchWithBorder;
+    extractPatchFromPatchWithBorder();
+    validGradientParameters = false;
+  }
+  void extractPatchFromPatchWithBorder(){
+    uint8_t* it_patch = patch_.data_;
+    uint8_t* it_patchWithBorder;
+    for(int y=1; y<size_+1; ++y, it_patch += size_){
+      it_patchWithBorder = patchWithBorder_.data_ + y*(size_+2) + 1;
+      for(int x=0; x<size_; ++x)
+        it_patch[x] = it_patchWithBorder[x];
+    }
+  }
+};
+
+template<int n_levels,int patch_size>
+class MultilevelPatchFeature{
+ public:
+  static const int nLevels_ = n_levels;
+  PatchFeature<patch_size> patches_[nLevels_];
+  MultilevelPatchFeature(){}
+  ~MultilevelPatchFeature(){}
 };
 
 inline bool in_image_with_border(const cv::Mat& im, const cv::Point2f& point, float border) { // Feature_tracker code
