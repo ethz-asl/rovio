@@ -35,6 +35,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
 #include "common_vision.hpp"
+#include "camera.hpp"
 
 namespace rovio{
 
