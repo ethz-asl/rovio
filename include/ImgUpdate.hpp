@@ -35,8 +35,8 @@
 #include "State.hpp"
 #include "FilterState.hpp"
 #include <cv_bridge/cv_bridge.h>
-#include "common_vision.hpp"
 #include <ros-camera.h>
+#include "common_vision_old.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 

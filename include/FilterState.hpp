@@ -35,7 +35,8 @@
 #include <cv_bridge/cv_bridge.h>
 #include <map>
 #include <unordered_set>
-#include "common_vision.hpp"
+
+#include "common_vision_old.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
