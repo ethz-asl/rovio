@@ -30,6 +30,7 @@
 #define ROVIO_NODE_HPP_
 
 #include "common_vision.hpp"
+#include "common_vision_new.hpp"
 
 namespace rovio{
 
@@ -76,6 +77,11 @@ class TestNode{
   std::shared_ptr<cv::FeatureDetector> feature_detector_fast_;
   std::vector<TrackedKeypointWithID> feature_and_index_vec_;
   std::shared_ptr<RosCamera> camera_;
+
+
+  ImagePyramid<4> pyr_;
+  FeatureManager<4,8> fManager_;
+
   TestNode(ros::NodeHandle& nh): nh_(nh), termcrit_(cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 20,0.03)),
       sub_pix_win_size_(cv::Size(10, 10)),win_size_(cv::Size(31, 31)){
     camera_.reset(new RosCamera("fpga21_cam0.yaml"));
@@ -85,8 +91,8 @@ class TestNode{
     landmark_idx_ = 0;
     draw_matches_ = true;
     use_fast_corners_ = true;
-    min_feature_count_ = 50;
-    max_feature_count_ = 20; // Maximal number of feature which is added at a time (not total)
+    min_feature_count_ = 150;
+    max_feature_count_ = 30; // Maximal number of feature which is added at a time (not total)
     fast_threshold_ = 10;
     uniformity_radius_ = 50;
     need_init_ = false;
@@ -108,40 +114,6 @@ class TestNode{
   }
 
   void imgCallback2(const sensor_msgs::ImageConstPtr & img){
-//    static double last_timeStamp = 0.0;
-//    double current_timeStamp = img->header.stamp.toSec();
-//    cv_bridge::CvImagePtr cv_ptr;
-//    try {
-//      cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::TYPE_8UC1);
-//      cv_ptr->image.copyTo(draw_image_);
-//      curr_image_ = cv_ptr->image;
-//    } catch (cv_bridge::Exception& e) {
-//      ROS_ERROR("cv_bridge exception: %s", e.what());
-//      return;
-//    }
-//    std::vector<cv::Point2f> points_temp;
-//    DetectFastCorners(curr_image_, points_temp, landmarks_prev_image_->landmarks_);
-//    // Assign IDs to points and add them to vectors
-//    for (size_t i = 0; i < points_temp.size(); ++i) {
-//      cv::circle(draw_image_,cv::Point(points_temp[i].x,points_temp[i].y),3, cv::Scalar(0, 0, 0), -1, 8);
-////      landmarks_prev_image_->idx_.push_back(landmark_idx_++);
-//    }
-////    landmarks_prev_image_->landmarks_.insert(landmarks_prev_image_->landmarks_.end(), points_temp.begin(),points_temp.end());
-//
-//
-//
-////    for (int i = 0; i < landmarks_prev_image_->landmarks_.size(); ++i) {
-////      cv::circle(draw_image_,cv::Point(landmarks_prev_image_->landmarks_[i].x,landmarks_prev_image_->landmarks_[i].y),3, cv::Scalar(0, 0, 0), -1, 8);
-////    }
-//
-////    if (cv_ptr->image.rows > 60 && cv_ptr->image.cols > 60)
-////      cv::circle(cv_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
-//
-//    cv::imshow("test1", draw_image_);
-//    cv::waitKey(30);
-  }
-  void imgCallback(const sensor_msgs::ImageConstPtr & img){
-    imgCallback2(img);
     // Get image from msg
     cv_bridge::CvImagePtr cv_ptr;
     try {
@@ -155,6 +127,8 @@ class TestNode{
     // Timing
     static double last_timeStamp = 0.0;
     double current_timeStamp = img->header.stamp.toSec();
+
+    pyr_.computeFromImage(cv_ptr);
 
     // Pyramid
     cv_ptr->image.copyTo(curr_pyr_[0]);
@@ -179,10 +153,11 @@ class TestNode{
     if (landmarks_prev_image_->landmarks_.size() < min_feature_count_)
       need_init_ = true;
 
+
     // Initialize new features (on prev image)
     if (need_init_) {
       int detect_level = 1;
-      ROS_INFO_STREAM("adding keypoints");
+//      ROS_INFO_STREAM("adding keypoints");
 
       // Get points from detector
       std::vector<cv::Point2f> points_temp;
@@ -202,7 +177,7 @@ class TestNode{
       need_init_ = false;
     }
 
-    ROS_INFO_STREAM(" landmark size: " << landmarks_prev_image_->landmarks_.size() << " " << landmarks_prev_image_->idx_.size());
+//    ROS_INFO_STREAM(" landmark size: " << landmarks_prev_image_->landmarks_.size() << " " << landmarks_prev_image_->idx_.size());
 
     // Find matches in current image
     if (!landmarks_prev_image_->landmarks_.empty()) {
@@ -237,7 +212,7 @@ class TestNode{
               break;
             } else {
               curr_end_pix = curr_end_pix*pow(2.0,level);
-              cv::line(draw_image_,cv::Point(curr_end_pix.x(),curr_end_pix.y()),cv::Point(curr_sta_pix.x(),curr_sta_pix.y()),cv::Scalar(250-60*(start_level-level), 250-60*(start_level-level), 250-60*(start_level-level)), 2);
+//              cv::line(draw_image_,cv::Point(curr_end_pix.x(),curr_end_pix.y()),cv::Point(curr_sta_pix.x(),curr_sta_pix.y()),cv::Scalar(250-60*(start_level-level), 250-60*(start_level-level), 250-60*(start_level-level)), 2);
             }
           }
           curr_sta_pix = curr_end_pix;
@@ -247,139 +222,65 @@ class TestNode{
           landmarks_curr_image_->idx_.push_back(landmarks_prev_image_->idx_[i]);
           status.push_back(1);
           feature_and_index_vec_.emplace_back(landmarks_prev_image_->idx_[i],prev_pix,curr_sta_pix);// Drawing
-          if (draw_matches_) {
-            //TODO(omaris) Add flag to plot keypoint id or simply point
-            if ((feature_and_index_vec_.back().id % 1) == 0) {
-              cv::putText(
-                  draw_image_,
-                  std::to_string(feature_and_index_vec_.back().id),
-                  cv::Point(
-                      feature_and_index_vec_.back().location_current_frame.x(),
-                      feature_and_index_vec_.back().location_current_frame.y()),
-                  cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-
-//              cv::line(
+//          if (draw_matches_) {
+//            //TODO(omaris) Add flag to plot keypoint id or simply point
+//            if ((feature_and_index_vec_.back().id % 1) == 0) {
+//              cv::putText(
+//                  draw_image_,
+//                  std::to_string(feature_and_index_vec_.back().id),
+//                  cv::Point(
+//                      feature_and_index_vec_.back().location_current_frame.x(),
+//                      feature_and_index_vec_.back().location_current_frame.y()),
+//                  cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+//
+////              cv::line(
+////                  draw_image_,
+////                  cv::Point(
+////                      feature_and_index_vec_.back().location_current_frame.x(),
+////                      feature_and_index_vec_.back().location_current_frame.y()),
+////                  cv::Point(
+////                      feature_and_index_vec_.back().location_previous_frame.x(),
+////                      feature_and_index_vec_.back().location_previous_frame.y()),
+////                  cv::Scalar(255, 255, 0), 2);
+//              cv::circle(
 //                  draw_image_,
 //                  cv::Point(
 //                      feature_and_index_vec_.back().location_current_frame.x(),
 //                      feature_and_index_vec_.back().location_current_frame.y()),
-//                  cv::Point(
-//                      feature_and_index_vec_.back().location_previous_frame.x(),
-//                      feature_and_index_vec_.back().location_previous_frame.y()),
-//                  cv::Scalar(255, 255, 0), 2);
-              cv::circle(
-                  draw_image_,
-                  cv::Point(
-                      feature_and_index_vec_.back().location_current_frame.x(),
-                      feature_and_index_vec_.back().location_current_frame.y()),
-                  3, cv::Scalar(0, 0, 0), -1, 8);
-            }
-          }
-        } else {
-//          landmarks_curr_image_->landmarks_.emplace_back(0,0);
-//          landmarks_curr_image_->idx_.push_back(0);
-//          status.push_back(0);
+//                  3, cv::Scalar(0, 0, 0), -1, 8);
+//            }
+//          }
         }
       }
-
-//      // Sparse Optical Flow
-//      cv::calcOpticalFlowPyrLK(prev_image_, curr_image_, landmarks_prev_image_->landmarks_, landmarks_curr_image_->landmarks_,
-//                               status, err, win_size_, lk_max_level_, termcrit_, 0, lk_min_eigen_threshold_);
-//      // Copy indices of previous to current
-//      landmarks_curr_image_->idx_ = landmarks_prev_image_->idx_;
-
-//
-//      feature_tracker::optical_flow_measurementPtr of_measurementmsg(
-//          new feature_tracker::optical_flow_measurement);
-//      FILE * pFile;
-//      pFile = fopen("vi_data.txt", "a");
-//      fprintf(pFile, "New Frame:\t%.3f\n", img->header.stamp.toSec());
-//      for (i = k = 0; i < landmarks_curr_image_->landmarks_.size(); ++i) {
-//        if (!status[i])
-//          continue;
-//
-////        feature_tracker::flow_vector oneFlow;
-////
-//        // Just for plotting
-//        feature_and_index_vec_.emplace_back(
-//            landmarks_prev_image_->idx_[i],
-//            Eigen::Matrix<double, 2, 1>(landmarks_prev_image_->landmarks_[i].x,
-//                                        landmarks_prev_image_->landmarks_[i].y),
-//            Eigen::Matrix<double, 2, 1>(landmarks_curr_image_->landmarks_[i].x,
-//                                        landmarks_curr_image_->landmarks_[i].y));
-//
-//        // Removes invalid landmarks
-//        landmarks_curr_image_->landmarks_[k] =
-//            landmarks_curr_image_->landmarks_[i];
-//        landmarks_curr_image_->idx_[k] = landmarks_curr_image_->idx_[i];
-//        ++k;
-//
-//        Eigen::Vector3d dirvec_f2 = camera_->camToWorld(
-//            feature_and_index_vec_.back().location_current_frame.x(),
-//            feature_and_index_vec_.back().location_current_frame.y());
-//        Eigen::Vector3d dirvec_f1 = camera_->camToWorld(
-//            feature_and_index_vec_.back().location_previous_frame.x(),
-//            feature_and_index_vec_.back().location_previous_frame.y());
-//
-////        fprintf(pFile, "%.6f\t%.6f\t%.6f\t\t%.6f\t%.6f\t%.6f\t\n", dirvec_f1[0],
-////                dirvec_f1[1], dirvec_f1[2], dirvec_f2[0], dirvec_f2[1],
-////                dirvec_f2[2]);
-////
-////        oneFlow.p[0] = (dirvec_f2[0] + dirvec_f1[0])*0.5;
-////        oneFlow.p[1] = (dirvec_f2[1] + dirvec_f1[1])*0.5;
-////        oneFlow.p[2] = (dirvec_f2[2] + dirvec_f1[2])*0.5;
-////
-////        oneFlow.u[0] = (dirvec_f2[0] - dirvec_f1[0])/(current_timeStamp-last_timeStamp);
-////        oneFlow.u[1] = (dirvec_f2[1] - dirvec_f1[1])/(current_timeStamp-last_timeStamp);
-////        oneFlow.u[2] = (dirvec_f2[2] - dirvec_f1[2])/(current_timeStamp-last_timeStamp);
-////
-////        oneFlow.R = 0.5;  // ZMSSD distance.
-////        of_measurementmsg->flow.push_back(oneFlow);
-////
-//
-//        // Drawing
-//        if (draw_matches_) {
-//          //TODO(omaris) Add flag to plot keypoint id or simply point
-//          if ((feature_and_index_vec_.back().id % 3) == 0) {
-//            cv::putText(
-//                draw_image_,
-//                std::to_string(feature_and_index_vec_.back().id),
-//                cv::Point(
-//                    feature_and_index_vec_.back().location_current_frame.x(),
-//                    feature_and_index_vec_.back().location_current_frame.y()),
-//                cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-//
-//            cv::line(
-//                draw_image_,
-//                cv::Point(
-//                    feature_and_index_vec_.back().location_current_frame.x(),
-//                    feature_and_index_vec_.back().location_current_frame.y()),
-//                cv::Point(
-//                    feature_and_index_vec_.back().location_previous_frame.x(),
-//                    feature_and_index_vec_.back().location_previous_frame.y()),
-//                cv::Scalar(255, 255, 0), 2);
-//            cv::circle(
-//                draw_image_,
-//                cv::Point(
-//                    feature_and_index_vec_.back().location_current_frame.x(),
-//                    feature_and_index_vec_.back().location_current_frame.y()),
-//                3, cv::Scalar(0, 0, 0), -1, 8);
-//          }
-//        }
-//      }
-//      fclose(pFile);
-//      static int seq = 0;
-//      of_measurementmsg->header.stamp = img->header.stamp;
-//      of_measurementmsg->header.frame_id = "/world";
-//      of_measurementmsg->header.seq = seq++;
-//      pub_flow_.publish(of_measurementmsg);
-//
-//      // Remove the END
-//      landmarks_curr_image_->landmarks_.resize(k);
-//      landmarks_curr_image_->idx_.resize(k);
-    } else {
-      need_init_ = true;
     }
+    const double t1 = (double) cv::getTickCount();
+    fManager_.alignFeaturesSeq(pyr_,draw_image_,3,1);
+    const double t2 = (double) cv::getTickCount();
+    ROS_INFO_STREAM(" Matching " << fManager_.features_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    fManager_.removeInvisible();
+    fManager_.extractFeaturePatchesFromImage(pyr_);
+
+    fManager_.candidates_.clear();
+    if(fManager_.features_.size() < min_feature_count_){
+      ROS_INFO_STREAM(" Adding keypoints");
+      const double t1 = (double) cv::getTickCount();
+      const int detect_level = 1;
+      std::vector<cv::Point2f> detected_keypoints;
+      DetectFastCorners(pyr_,detected_keypoints,detect_level);
+      const double t2 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Detected " << detected_keypoints.size() << " on level " << detect_level << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+      fManager_.selectCandidates(detected_keypoints);
+      const double t3 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Selected " << fManager_.candidates_.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
+      fManager_.extractCandidatePatchesFromImage(pyr_);
+      fManager_.computeCandidatesScore(-1);
+      const double t4 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
+      fManager_.addBestCandidates(max_feature_count_,draw_image_);
+      const double t5 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Got " << fManager_.features_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
+    }
+
     if (draw_matches_) {
       cv::imshow("LK Tracker Window", draw_image_);
       cv::imshow("test1", curr_pyr_[1]);
@@ -393,6 +294,260 @@ class TestNode{
       cv::swap(prev_pyr_[i], curr_pyr_[i]);
     }
     last_timeStamp = current_timeStamp;
+  }
+  void imgCallback(const sensor_msgs::ImageConstPtr & img){
+    imgCallback2(img);
+    // Get image from msg
+//    cv_bridge::CvImagePtr cv_ptr;
+//    try {
+//      cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::TYPE_8UC1);
+//    } catch (cv_bridge::Exception& e) {
+//      ROS_ERROR("cv_bridge exception: %s", e.what());
+//      return;
+//    }
+//    curr_image_ = cv_ptr->image;
+//
+//    // Timing
+//    static double last_timeStamp = 0.0;
+//    double current_timeStamp = img->header.stamp.toSec();
+//
+//    // Pyramid
+//    cv_ptr->image.copyTo(curr_pyr_[0]);
+//    for(int i=1; i<n_levels_; ++i){
+////      curr_pyr_[i] = cv::Mat(curr_pyr_[i-1].rows/2, curr_pyr_[i-1].cols/2, CV_8U);
+//      cv::pyrDown(curr_pyr_[i-1],curr_pyr_[i],cv::Size(curr_pyr_[i-1].cols/2, curr_pyr_[i-1].rows/2));
+//    }
+//
+//    //If we just started up
+//    if (prev_image_.empty()){
+//      curr_image_.copyTo(prev_image_);
+//      for(unsigned int i=0;i<n_levels_;i++){
+//        curr_pyr_[i].copyTo(prev_pyr_[i]);
+//      }
+//    }
+//
+//    // Drawing
+//    if (draw_matches_)
+//      cv_ptr->image.copyTo(draw_image_);
+//
+//    // Check if initialization of new feature is required
+//    if (landmarks_prev_image_->landmarks_.size() < min_feature_count_)
+//      need_init_ = true;
+//
+//    // Initialize new features (on prev image)
+//    if (need_init_) {
+//      int detect_level = 1;
+//      ROS_INFO_STREAM("adding keypoints");
+//
+//      // Get points from detector
+//      std::vector<cv::Point2f> points_temp;
+//      std::vector<cv::Point2f> current_points_temp;
+//      for (size_t i = 0; i < landmarks_prev_image_->landmarks_.size(); ++i) {
+//        current_points_temp.emplace_back(landmarks_prev_image_->landmarks_[i].x*pow(0.5,detect_level),landmarks_prev_image_->landmarks_[i].y*pow(0.5,detect_level));
+//      }
+//      DetectFastCorners(prev_pyr_[detect_level], points_temp, current_points_temp,max_feature_count_);
+//      // TODO: look at SVO detector
+//
+//      // Assign IDs to points and add them to vectors
+//      for (size_t i = 0; i < points_temp.size(); ++i) {
+//        landmarks_prev_image_->idx_.push_back(landmark_idx_++);
+//        landmarks_prev_image_->landmarks_.emplace_back(points_temp[i].x*pow(2.0,detect_level), points_temp[i].y*pow(2.0,detect_level));
+//      }
+//
+//      need_init_ = false;
+//    }
+//
+//    ROS_INFO_STREAM(" landmark size: " << landmarks_prev_image_->landmarks_.size() << " " << landmarks_prev_image_->idx_.size());
+//
+//    // Find matches in current image
+//    if (!landmarks_prev_image_->landmarks_.empty()) {
+//      std::vector<uchar> status;
+//      std::vector<float> err;
+//
+//      size_t i, k;
+//      Patch<10> patch10;
+//      Patch<8> patch8;
+//      Vector2d curr_sta_pix;
+//      Vector2d curr_end_pix;
+//      Vector2d prev_pix;
+//      landmarks_curr_image_->landmarks_.clear();
+//      landmarks_curr_image_->idx_.clear();
+//      int start_level = 3;
+//      int end_level = 1;
+//      bool success = true;
+//      // Feature matches and indices, used for plotting
+//      feature_and_index_vec_.clear();
+//      feature_and_index_vec_.reserve(landmarks_prev_image_->landmarks_.size());
+//      for (i = 0; i < landmarks_prev_image_->landmarks_.size(); ++i) {
+//        prev_pix = Eigen::Vector2d(landmarks_prev_image_->landmarks_[i].x,landmarks_prev_image_->landmarks_[i].y);
+//        curr_sta_pix = prev_pix;
+//        success = true;
+//        for(int level = start_level;level>=end_level;--level){
+//          curr_end_pix = curr_sta_pix*pow(0.5,level);
+//          getPatchInterpolated(prev_pyr_[level],prev_pix*pow(0.5,level),5,patch10.data_);
+//          createPatchFromPatchWithBorder(patch10.data_,patch8.data_);
+//          if(level<=3){
+//            if(!align2D(curr_pyr_[level],patch10.data_,patch8.data_,10,curr_end_pix)){
+//              success = false; // TODO: rmeove for higher levels
+//              break;
+//            } else {
+//              curr_end_pix = curr_end_pix*pow(2.0,level);
+//              cv::line(draw_image_,cv::Point(curr_end_pix.x(),curr_end_pix.y()),cv::Point(curr_sta_pix.x(),curr_sta_pix.y()),cv::Scalar(250-60*(start_level-level), 250-60*(start_level-level), 250-60*(start_level-level)), 2);
+//            }
+//          }
+//          curr_sta_pix = curr_end_pix;
+//        }
+//        if(success){
+//          landmarks_curr_image_->landmarks_.emplace_back(curr_end_pix(0),curr_end_pix(1));
+//          landmarks_curr_image_->idx_.push_back(landmarks_prev_image_->idx_[i]);
+//          status.push_back(1);
+//          feature_and_index_vec_.emplace_back(landmarks_prev_image_->idx_[i],prev_pix,curr_sta_pix);// Drawing
+//          if (draw_matches_) {
+//            //TODO(omaris) Add flag to plot keypoint id or simply point
+//            if ((feature_and_index_vec_.back().id % 1) == 0) {
+//              cv::putText(
+//                  draw_image_,
+//                  std::to_string(feature_and_index_vec_.back().id),
+//                  cv::Point(
+//                      feature_and_index_vec_.back().location_current_frame.x(),
+//                      feature_and_index_vec_.back().location_current_frame.y()),
+//                  cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+//
+////              cv::line(
+////                  draw_image_,
+////                  cv::Point(
+////                      feature_and_index_vec_.back().location_current_frame.x(),
+////                      feature_and_index_vec_.back().location_current_frame.y()),
+////                  cv::Point(
+////                      feature_and_index_vec_.back().location_previous_frame.x(),
+////                      feature_and_index_vec_.back().location_previous_frame.y()),
+////                  cv::Scalar(255, 255, 0), 2);
+//              cv::circle(
+//                  draw_image_,
+//                  cv::Point(
+//                      feature_and_index_vec_.back().location_current_frame.x(),
+//                      feature_and_index_vec_.back().location_current_frame.y()),
+//                  3, cv::Scalar(0, 0, 0), -1, 8);
+//            }
+//          }
+//        } else {
+////          landmarks_curr_image_->landmarks_.emplace_back(0,0);
+////          landmarks_curr_image_->idx_.push_back(0);
+////          status.push_back(0);
+//        }
+//      }
+//
+////      // Sparse Optical Flow
+////      cv::calcOpticalFlowPyrLK(prev_image_, curr_image_, landmarks_prev_image_->landmarks_, landmarks_curr_image_->landmarks_,
+////                               status, err, win_size_, lk_max_level_, termcrit_, 0, lk_min_eigen_threshold_);
+////      // Copy indices of previous to current
+////      landmarks_curr_image_->idx_ = landmarks_prev_image_->idx_;
+//
+////
+////      feature_tracker::optical_flow_measurementPtr of_measurementmsg(
+////          new feature_tracker::optical_flow_measurement);
+////      FILE * pFile;
+////      pFile = fopen("vi_data.txt", "a");
+////      fprintf(pFile, "New Frame:\t%.3f\n", img->header.stamp.toSec());
+////      for (i = k = 0; i < landmarks_curr_image_->landmarks_.size(); ++i) {
+////        if (!status[i])
+////          continue;
+////
+//////        feature_tracker::flow_vector oneFlow;
+//////
+////        // Just for plotting
+////        feature_and_index_vec_.emplace_back(
+////            landmarks_prev_image_->idx_[i],
+////            Eigen::Matrix<double, 2, 1>(landmarks_prev_image_->landmarks_[i].x,
+////                                        landmarks_prev_image_->landmarks_[i].y),
+////            Eigen::Matrix<double, 2, 1>(landmarks_curr_image_->landmarks_[i].x,
+////                                        landmarks_curr_image_->landmarks_[i].y));
+////
+////        // Removes invalid landmarks
+////        landmarks_curr_image_->landmarks_[k] =
+////            landmarks_curr_image_->landmarks_[i];
+////        landmarks_curr_image_->idx_[k] = landmarks_curr_image_->idx_[i];
+////        ++k;
+////
+////        Eigen::Vector3d dirvec_f2 = camera_->camToWorld(
+////            feature_and_index_vec_.back().location_current_frame.x(),
+////            feature_and_index_vec_.back().location_current_frame.y());
+////        Eigen::Vector3d dirvec_f1 = camera_->camToWorld(
+////            feature_and_index_vec_.back().location_previous_frame.x(),
+////            feature_and_index_vec_.back().location_previous_frame.y());
+////
+//////        fprintf(pFile, "%.6f\t%.6f\t%.6f\t\t%.6f\t%.6f\t%.6f\t\n", dirvec_f1[0],
+//////                dirvec_f1[1], dirvec_f1[2], dirvec_f2[0], dirvec_f2[1],
+//////                dirvec_f2[2]);
+//////
+//////        oneFlow.p[0] = (dirvec_f2[0] + dirvec_f1[0])*0.5;
+//////        oneFlow.p[1] = (dirvec_f2[1] + dirvec_f1[1])*0.5;
+//////        oneFlow.p[2] = (dirvec_f2[2] + dirvec_f1[2])*0.5;
+//////
+//////        oneFlow.u[0] = (dirvec_f2[0] - dirvec_f1[0])/(current_timeStamp-last_timeStamp);
+//////        oneFlow.u[1] = (dirvec_f2[1] - dirvec_f1[1])/(current_timeStamp-last_timeStamp);
+//////        oneFlow.u[2] = (dirvec_f2[2] - dirvec_f1[2])/(current_timeStamp-last_timeStamp);
+//////
+//////        oneFlow.R = 0.5;  // ZMSSD distance.
+//////        of_measurementmsg->flow.push_back(oneFlow);
+//////
+////
+////        // Drawing
+////        if (draw_matches_) {
+////          //TODO(omaris) Add flag to plot keypoint id or simply point
+////          if ((feature_and_index_vec_.back().id % 3) == 0) {
+////            cv::putText(
+////                draw_image_,
+////                std::to_string(feature_and_index_vec_.back().id),
+////                cv::Point(
+////                    feature_and_index_vec_.back().location_current_frame.x(),
+////                    feature_and_index_vec_.back().location_current_frame.y()),
+////                cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+////
+////            cv::line(
+////                draw_image_,
+////                cv::Point(
+////                    feature_and_index_vec_.back().location_current_frame.x(),
+////                    feature_and_index_vec_.back().location_current_frame.y()),
+////                cv::Point(
+////                    feature_and_index_vec_.back().location_previous_frame.x(),
+////                    feature_and_index_vec_.back().location_previous_frame.y()),
+////                cv::Scalar(255, 255, 0), 2);
+////            cv::circle(
+////                draw_image_,
+////                cv::Point(
+////                    feature_and_index_vec_.back().location_current_frame.x(),
+////                    feature_and_index_vec_.back().location_current_frame.y()),
+////                3, cv::Scalar(0, 0, 0), -1, 8);
+////          }
+////        }
+////      }
+////      fclose(pFile);
+////      static int seq = 0;
+////      of_measurementmsg->header.stamp = img->header.stamp;
+////      of_measurementmsg->header.frame_id = "/world";
+////      of_measurementmsg->header.seq = seq++;
+////      pub_flow_.publish(of_measurementmsg);
+////
+////      // Remove the END
+////      landmarks_curr_image_->landmarks_.resize(k);
+////      landmarks_curr_image_->idx_.resize(k);
+//    } else {
+//      need_init_ = true;
+//    }
+//    if (draw_matches_) {
+//      cv::imshow("LK Tracker Window", draw_image_);
+//      cv::imshow("test1", curr_pyr_[1]);
+//      cv::imshow("test2", curr_pyr_[2]);
+//      cv::imshow("test3", curr_pyr_[3]);
+//      cv::waitKey(30);
+//    }
+//    std::swap(landmarks_prev_image_, landmarks_curr_image_);
+//    cv::swap(prev_image_, curr_image_);
+//    for(unsigned int i=0;i<n_levels_;i++){
+//      cv::swap(prev_pyr_[i], curr_pyr_[i]);
+//    }
+//    last_timeStamp = current_timeStamp;
   }
 };
 }

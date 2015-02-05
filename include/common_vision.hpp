@@ -58,69 +58,6 @@ struct Patch {
   uint8_t data_[area_] __attribute__ ((aligned (16)));
 };
 
-template<int size>
-class PatchFeature {
- public:
-  static constexpr int size_ = size;
-  static constexpr int area_ = size_*size_;
-  typedef Patch<size_> mtPatch;
-  typedef Patch<size_+2> mtPatchWithBorder;
-  mtPatch patch_;
-  mtPatchWithBorder patchWithBorder_;
-  float dx_[area_] __attribute__ ((aligned (16)));
-  float dy_[area_] __attribute__ ((aligned (16)));
-  Matrix3f H_;
-  bool validGradientParameters;
-  PatchFeature(){
-    validGradientParameters = false;
-  }
-  ~PatchFeature(){}
-  void computeGradientParameters(){
-    H_.setZero();
-    const int refStep = size_+2;
-    float* it_dx = dx_;
-    float* it_dy = dy_;
-    uint8_t* it;
-    Vector3f J;
-    for(int y=0; y<size_; ++y){
-      it = patchWithBorder_.data_ + (y+1)*refStep + 1;
-      for(int x=0; x<size_; ++x, ++it, ++it_dx, ++it_dy)
-      {
-        J[0] = 0.5 * (it[1] - it[-1]);
-        J[1] = 0.5 * (it[refStep] - it[-refStep]);
-        J[2] = 1;
-        *it_dx = J[0];
-        *it_dy = J[1];
-        H_ += J*J.transpose();
-      }
-    }
-    validGradientParameters = true;
-  }
-  void setPatch(const mtPatchWithBorder& patchWithBorder){
-    patchWithBorder_ = patchWithBorder;
-    extractPatchFromPatchWithBorder();
-    validGradientParameters = false;
-  }
-  void extractPatchFromPatchWithBorder(){
-    uint8_t* it_patch = patch_.data_;
-    uint8_t* it_patchWithBorder;
-    for(int y=1; y<size_+1; ++y, it_patch += size_){
-      it_patchWithBorder = patchWithBorder_.data_ + y*(size_+2) + 1;
-      for(int x=0; x<size_; ++x)
-        it_patch[x] = it_patchWithBorder[x];
-    }
-  }
-};
-
-template<int n_levels,int patch_size>
-class MultilevelPatchFeature{
- public:
-  static const int nLevels_ = n_levels;
-  PatchFeature<patch_size> patches_[nLevels_];
-  MultilevelPatchFeature(){}
-  ~MultilevelPatchFeature(){}
-};
-
 inline bool in_image_with_border(const cv::Mat& im, const cv::Point2f& point, float border) { // Feature_tracker code
   return point.x >= border && point.y >= border && point.x < im.cols - border
       && point.y < im.rows - border;
@@ -320,7 +257,7 @@ void DetectFastCorners(cv::Mat& img, std::vector<cv::Point2f>& detected_keypoint
   double t1 = (double) cv::getTickCount();
   cv::FastFeatureDetector feature_detector_fast(10, true); // TODO param
   feature_detector_fast.detect(img, keypoints);
-  ROS_INFO_STREAM("Found using fast corners " << keypoints.size());
+//  ROS_INFO_STREAM("Found using fast corners " << keypoints.size());
 
   // Sort by y for row corner LUT.
   std::sort(keypoints.begin(), keypoints.end(), [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {return a.pt.y < b.pt.y;});
@@ -343,8 +280,8 @@ void DetectFastCorners(cv::Mat& img, std::vector<cv::Point2f>& detected_keypoint
   for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
     detected_keypoints.emplace_back(it->pt.x, it->pt.y);
   }
-  ROS_INFO_STREAM("fast corners: " << (t2-t1)/cv::getTickFrequency() << " s, shi tomasi: " <<
-                  (t3-t2)/cv::getTickFrequency()<< " s, distribute: " << (t4-t3)/cv::getTickFrequency() << " s");
+//  ROS_INFO_STREAM("fast corners: " << (t2-t1)/cv::getTickFrequency() << " s, shi tomasi: " <<
+//                  (t3-t2)/cv::getTickFrequency()<< " s, distribute: " << (t4-t3)/cv::getTickFrequency() << " s");
 }
 
 
