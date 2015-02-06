@@ -59,18 +59,18 @@ class TestNode{
     subImu_ = nh_.subscribe("imuMeas", 1000, &TestNode::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestNode::imgCallback,this);
     doVisualization = true;
-    min_feature_count_ = 150;
-    max_feature_count_ = 30; // Maximal number of feature which is added at a time (not total)
-    cv::namedWindow("Tracker");
+    min_feature_count_ = 50;
+    max_feature_count_ = 20; // Maximal number of feature which is added at a time (not total)
     cv::namedWindow("test1");
     cv::namedWindow("test2");
     cv::namedWindow("test3");
+    cv::namedWindow("Tracker");
   };
   ~TestNode(){
-    cv::destroyWindow("Tracker");
     cv::destroyWindow("test1");
     cv::destroyWindow("test2");
     cv::destroyWindow("test3");
+    cv::destroyWindow("Tracker");
   }
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
   }

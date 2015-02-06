@@ -64,12 +64,12 @@ class PatchNew {
   Matrix3f H_;
   float s_;
   bool validGradientParameters;
-  bool hasPatch_;
+  bool hasValidPatch_; // Patch gets invalidates if extractPatchFromImage is not succesfull
   PatchNew(){
     static_assert(size_%2==0,"Patch size must be a multiple of 2");
     validGradientParameters = false;
     s_ = 0.0;
-    hasPatch_ = false;
+    hasValidPatch_ = false;
   }
   ~PatchNew(){}
   void computeGradientParameters(){
@@ -96,7 +96,7 @@ class PatchNew {
     const float dXX = H_(0,0)/(size_*size_);
     const float dYY = H_(1,1)/(size_*size_);
     const float dXY = H_(0,1)/(size_*size_);
-    // Find and return smaller eigenvalue: // TODO: this could be adapted to multiple levels, maybe not smaller eigenvalue
+    // Find and return smaller eigenvalue:
     s_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
     validGradientParameters = true;
   }
@@ -108,7 +108,7 @@ class PatchNew {
     const int u_r = floor(u);
     const int v_r = floor(v);
     if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= img.cols-halfpatch_size || v_r >= img.rows-halfpatch_size){
-      hasPatch_ = false;
+      hasValidPatch_ = false;
       return false;
     }
 
@@ -133,7 +133,7 @@ class PatchNew {
 
     extractPatchFromPatchWithBorder();
     validGradientParameters = false;
-    hasPatch_ = true;
+    hasValidPatch_ = true;
     return true;
   }
   void extractPatchFromPatchWithBorder(){
@@ -164,17 +164,40 @@ class MultilevelPatchFeature{
   int idx_;
   Matrix3f H_;
   float s_;
-  bool isVisible_;
-  int numInvisible_;
-  bool hasPatches_;
-//  STATISTICS
+  bool trackingSuccess_;
+  int numConsecutiveFailures_;
+  int numSuccess_;
+  int numFailures_;
+  bool hasValidPatches_;
+  bool inFrame_;
+  bool inFrameWithBorder_;
+  bool isGoodFeature(){  // TODO param
+    double r = static_cast<double>(numSuccess_)/static_cast<double>(numSuccess_+numFailures_);
+    double s = r*std::max(static_cast<double>(numSuccess_)/100.0,1.0);
+    int threshold = 3+s*10;
+    return numConsecutiveFailures_ < threshold;
+  }
+  void addSuccess(){
+    trackingSuccess_ = true;
+    numSuccess_++;
+    numConsecutiveFailures_ = 0;
+  }
+  void addFailure(){
+    trackingSuccess_ = false;
+    numFailures_++;
+    numConsecutiveFailures_++;
+  }
   MultilevelPatchFeature(int idx,const cv::Point2f& c){
     idx_ = idx;
     c_ = c;
     s_ = 0;
-    isVisible_ = true;
-    numInvisible_ = 0;
-    hasPatches_ = false;
+    hasValidPatches_ = false;
+    trackingSuccess_ = false;
+    numConsecutiveFailures_ = 0;
+    numSuccess_ = 0;
+    numFailures_ = 0;
+    inFrame_ = false;
+    inFrameWithBorder_ = false;
   }
   ~MultilevelPatchFeature(){}
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
@@ -182,11 +205,11 @@ class MultilevelPatchFeature{
     for(unsigned int i=0;i<nLevels_;i++){
       success = success & patches_[i].extractPatchFromImage(pyr.imgs_[i],c_*pow(0.5,i));
     }
-    hasPatches_ = success;
+    hasValidPatches_ = success;
     return success;
   }
   void computeMultilevelShiTomasiScore(){
-    if(hasPatches_){
+    if(hasValidPatches_){
       for(unsigned int i=0;i<nLevels_;i++){
         H_ += pow(0.25,i)*patches_[i].getHessian();
       }
@@ -200,12 +223,14 @@ class MultilevelPatchFeature{
     }
   }
   void getSpecificLevelScore(const int level){
-    if(patches_[level].hasPatch_){
+    if(patches_[level].hasValidPatch_){
       s_ = patches_[level].getScore();
+    } else {
+      s_ = -1;
     }
   }
   bool align2DSingleLevel(const ImagePyramid<n_levels>& pyr,cv::Point2f& c, const int level){
-    if(!patches_[level].hasPatch_) return false;
+    if(!patches_[level].hasValidPatch_) return false;
     const int halfpatch_size = patch_size/2;
     bool converged=false;
     patches_[level].computeGradientParameters();
@@ -227,7 +252,7 @@ class MultilevelPatchFeature{
       if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[level].cols-halfpatch_size || v_r >= pyr.imgs_[level].rows-halfpatch_size){
         break;
       }
-      if(isnan(u) || isnan(v)){ // TODO very rarely this can happen, maybe H is singular? should not be at corner.. check
+      if(isnan(u) || isnan(v)){ // TODO check
         return false;
       }
 
@@ -286,7 +311,7 @@ class FeatureManager{
     for (auto it = detected_keypoints.begin(); it != detected_keypoints.end(); ++it) {
       add = true;
       for (auto it_features = features_.begin(); it_features != features_.end(); ++it_features){
-//        if(it_features->isVisible_){ // TODO: rather inFrame
+//        if(it_features->trackingSuccess_){ // TODO: rather inFrame
           d2 = pow(it->x-it_features->c_.x,2) + pow(it->y-it_features->c_.y,2);
           if(d2 < t2){
             add = false;
@@ -304,6 +329,7 @@ class FeatureManager{
     }
   }
   void extractFeaturePatchesFromImage(const ImagePyramid<n_levels>& pyr){
+    // TODO: should feature only be extracted if extractable on all levels?
     for(auto it = features_.begin(); it != features_.end(); ++it){
       it->extractPatchesFromImage(pyr);
     }
@@ -322,16 +348,17 @@ class FeatureManager{
   void addBestCandidates(const int maxN,cv::Mat& drawImg){
     float maxScore = -1.0;
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
-      if(it->s_ > maxScore) maxScore = it->s_; // TODO apply log?
+      if(it->s_ > maxScore) maxScore = it->s_;
     }
 
     // Make buckets and fill based on score
     const unsigned int nBuckets = 100; // TODO param
+    const float exponent = 0.5; // TODO param
     std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*> buckets[nBuckets];
     unsigned int newBucketID;
     for (auto it_cand = candidates_.begin(); it_cand != candidates_.end(); ++it_cand) {
       if(it_cand->s_ > 0.0){
-        newBucketID = std::ceil(nBuckets*(it_cand->s_/maxScore))-1;
+        newBucketID = std::ceil(nBuckets*(pow(it_cand->s_/maxScore,exponent)))-1;
         if(newBucketID>nBuckets-1) newBucketID = nBuckets-1;
         buckets[newBucketID].insert(&(*it_cand));
       }
@@ -339,7 +366,7 @@ class FeatureManager{
 
     // Move buckets based on current features
     double d2;
-    double t2 = pow(20,2); // TODO param, remove sqrt everywhere
+    double t2 = pow(20,2); // TODO param
     double zeroDistancePenalty = nBuckets*1.0; // TODO param
     bool doDelete;
     for (auto it_feat = features_.begin(); it_feat != features_.end(); ++it_feat) {
@@ -398,18 +425,19 @@ class FeatureManager{
   }
   void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
+    bool success;
     for(auto it = features_.begin(); it != features_.end(); ++it){
       c_new = it->c_;
-      it->isVisible_ = true;
+      success = true;
       for(int level = start_level;level>=end_level;--level){
         if(!it->align2DSingleLevel(pyr,c_new,level)){
-          it->isVisible_ = false;
-          it->numInvisible_++;
+          it->addFailure();
+          success = false;
           break;
         }
       }
-      if(it->isVisible_){
-        it->numInvisible_ = 0;
+      if(success){
+        it->addSuccess();
         cv::line(drawImg,c_new,it->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(it->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -419,18 +447,19 @@ class FeatureManager{
   }
   void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
+    bool success;
     for(auto it = features_.begin(); it != features_.end(); ++it){
       c_new = it->c_;
-      it->isVisible_ = true;
+      success = true;
       for(int level = start_level;level>=end_level;--level){
         if(!it->align2DSingleLevel(pyr,c_new,level) && level==end_level){
-          it->isVisible_ = false;
-          it->numInvisible_++;
+          it->addFailure();
+          success = false;
           break;
         }
       }
-      if(it->isVisible_){
-        it->numInvisible_ = 0;
+      if(success){
+        it->addSuccess();
         cv::line(drawImg,c_new,it->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(it->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -448,16 +477,15 @@ class FeatureManager{
       cv::circle(drawImg,it->c_, 3, cv::Scalar(0, 0, 0), -1, 8);
     }
   }
-  void removeInvisible(){ // TODO Improve removent
+  void removeInvisible(){
     for(auto it = features_.begin(); it != features_.end();){
-      if(it->numInvisible_ > 2){ // TODO param
+      if(!it->isGoodFeature()){
         it = features_.erase(it);
       } else {
         ++it;
       }
     }
   }
-  // STATISTICS
 };
 
 template <int n_levels>
