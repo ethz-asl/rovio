@@ -27,26 +27,11 @@
 */
 
 #include "rovio_node.hpp"
-#include "FilterState.hpp"
-#include "ImuPrediction.hpp"
-
+#include "Camera.hpp"
 
 int main(int argc, char** argv) {
-  typedef rovio::FilterState<2> mtState;
-  rovio::ImuPrediction<mtState> imuPrediction_;
-  mtState testState;
-  testState.setRandom(1);
-  rovio::PredictionMeas imuMeas;
-  imuMeas.setRandom(1);
-//
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << imuPrediction_.jacInput(testState,imuMeas,0.1) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << imuPrediction_.jacInputFD(testState,imuMeas,0.1,1e-6) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << imuPrediction_.jacNoise(testState,imuMeas,0.1) << std::endl;
-//  std::cout << "---------------------------------------------------------------------------------" << std::endl;
-//  std::cout << imuPrediction_.jacNoiseFD(testState,imuMeas,0.1,1e-6) << std::endl;
+  rovio::Camera camera_;
+  camera_.testCameraModel();
 
   ros::init(argc, argv, "testNode");
   ros::NodeHandle nh;

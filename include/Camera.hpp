@@ -37,8 +37,6 @@ using namespace Eigen;
 
 namespace rovio{
 
-// TODO: look at different model: radtan, radtanext,
-
 class Camera{
  public:
   Matrix3d K_;
@@ -156,6 +154,63 @@ class Camera{
     y = ybar;
     vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
     return true;
+  }
+  bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& vec){
+    return pixelToBearing(c,vec.n_);
+  }
+  void testCameraModel(){
+    double d = 1e-4;
+    LWF::NormalVectorElement b_s;
+    LWF::NormalVectorElement b_s1;
+    LWF::NormalVectorElement b_s2;
+    Eigen::Vector3d v_s;
+    Eigen::Vector3d v_s1;
+    Eigen::Vector3d v_s2;
+    LWF::NormalVectorElement b_e;
+    Eigen::Matrix2d J1;
+    Eigen::Matrix2d J1_FD;
+    Eigen::Matrix<double,2,3> J2;
+    Eigen::Matrix<double,2,3> J2_FD;
+    cv::Point2f p_s;
+    cv::Point2f p_s1;
+    cv::Point2f p_s2;
+    cv::Point2f p_s3;
+    Eigen::Vector2d diff;
+    for(unsigned int s = 1; s<10;){
+      b_s.setRandom(s);
+      if(b_s.n_(2)<0) b_s.n_(2) = -b_s.n_(2);
+      bearingToPixel(b_s,p_s,J1);
+      pixelToBearing(p_s,b_e);
+      b_s.boxMinus(b_e,diff);
+      std::cout << b_s.n_.transpose() << std::endl;
+      std::cout << "Error after back and forward mapping: " << diff.norm() << std::endl;
+      diff = Eigen::Vector2d(d,0);
+      b_s.boxPlus(diff,b_s1);
+      bearingToPixel(b_s1,p_s1);
+      J1_FD(0,0) = static_cast<double>((p_s1-p_s).x)/d;
+      J1_FD(1,0) = static_cast<double>((p_s1-p_s).y)/d;
+      diff = Eigen::Vector2d(0,d);
+      b_s.boxPlus(diff,b_s2);
+      bearingToPixel(b_s2,p_s2);
+      J1_FD(0,1) = static_cast<double>((p_s2-p_s).x)/d;
+      J1_FD(1,1) = static_cast<double>((p_s2-p_s).y)/d;
+      std::cout << J1 << std::endl;
+      std::cout << J1_FD << std::endl;
+
+      v_s = b_s.n_;
+      bearingToPixel(v_s,p_s,J2);
+      bearingToPixel(v_s + Eigen::Vector3d(d,0,0),p_s1);
+      bearingToPixel(v_s + Eigen::Vector3d(0,d,0),p_s2);
+      bearingToPixel(v_s + Eigen::Vector3d(0,0,d),p_s3);
+      J2_FD(0,0) = static_cast<double>((p_s1-p_s).x)/d;
+      J2_FD(1,0) = static_cast<double>((p_s1-p_s).y)/d;
+      J2_FD(0,1) = static_cast<double>((p_s2-p_s).x)/d;
+      J2_FD(1,1) = static_cast<double>((p_s2-p_s).y)/d;
+      J2_FD(0,2) = static_cast<double>((p_s3-p_s).x)/d;
+      J2_FD(1,2) = static_cast<double>((p_s3-p_s).y)/d;
+      std::cout << J2 << std::endl;
+      std::cout << J2_FD << std::endl;
+    }
   }
   //  void pixelToBearingVector(const cv::Point2f& c,Eigen::Vector3d& v){ // radtan (extended)
   //    // Shift origin and scale for undistortion

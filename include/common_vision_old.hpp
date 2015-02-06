@@ -44,7 +44,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#include <ros-camera.h>
 #include <unordered_set>
 
 using namespace Eigen;

@@ -35,7 +35,7 @@
 #include "State.hpp"
 #include "FilterState.hpp"
 #include <cv_bridge/cv_bridge.h>
-#include <ros-camera.h>
+#include "Camera.hpp"
 #include "common_vision_old.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -111,7 +111,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
   ImgUpdate(){
-    camera_.reset(new RosCamera("fpga21_cam0.yaml"));
+//    camera_.reset(new RosCamera("fpga21_cam0.yaml")); // TODO load calib
     qVM_.setIdentity();
     MrMV_.setZero();
     initCovFeature_.setIdentity();
@@ -132,7 +132,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double initDepth_;
   double timeForRemoval_;
   int minFeatureForDetection_;
-  std::shared_ptr<RosCamera> camera_;
+  rovio::Camera camera_;
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     mtInnovation y;
 //    /* Bearing vector error
@@ -199,7 +199,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     } else {
       // Search visible features
       unsigned int ID;
-      Eigen::Vector2d vec2;
+      Eigen::Vector2d vec2; // TODO: delete
+      cv::Point2f pixel; // TODO: delete
       Eigen::Vector3d vec3;
       const Eigen::Vector3d e3(0,0,1);
       bool converged;
@@ -207,15 +208,16 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       for(unsigned int i=0;i<STATE::nMax_;i++){
         ID = state.template get<mtState::_aux>().ID_[i];
         vec3 = state.template get<mtState::_nor>(i);
-        if(ID != 0 && e3.dot(vec3)>0){ // check if on front side of camera
-          vec2 = camera_->worldToCam(vec3);
+        if(ID != 0 && e3.dot(vec3)>0){ // TODO check if on front side of camera (should be done by camera)
+          camera_.bearingToPixel(vec3,pixel);
+          vec2 = Eigen::Vector2d(pixel.x,pixel.y);
           createPatchFromPatchWithBorder(state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch);
           // TODO: make multiple samples depending on covariance
           converged = align2D(meas.template get<mtMeas::_aux>().img_,state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch,10,vec2);
           if(converged){
             state.template get<mtState::_aux>().isVisible_[i] = true;
-            vec3 = camera_->camToWorld(vec2.x(),vec2.y());
-            vec3.normalize();
+            pixel = cv::Point2f(vec2.x(),vec2.y());
+            camera_.pixelToBearing(pixel,vec3);
             state.template get<mtState::_aux>().norInCurrentFrame_[i] = vec3;
           }
         }
@@ -236,14 +238,16 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       std::cout << "Img Update Error: Image is empty" << std::endl;
       return;
     } else {
-      Eigen::Vector2d vec2;
+      Eigen::Vector2d vec2; // TODO: delete
+      cv::Point2f pixel; // TODO: delete
       Eigen::Vector3d vec3;
       std::vector<cv::Point2f> points_current;
       std::vector<cv::Point2f> points_temp;
       state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
       state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
       for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
-        vec2 = camera_->worldToCam(state.template get<mtState::_nor>(it->second));
+        camera_.bearingToPixel(state.template get<mtState::_nor>(it->second),pixel);
+        vec2 = Eigen::Vector2d(pixel.x,pixel.y);
         points_current.emplace_back(vec2(0),vec2(1));
       }
       const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
@@ -251,8 +255,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
       }
       for(auto it = points_temp.begin();it != points_temp.end();++it){
-        vec3 = camera_->camToWorld(it->x,it->y);
-        vec3.normalize();
+        pixel = cv::Point2f(vec2.x(),vec2.y());
+        camera_.pixelToBearing(pixel,vec3);
         ID = state.template get<mtState::_aux>().maxID_;
         stateInd = state.template get<mtState::_aux>().addID(ID);
         if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
@@ -266,7 +270,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       for(unsigned int i=0;i<STATE::nMax_;i++){
         ID = state.template get<mtState::_aux>().ID_[i];
         if(ID != 0){
-          vec2 = camera_->worldToCam(state.template get<mtState::_nor>(i));
+          camera_.bearingToPixel(state.template get<mtState::_nor>(i),pixel);
+          vec2 = Eigen::Vector2d(pixel.x,pixel.y);
           getPatchInterpolated(state.template get<mtState::_aux>().img_,vec2,5,state.template get<mtState::_aux>().patchesWithBorder_[i].data_);
         }
       }
