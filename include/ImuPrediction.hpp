@@ -101,17 +101,15 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
         *state.template get<mtState::_vel>()-dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
-    NormalVectorElement nIn;
     for(unsigned int i=0;i<mtState::nMax_;i++){
-      nIn.n_ = state.template get<mtState::_nor>(i);
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt/pow(state.template get<mtState::_dep>(i),2)
-          *nIn.get().transpose()*state.template get<mtState::_vel>()
+          *state.template get<mtState::_nor>(i).getVec().transpose()*state.template get<mtState::_vel>()
           + noise.template get<mtNoise::_dep>(i)*sqrt(dt);
-      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
-          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega
-          + nIn.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_nor>(i).getVec())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*dOmega
+          + state.template get<mtState::_nor>(i).getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
-      output.template get<mtState::_nor>(i) = qm.rotate(nIn.get());
+      output.template get<mtState::_nor>(i) = state.template get<mtState::_nor>(i).rotated(qm);
       output.template get<mtState::_aux>().timeSinceVisible_[i] = state.template get<mtState::_aux>().timeSinceVisible_[i]+dt;
       output.template get<mtState::_aux>().isVisible_[i] = state.template get<mtState::_aux>().isVisible_[i];
       output.template get<mtState::_aux>().patchesWithBorder_[i] = state.template get<mtState::_aux>().patchesWithBorder_[i];
@@ -157,35 +155,34 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
         dt*rot::RotationMatrixPD(state.template get<mtState::_att>()).matrix()*Lmat(dOmega);
     J.template block<3,3>(mtState::template getId<mtState::_att>(),mtState::template getId<mtState::_att>()) =
         Eigen::Matrix3d::Identity();
-    NormalVectorElement nIn, nOut;
+    NormalVectorElement nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
-      nIn.n_ = state.template get<mtState::_nor>(i);
-      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
-          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega;
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_nor>(i).getVec())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*dOmega;
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
-      nOut.get() = qm.rotate(nIn.get());
+      nOut = state.template get<mtState::_nor>(i).rotated(qm);
       J(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0 + (2.0*dt/pow(state.template get<mtState::_dep>(i),3)
-              *nIn.get().transpose()*state.template get<mtState::_vel>());
+              *state.template get<mtState::_nor>(i).getVec().transpose()*state.template get<mtState::_vel>());
       J.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
-          -dt/pow(state.template get<mtState::_dep>(i),2)*nIn.get().transpose();
+          -dt/pow(state.template get<mtState::_dep>(i),2)*state.template get<mtState::_nor>(i).getVec().transpose();
       J.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
-          -dt/pow(state.template get<mtState::_dep>(i),2)*state.template get<mtState::_vel>().transpose()*nIn.getM();
+          -dt/pow(state.template get<mtState::_dep>(i),2)*state.template get<mtState::_vel>().transpose()*state.template get<mtState::_nor>(i).getM();
       J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
           nOut.getM().transpose()*(
-                  kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)*(
+                  kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*(
                       -dt*state.template get<mtState::_dep>(i)*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_vel>())
-                      -Eigen::Matrix3d::Identity()*(nIn.get().dot(dOmega))-nIn.get()*dOmega.transpose())
+                      -Eigen::Matrix3d::Identity()*(state.template get<mtState::_nor>(i).getVec().dot(dOmega))-state.template get<mtState::_nor>(i).getVec()*dOmega.transpose())
                   +rot::RotationMatrixPD(qm).matrix()
-          )*nIn.getM();
+          )*state.template get<mtState::_nor>(i).getM();
       J.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)) =
-          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
-              *dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>();
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
+              *dt*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_nor>(i).getVec())*state.template get<mtState::_vel>();
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vel>()) =
-          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
-              *dt*state.template get<mtState::_dep>(i)*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get());
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
+              *dt*state.template get<mtState::_dep>(i)*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_nor>(i).getVec());
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_gyb>()) =
-          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
-              *(Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dt;
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
+              *(Eigen::Matrix<double,3,3>::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*dt;
     }
     return J;
   }
@@ -203,19 +200,18 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     J.template block<3,3>(mtState::template getId<mtState::_gyb>(),mtNoise::template getId<mtNoise::_gyb>()) = Eigen::Matrix3d::Identity()*sqrt(dt);
     J.template block<3,3>(mtState::template getId<mtState::_att>(),mtNoise::template getId<mtNoise::_att>()) =
         -rot::RotationMatrixPD(state.template get<mtState::_att>()).matrix()*Lmat(dOmega)*sqrt(dt);
-    NormalVectorElement nIn, nOut;
+    NormalVectorElement nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
-      nIn.n_ = state.template get<mtState::_nor>(i);
-      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(nIn.get())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
-          + (Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*dOmega;
+      Eigen::Vector3d dm = dt*kindr::linear_algebra::getSkewMatrixFromVector(state.template get<mtState::_nor>(i).getVec())*state.template get<mtState::_vel>()*state.template get<mtState::_dep>(i)
+          + (Eigen::Matrix<double,3,3>::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*dOmega;
       rot::RotationQuaternionPD qm = qm.exponentialMap(dm);
-      nOut.get() = qm.rotate(nIn.get());
+      nOut = state.template get<mtState::_nor>(i).rotated(qm);
       J(mtState::template getId<mtState::_dep>(i),mtNoise::template getId<mtNoise::_dep>(i)) = sqrt(dt);
       J.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) =
-          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)*nIn.getN()*sqrt(dt);
+          nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*state.template get<mtState::_nor>(i).getN()*sqrt(dt);
       J.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_att>()) =
-          -nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(nIn.get()))*Lmat(dm)
-          *(Eigen::Matrix<double,3,3>::Identity()-nIn.get()*nIn.get().transpose())*sqrt(dt);
+          -nOut.getM().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
+          *(Eigen::Matrix<double,3,3>::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*sqrt(dt);
     }
     return J;
   }

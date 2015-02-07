@@ -29,7 +29,7 @@
 #include "rovio_filter.hpp"
 
 int main(){
-  static const unsigned int nMax_ = 20;
+  static const unsigned int nMax_ = 10;
   typedef rovio::FilterState<nMax_> mtState;
   typedef rovio::PredictionMeas mtPredictionMeas;
   typedef rovio::ImgUpdateMeas<mtState> mtImgMeas;
@@ -41,7 +41,7 @@ int main(){
   }
   for(unsigned int i=0;i<nMax_;i++){
     testState.template get<mtState::_aux>().isVisible_[i] = true;
-    testState.template get<mtState::_aux>().norInCurrentFrame_[i] = testState.template get<mtState::_nor>(i);
+    testState.template get<mtState::_aux>().norInCurrentFrame_[i] = testState.template get<mtState::_nor>(i).getVec();
     testState.template get<mtState::_aux>().norInCurrentFrame_[i] += Eigen::Vector3d(i*0.1,-(i*0.3)+0.03,0.1);
     testState.template get<mtState::_aux>().norInCurrentFrame_[i].normalize();
     testState.template get<mtState::_aux>().norInCurrentFrame_[i] = Eigen::Vector3d(1.0,0.3,0.5);

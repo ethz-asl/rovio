@@ -138,12 +138,11 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
 //     */
-    NormalVectorElement m_est, m_meas;
+    NormalVectorElement m_meas;
     for(unsigned int i=0;i<STATE::nMax_;i++){
       if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
-        m_est.n_ = state.template get<mtState::_nor>(i);
-        m_meas.n_ = state.template get<mtState::_aux>().norInCurrentFrame_[i];
-        m_est.boxMinus(m_meas,y.template get<mtInnovation::_nor>(i));
+        m_meas.setFromVector(state.template get<mtState::_aux>().norInCurrentFrame_[i]);
+        state.template get<mtState::_nor>(i).boxMinus(m_meas,y.template get<mtInnovation::_nor>(i));
         y.template get<mtInnovation::_nor>(i) += noise.template get<mtNoise::_nor>(i);
       } else {
         y.template get<mtInnovation::_nor>(i) = noise.template get<mtNoise::_nor>(i);
@@ -154,31 +153,16 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     mtJacInput J;
     J.setZero();
-    NormalVectorElement m_est, m_meas;
+    NormalVectorElement m_meas;
     Eigen::Vector3d vec;
     double a, vecNorm, c;
     for(unsigned int i=0;i<STATE::nMax_;i++){
       if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
-        m_est.n_ = state.template get<mtState::_nor>(i);
-        m_meas.n_ = state.template get<mtState::_aux>().norInCurrentFrame_[i];
-        vec = -m_meas.n_.cross(m_est.n_);
-        vecNorm = vec.norm();
-        c = m_meas.n_.dot(m_est.n_);
-        a = std::acos(c);
-        if(vecNorm<1e-6){
-          if(c>0){
-            J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-                -m_meas.getN().transpose()*kindr::linear_algebra::getSkewMatrixFromVector(m_meas.n_)*m_est.getM();
-          } else { // TODO: imprecise
-            J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)).setZero();
-          }
-        } else {
-          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-              m_meas.getN().transpose()*(
-                  -(Eigen::Matrix3d::Identity()*a/vecNorm - (vec*vec.transpose())*a/pow(vecNorm,3))*kindr::linear_algebra::getSkewMatrixFromVector(m_meas.n_)
-                  -(vec*m_meas.n_.transpose())/(std::sqrt(1-std::pow(c,2))*vecNorm)
-              )*m_est.getM();
-        }
+        m_meas.setFromVector(state.template get<mtState::_aux>().norInCurrentFrame_[i]);
+        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
+            m_meas.getN().transpose()
+            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(i),m_meas)
+            *state.template get<mtState::_nor>(i).getM();
       }
     }
     return J;
@@ -201,15 +185,13 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       unsigned int ID;
       Eigen::Vector2d vec2; // TODO: delete
       cv::Point2f pixel; // TODO: delete
-      Eigen::Vector3d vec3;
       const Eigen::Vector3d e3(0,0,1);
       bool converged;
       uint8_t patch[64] __attribute__ ((aligned (16)));
       for(unsigned int i=0;i<STATE::nMax_;i++){
         ID = state.template get<mtState::_aux>().ID_[i];
-        vec3 = state.template get<mtState::_nor>(i);
-        if(ID != 0 && e3.dot(vec3)>0){ // TODO check if on front side of camera (should be done by camera)
-          camera_.bearingToPixel(vec3,pixel);
+        if(ID != 0 && e3.dot(state.template get<mtState::_nor>(i).getVec())>0){ // TODO check if on front side of camera (should be done by camera)
+          camera_.bearingToPixel(state.template get<mtState::_nor>(i),pixel);
           vec2 = Eigen::Vector2d(pixel.x,pixel.y);
           createPatchFromPatchWithBorder(state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch);
           // TODO: make multiple samples depending on covariance
@@ -217,8 +199,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
           if(converged){
             state.template get<mtState::_aux>().isVisible_[i] = true;
             pixel = cv::Point2f(vec2.x(),vec2.y());
-            camera_.pixelToBearing(pixel,vec3);
-            state.template get<mtState::_aux>().norInCurrentFrame_[i] = vec3;
+            camera_.pixelToBearing(pixel,state.template get<mtState::_aux>().norInCurrentFrame_[i]);
           }
         }
       }
@@ -240,7 +221,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     } else {
       Eigen::Vector2d vec2; // TODO: delete
       cv::Point2f pixel; // TODO: delete
-      Eigen::Vector3d vec3;
       std::vector<cv::Point2f> points_current;
       std::vector<cv::Point2f> points_temp;
       state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
@@ -256,6 +236,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
       for(auto it = points_temp.begin();it != points_temp.end();++it){
         pixel = cv::Point2f(vec2.x(),vec2.y());
+        Eigen::Vector3d vec3;
         camera_.pixelToBearing(pixel,vec3);
         ID = state.template get<mtState::_aux>().maxID_;
         stateInd = state.template get<mtState::_aux>().addID(ID);

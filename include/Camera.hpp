@@ -118,14 +118,14 @@ class Camera{
     }
     return true;
   }
-  bool bearingToPixel(const LWF::NormalVectorElement& vec, cv::Point2f& c){
-    return bearingToPixel(vec.n_,c);
+  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c){
+    return bearingToPixel(n.getVec(),c);
   }
-  bool bearingToPixel(const LWF::NormalVectorElement& vec, cv::Point2f& c, Eigen::Matrix<double,2,2>& J){
+  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c, Eigen::Matrix<double,2,2>& J){
     Eigen::Matrix<double,3,2> J1;
-    J1 = vec.getM();
+    J1 = n.getM();
     Eigen::Matrix<double,2,3> J2;
-    const bool success = bearingToPixel(vec.n_,c,J2);
+    const bool success = bearingToPixel(n.getVec(),c,J2);
     J = J2*J1;
     return success;
   }
@@ -155,8 +155,11 @@ class Camera{
     vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
     return true;
   }
-  bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& vec){
-    return pixelToBearing(c,vec.n_);
+  bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n){
+    Eigen::Vector3d vec;
+    bool success = pixelToBearing(c,vec);
+    n.setFromVector(vec);
+    return success;
   }
   void testCameraModel(){
     double d = 1e-4;
@@ -178,11 +181,11 @@ class Camera{
     Eigen::Vector2d diff;
     for(unsigned int s = 1; s<10;){
       b_s.setRandom(s);
-      if(b_s.n_(2)<0) b_s.n_(2) = -b_s.n_(2);
+      if(b_s.getVec()(2)<0) b_s = b_s.inverted();
       bearingToPixel(b_s,p_s,J1);
       pixelToBearing(p_s,b_e);
       b_s.boxMinus(b_e,diff);
-      std::cout << b_s.n_.transpose() << std::endl;
+      std::cout << b_s.getVec().transpose() << std::endl;
       std::cout << "Error after back and forward mapping: " << diff.norm() << std::endl;
       diff = Eigen::Vector2d(d,0);
       b_s.boxPlus(diff,b_s1);
@@ -197,7 +200,7 @@ class Camera{
       std::cout << J1 << std::endl;
       std::cout << J1_FD << std::endl;
 
-      v_s = b_s.n_;
+      v_s = b_s.getVec();
       bearingToPixel(v_s,p_s,J2);
       bearingToPixel(v_s + Eigen::Vector3d(d,0,0),p_s1);
       bearingToPixel(v_s + Eigen::Vector3d(0,d,0),p_s2);

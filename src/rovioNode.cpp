@@ -31,7 +31,7 @@
 
 int main(int argc, char** argv) {
   rovio::Camera camera_;
-  camera_.testCameraModel();
+//  camera_.testCameraModel();
 
   ros::init(argc, argv, "testNode");
   ros::NodeHandle nh;

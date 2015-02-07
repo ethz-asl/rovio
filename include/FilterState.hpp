@@ -159,7 +159,7 @@ class FilterState: public State<
   }
   void initializeFeatureState(mtCovMat& stateCov, unsigned int i, Eigen::Vector3d n, double d,const Eigen::Matrix<double,3,3>& initCov){
     this->template get<_dep>(i) = d;
-    this->template get<_nor>(i) = n;
+    this->template get<_nor>(i).setFromVector(n);
     stateCov.template block<D_,1>(0,this->template getId<_dep>(i)).setZero();
     stateCov.template block<1,D_>(this->template getId<_dep>(i),0).setZero();
     stateCov.template block<D_,2>(0,this->template getId<_nor>(i)).setZero();
