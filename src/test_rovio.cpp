@@ -71,8 +71,6 @@ int main(){
 //  std::cout << "---------------------------------------------------------------------------------" << std::endl;
 //  std::cout << std::get<0>(mpFilter->mUpdates_).jacNoiseFD(testState,imgUpdateMeas_,0.1,1e-6) << std::endl;
 
-
-
   mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
   std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-6,0,0.1);
 

@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
 	roscpp
 	cv_bridge
+	camera_calibration_parsers
 )
 include_directories(include ${catkin_INCLUDE_DIRS})
 
@@ -31,6 +32,7 @@ catkin_package(
 	lightweight_filtering 
 	roscpp
 	cv_bridge
+	camera_calibration_parsers
 )
 
 add_executable(rovioNode src/rovioNode.cpp)

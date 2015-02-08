@@ -37,6 +37,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include "Camera.hpp"
 #include "common_vision_old.hpp"
+#include <camera_calibration_parsers/parse.h>
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -111,7 +112,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
   ImgUpdate(){
-//    camera_.reset(new RosCamera("fpga21_cam0.yaml")); // TODO load calib (also qVM_ and MrMV_);
+    std::string camera_name;
+    sensor_msgs::CameraInfo cam_info;
+    camera_calibration_parsers::readCalibration("fpga21_cam0.yaml",camera_name,cam_info);
+    Eigen::Matrix3d K; K << cam_info.K[0], cam_info.K[1], cam_info.K[2], cam_info.K[3], cam_info.K[4], cam_info.K[5], cam_info.K[6], cam_info.K[7], cam_info.K[8];
+    camera_.setCameraMatrix(K);
+    camera_.setDistortionParameterSimple(cam_info.D[0],cam_info.D[1],cam_info.D[4],cam_info.D[2],cam_info.D[3]);
     qVM_.setIdentity();
     MrMV_.setZero();
     initCovFeature_.setIdentity();

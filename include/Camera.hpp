@@ -50,6 +50,14 @@ class Camera{
     K_.setIdentity();
   };
   ~Camera(){};
+  void setCameraMatrix(Matrix3d K){
+    K_ = K;
+    std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
+  }
+  void setDistortionParameterSimple(double k1, double k2, double k3, double p1, double p2){
+    k1_ = k1; k2_ = k2; k3_ = k3; p1_ = p1; p2_ = p2;
+    std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
+  }
   void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out){
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);

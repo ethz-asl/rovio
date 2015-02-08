@@ -50,12 +50,10 @@ class TestNode{
   cv::Mat draw_image_, img_;
   bool doVisualization;
   unsigned int min_feature_count_, max_feature_count_;
-//  std::shared_ptr<RosCamera> camera_;
   ImagePyramid<n_levels_> pyr_;
   FeatureManager<n_levels_,8,100> fManager_;
 
   TestNode(ros::NodeHandle& nh): nh_(nh){
-//    camera_.reset(new RosCamera("fpga21_cam0.yaml"));
     subImu_ = nh_.subscribe("imuMeas", 1000, &TestNode::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestNode::imgCallback,this);
     doVisualization = true;
