@@ -32,19 +32,17 @@
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
 #include "State.hpp"
-#include <cv_bridge/cv_bridge.h>
 #include <map>
 #include <unordered_set>
 
 #include "common_vision_old.hpp"
+#include "common_vision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
 using namespace LWF;
-
-// todo: feature manager
 
 template<unsigned int nMax>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
@@ -63,6 +61,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
     }
   };
   ~StateAuxiliary(){};
+  FeatureManager<4,8,nMax> fManager_;
   cv::Mat img_;
   double imgTime_;
   std::map<unsigned int,unsigned int> indFeature_;

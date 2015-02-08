@@ -121,6 +121,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     output.template get<mtState::_aux>().indEmpty_ = state.template get<mtState::_aux>().indEmpty_;
     output.template get<mtState::_aux>().indFeature_ = state.template get<mtState::_aux>().indFeature_;
     output.template get<mtState::_aux>().imgTime_ = state.template get<mtState::_aux>().imgTime_;
+    output.template get<mtState::_aux>().fManager_ = state.template get<mtState::_aux>().fManager_;
     // todo: change to avoid copy
     output.fix();
     return output;

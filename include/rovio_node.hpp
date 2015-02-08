@@ -52,7 +52,7 @@ class TestNode{
   unsigned int min_feature_count_, max_feature_count_;
 //  std::shared_ptr<RosCamera> camera_;
   ImagePyramid<n_levels_> pyr_;
-  FeatureManager<n_levels_,8> fManager_;
+  FeatureManager<n_levels_,8,100> fManager_;
 
   TestNode(ros::NodeHandle& nh): nh_(nh){
 //    camera_.reset(new RosCamera("fpga21_cam0.yaml"));
@@ -100,12 +100,12 @@ class TestNode{
     const double t1 = (double) cv::getTickCount();
     fManager_.alignFeaturesSeq(pyr_,draw_image_,3,1);
     const double t2 = (double) cv::getTickCount();
-    ROS_INFO_STREAM(" Matching " << fManager_.features_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    ROS_INFO_STREAM(" Matching " << fManager_.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     fManager_.removeInvisible();
     fManager_.extractFeaturePatchesFromImage(pyr_);
 
     fManager_.candidates_.clear();
-    if(fManager_.features_.size() < min_feature_count_){
+    if(fManager_.validSet_.size() < min_feature_count_){
       ROS_INFO_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       const int detect_level = 1;
@@ -122,7 +122,7 @@ class TestNode{
       ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       fManager_.addBestCandidates(max_feature_count_,draw_image_);
       const double t5 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Got " << fManager_.features_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
     }
     if (doVisualization) {
       cv::imshow("test1", pyr_.imgs_[1]);

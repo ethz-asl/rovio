@@ -111,7 +111,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
   ImgUpdate(){
-//    camera_.reset(new RosCamera("fpga21_cam0.yaml")); // TODO load calib
+//    camera_.reset(new RosCamera("fpga21_cam0.yaml")); // TODO load calib (also qVM_ and MrMV_);
     qVM_.setIdentity();
     MrMV_.setZero();
     initCovFeature_.setIdentity();
@@ -139,7 +139,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 //     * 0 = m - m_meas + n
 //     */
     NormalVectorElement m_meas;
-    for(unsigned int i=0;i<STATE::nMax_;i++){
+    for(unsigned int i=0;i<STATE::nMax_;i++){ // Iterate over valid set (do invalid as well)
       if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
         m_meas.setFromVector(state.template get<mtState::_aux>().norInCurrentFrame_[i]);
         state.template get<mtState::_nor>(i).boxMinus(m_meas,y.template get<mtInnovation::_nor>(i));

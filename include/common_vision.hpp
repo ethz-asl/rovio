@@ -187,9 +187,18 @@ class MultilevelPatchFeature{
     numFailures_++;
     numConsecutiveFailures_++;
   }
+  MultilevelPatchFeature(){
+    idx_ = -1;
+    c_ = cv::Point2f(0,0);
+    reset();
+  }
   MultilevelPatchFeature(int idx,const cv::Point2f& c){
     idx_ = idx;
     c_ = c;
+    reset();
+  }
+  ~MultilevelPatchFeature(){}
+  void reset(){
     s_ = 0;
     hasValidPatches_ = false;
     trackingSuccess_ = false;
@@ -199,7 +208,6 @@ class MultilevelPatchFeature{
     inFrame_ = false;
     inFrameWithBorder_ = false;
   }
-  ~MultilevelPatchFeature(){}
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
     for(unsigned int i=0;i<nLevels_;i++){
@@ -298,25 +306,52 @@ class MultilevelPatchFeature{
   }
 };
 
-template<int n_levels,int patch_size>
+template<int n_levels,int patch_size,int nMax>
 class FeatureManager{
  public:
-  std::vector<MultilevelPatchFeature<n_levels,patch_size>> features_;
+  MultilevelPatchFeature<n_levels,patch_size> features_[nMax];
+  std::unordered_set<unsigned int> validSet_;
+  std::unordered_set<unsigned int> invalidSet_;
   std::vector<MultilevelPatchFeature<n_levels,patch_size>> candidates_;
   int maxIdx_;
+  FeatureManager(){
+    maxIdx_ = 0;
+    for(unsigned int i=0;i<nMax;i++){
+      invalidSet_.insert(i);
+    }
+  }
+  int addFeature(const MultilevelPatchFeature<n_levels,patch_size>& feature){
+    if(invalidSet_.empty()){
+      std::cout << "Feature Manager: maximal number of feature reached" << std::endl;
+      return -1;
+    } else {
+      unsigned int ind = *(invalidSet_.begin());
+      invalidSet_.erase(ind);
+      validSet_.insert(ind);
+      features_[ind] = feature;
+      features_[ind].idx_ = maxIdx_++;
+      return ind;
+    }
+  }
+  void removeFeature(unsigned int ind){
+      validSet_.erase(ind);
+      invalidSet_.insert(ind);
+  }
+  ~FeatureManager(){}
   void selectCandidates(std::vector<cv::Point2f>& detected_keypoints){ // TODO: add corner motion dependency
     float d2;
     constexpr float t2 = patch_size*patch_size; // TODO: param
     bool add;
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for (auto it = detected_keypoints.begin(); it != detected_keypoints.end(); ++it) {
       add = true;
-      for (auto it_features = features_.begin(); it_features != features_.end(); ++it_features){
-//        if(it_features->trackingSuccess_){ // TODO: rather inFrame
-          d2 = pow(it->x-it_features->c_.x,2) + pow(it->y-it_features->c_.y,2);
-          if(d2 < t2){
-            add = false;
-          }
-//        }
+      for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+        mpFeature = &features_[*it_f];
+        d2 = pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2); // TODO: check inFrame
+        if(d2 < t2){
+          add = false;
+        }
+
       }
       if(add){
         candidates_.emplace_back(0,*it);
@@ -330,8 +365,10 @@ class FeatureManager{
   }
   void extractFeaturePatchesFromImage(const ImagePyramid<n_levels>& pyr){
     // TODO: should feature only be extracted if extractable on all levels?
-    for(auto it = features_.begin(); it != features_.end(); ++it){
-      it->extractPatchesFromImage(pyr);
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
+      mpFeature->extractPatchesFromImage(pyr);
     }
   }
   void computeCandidatesScore(int mode){
@@ -369,11 +406,13 @@ class FeatureManager{
     double t2 = pow(20,2); // TODO param
     double zeroDistancePenalty = nBuckets*1.0; // TODO param
     bool doDelete;
-    for (auto it_feat = features_.begin(); it_feat != features_.end(); ++it_feat) {
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
       for (unsigned int bucketID = 1;bucketID < nBuckets;bucketID++) {
         for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
           doDelete = false;
-          d2 = std::pow(it_feat->c_.x - (*it_cand)->c_.x,2) + std::pow(it_feat->c_.y - (*it_cand)->c_.y,2);
+          d2 = std::pow(mpFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpFeature->c_.y - (*it_cand)->c_.y,2);
           if(d2<t2){
             newBucketID = std::max((int)(bucketID - (t2-d2)/t2*zeroDistancePenalty),0);
             if(bucketID != newBucketID){
@@ -391,15 +430,13 @@ class FeatureManager{
     }
 
     // Incrementally add features and update candidate buckets
-    features_.reserve(candidates_.size());
     MultilevelPatchFeature<n_levels,patch_size>* mpNewFeature;
     int addedCount = 0;
     for (int bucketID = nBuckets-1;bucketID >= 0;bucketID--) {
       while(!buckets[bucketID].empty() && addedCount < maxN) {
         mpNewFeature = *(buckets[bucketID].begin());
-        mpNewFeature->idx_ = maxIdx_++;
         buckets[bucketID].erase(mpNewFeature);
-        features_.push_back(*mpNewFeature); // TODO: add further criteria like threshold on score
+        addFeature(*mpNewFeature);
 //        cv::circle(drawImg,mpNewFeature->c_, 5, cv::Scalar(0, 0, 0), -1, 8);
         addedCount++;
         for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
@@ -426,44 +463,48 @@ class FeatureManager{
   void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
     bool success;
-    for(auto it = features_.begin(); it != features_.end(); ++it){
-      c_new = it->c_;
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
+      c_new = mpFeature->c_;
       success = true;
       for(int level = start_level;level>=end_level;--level){
-        if(!it->align2DSingleLevel(pyr,c_new,level)){
-          it->addFailure();
+        if(!mpFeature->align2DSingleLevel(pyr,c_new,level)){
+          mpFeature->addFailure();
           success = false;
           break;
         }
       }
       if(success){
-        it->addSuccess();
-        cv::line(drawImg,c_new,it->c_,cv::Scalar(255,255,255), 2);
-        cv::putText(drawImg,std::to_string(it->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+        mpFeature->addSuccess();
+        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
+        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
-        it->c_ = c_new;
+        mpFeature->c_ = c_new;
       }
     }
   }
   void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
     bool success;
-    for(auto it = features_.begin(); it != features_.end(); ++it){
-      c_new = it->c_;
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
+      c_new = mpFeature->c_;
       success = true;
       for(int level = start_level;level>=end_level;--level){
-        if(!it->align2DSingleLevel(pyr,c_new,level) && level==end_level){
-          it->addFailure();
+        if(!mpFeature->align2DSingleLevel(pyr,c_new,level) && level==end_level){
+          mpFeature->addFailure();
           success = false;
           break;
         }
       }
       if(success){
-        it->addSuccess();
-        cv::line(drawImg,c_new,it->c_,cv::Scalar(255,255,255), 2);
-        cv::putText(drawImg,std::to_string(it->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+        mpFeature->addSuccess();
+        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
+        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
-        it->c_ = c_new;
+        mpFeature->c_ = c_new;
       }
     }
   }
@@ -473,16 +514,19 @@ class FeatureManager{
     }
   }
   void drawFeatures(cv::Mat& drawImg){
-    for(auto it = features_.begin(); it != features_.end(); ++it){
-      cv::circle(drawImg,it->c_, 3, cv::Scalar(0, 0, 0), -1, 8);
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
+      cv::circle(drawImg,mpFeature->c_, 3, cv::Scalar(0, 0, 0), -1, 8);
     }
   }
   void removeInvisible(){
-    for(auto it = features_.begin(); it != features_.end();){
-      if(!it->isGoodFeature()){
-        it = features_.erase(it);
-      } else {
-        ++it;
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();){
+      int ind = *it_f;
+      it_f++;
+      if(!features_[ind].isGoodFeature()){
+        removeFeature(ind);
       }
     }
   }
