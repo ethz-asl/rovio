@@ -34,10 +34,43 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <unordered_set>
+#include <Eigen/Eigenvalues>
 
 using namespace Eigen;
 
 namespace rovio{
+
+class DrawPoint{
+ public:
+  cv::Point2f c_;
+  cv::Size sigma_;
+  double sigmaAngle_;
+  bool hasSigma_;
+  Eigen::EigenSolver<Eigen::Matrix2d> es_;
+  DrawPoint(){
+    c_ = cv::Point2f(0,0);
+    sigma_ = cv::Size(2,2);
+    hasSigma_ = false;
+    sigmaAngle_ = 0.0;
+  }
+  void draw(cv::Mat& drawImg,const cv::Scalar& color){
+    if(hasSigma_){
+      cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,1,8,0);
+    } else {
+      cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,-1,8,0);
+    }
+  }
+  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color){
+    cv::line(drawImg,c_,p.c_,color, 2);
+  }
+  void setSigmaFromCov(const Eigen::Matrix2d& cov){
+    es_.compute(cov);
+    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
+    sigma_.width =  std::max(static_cast<int>(es_.eigenvalues()(0).real()+0.5),1);
+    sigma_.height  = std::max(static_cast<int>(es_.eigenvalues()(1).real()+0.5),1);
+    hasSigma_ = true;
+  }
+};
 
 template<int n_levels>
 class ImagePyramid{
@@ -164,28 +197,42 @@ class MultilevelPatchFeature{
   int idx_;
   Matrix3f H_;
   float s_;
+  bool foundInImage_;
   bool trackingSuccess_;
   int numConsecutiveFailures_;
+  double localQuality_;
+  double localQualityGain_;
   int numSuccess_;
   int numFailures_;
   bool hasValidPatches_;
   bool inFrame_;
   bool inFrameWithBorder_;
+
+  DrawPoint log_previous_;
+  DrawPoint log_prediction_;
+  DrawPoint log_meas_;
+  DrawPoint log_current_;
+
   bool isGoodFeature(){  // TODO param
     double r = static_cast<double>(numSuccess_)/static_cast<double>(numSuccess_+numFailures_);
     double s = r*std::max(static_cast<double>(numSuccess_)/100.0,1.0);
-    int threshold = 3+s*10;
+    int threshold = 2+s*5;
     return numConsecutiveFailures_ < threshold;
+//    double upper = 0.9;
+//    double lower = 0.2;
+//    return localQuality_ > upper-(upper-lower)*s;
   }
   void addSuccess(){
     trackingSuccess_ = true;
     numSuccess_++;
     numConsecutiveFailures_ = 0;
+    localQuality_ = (1-localQualityGain_)*localQuality_ + localQualityGain_;
   }
   void addFailure(){
     trackingSuccess_ = false;
     numFailures_++;
     numConsecutiveFailures_++;
+    localQuality_ = (1-localQualityGain_)*localQuality_;
   }
   MultilevelPatchFeature(){
     idx_ = -1;
@@ -200,6 +247,7 @@ class MultilevelPatchFeature{
   ~MultilevelPatchFeature(){}
   void reset(){
     s_ = 0;
+    foundInImage_ = false;
     hasValidPatches_ = false;
     trackingSuccess_ = false;
     numConsecutiveFailures_ = 0;
@@ -207,6 +255,8 @@ class MultilevelPatchFeature{
     numFailures_ = 0;
     inFrame_ = false;
     inFrameWithBorder_ = false;
+    localQuality_ = 1.0;
+    localQualityGain_ = 0.1;
   }
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
@@ -237,55 +287,73 @@ class MultilevelPatchFeature{
       s_ = -1;
     }
   }
-  bool align2DSingleLevel(const ImagePyramid<n_levels>& pyr,cv::Point2f& c, const int level){
-    if(!patches_[level].hasValidPatch_) return false;
+  bool align2D(const ImagePyramid<n_levels>& pyr,cv::Point2f& c, const int level1, const int level2){
+    for(int level = level1; level <= level2; level++){
+      if(!patches_[level].hasValidPatch_) return false;
+    }
     const int halfpatch_size = patch_size/2;
     bool converged=false;
-    patches_[level].computeGradientParameters();
-    Matrix3f Hinv = patches_[level].H_.inverse();
+    Matrix3f H; H.setZero();
+    for(int level = level1; level <= level2; level++){
+      patches_[level].computeGradientParameters();
+      H(0,0) += pow(0.25,level)*patches_[level].H_(0,0);
+      H(0,1) += pow(0.25,level)*patches_[level].H_(0,1);
+      H(1,0) += pow(0.25,level)*patches_[level].H_(1,0);
+      H(1,1) += pow(0.25,level)*patches_[level].H_(1,1);
+      H(2,0) += pow(0.5,level)*patches_[level].H_(2,0);
+      H(2,1) += pow(0.5,level)*patches_[level].H_(2,1);
+      H(0,2) += pow(0.5,level)*patches_[level].H_(0,2);
+      H(1,2) += pow(0.5,level)*patches_[level].H_(1,2);
+      H(2,2) += patches_[level].H_(2,2);
+    }
+    Matrix3f Hinv = H.inverse();
     float mean_diff = 0;
     const int max_iter = 10;
 
     // Compute pixel location in new image:
-    float u = c.x*pow(0.5,level);
-    float v = c.y*pow(0.5,level);
+    float u = c.x;
+    float v = c.y;
 
     // termination condition
     const float min_update_squared = 0.03*0.03;
-    const int refStep = pyr.imgs_[level].step.p[0];
     Vector3f update; update.setZero();
     for(int iter = 0; iter<max_iter; ++iter){
-      int u_r = floor(u);
-      int v_r = floor(v);
-      if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[level].cols-halfpatch_size || v_r >= pyr.imgs_[level].rows-halfpatch_size){
-        break;
-      }
       if(isnan(u) || isnan(v)){ // TODO check
         return false;
       }
-
-      // compute interpolation weights
-      const float subpix_x = u-u_r;
-      const float subpix_y = v-v_r;
-      const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
-      const float wTR = subpix_x * (1.0-subpix_y);
-      const float wBL = (1.0-subpix_x)*subpix_y;
-      const float wBR = subpix_x * subpix_y;
-
-      // loop through search_patch, interpolate
-      uint8_t* it_patch = patches_[level].patch_;
-      float* it_dx = patches_[level].dx_;
-      float* it_dy = patches_[level].dy_;
-      uint8_t* it_img;
       Vector3f Jres; Jres.setZero();
-      for(int y=0; y<patch_size; ++y){
-        it_img = (uint8_t*) pyr.imgs_[level].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
-        for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
-          const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
-          const float res = intensity - *it_patch + mean_diff;
-          Jres[0] -= res*(*it_dx);
-          Jres[1] -= res*(*it_dy);
-          Jres[2] -= res;
+      for(int level = level1; level <= level2; level++){
+        const int refStep = pyr.imgs_[level].step.p[0];
+        const float u_level = u*pow(0.5,level);
+        const float v_level = v*pow(0.5,level);
+        const int u_r = floor(u_level);
+        const int v_r = floor(v_level);
+        if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[level].cols-halfpatch_size || v_r >= pyr.imgs_[level].rows-halfpatch_size){
+          return false;
+        }
+
+        // compute interpolation weights
+        const float subpix_x = u_level-u_r;
+        const float subpix_y = v_level-v_r;
+        const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
+        const float wTR = subpix_x * (1.0-subpix_y);
+        const float wBL = (1.0-subpix_x)*subpix_y;
+        const float wBR = subpix_x * subpix_y;
+
+        // loop through search_patch, interpolate
+        uint8_t* it_patch = patches_[level].patch_;
+        float* it_dx = patches_[level].dx_;
+        float* it_dy = patches_[level].dy_;
+        uint8_t* it_img;
+        for(int y=0; y<patch_size; ++y){
+          it_img = (uint8_t*) pyr.imgs_[level].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
+          for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
+            const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
+            const float res = intensity - *it_patch + mean_diff;
+            Jres[0] -= pow(0.5,level)*res*(*it_dx);
+            Jres[1] -= pow(0.5,level)*res*(*it_dy);
+            Jres[2] -= res;
+          }
         }
       }
 
@@ -300,9 +368,12 @@ class MultilevelPatchFeature{
       }
     }
 
-    c.x = u*pow(2.0,level);
-    c.y = v*pow(2.0,level);
+    c.x = u; // TODO
+    c.y = v;
     return converged;
+  }
+  bool align2DSingleLevel(const ImagePyramid<n_levels>& pyr,cv::Point2f& c, const int level){
+    return align2D(pyr,c,level,level);
   }
 };
 
@@ -368,7 +439,9 @@ class FeatureManager{
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      mpFeature->extractPatchesFromImage(pyr);
+      if(mpFeature->trackingSuccess_){
+        mpFeature->extractPatchesFromImage(pyr);
+      }
     }
   }
   void computeCandidatesScore(int mode){
@@ -382,7 +455,8 @@ class FeatureManager{
       }
     }
   }
-  void addBestCandidates(const int maxN,cv::Mat& drawImg){
+  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg){
+    std::unordered_set<unsigned int> newSet;
     float maxScore = -1.0;
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
       if(it->s_ > maxScore) maxScore = it->s_;
@@ -436,8 +510,10 @@ class FeatureManager{
       while(!buckets[bucketID].empty() && addedCount < maxN) {
         mpNewFeature = *(buckets[bucketID].begin());
         buckets[bucketID].erase(mpNewFeature);
-        addFeature(*mpNewFeature);
-//        cv::circle(drawImg,mpNewFeature->c_, 5, cv::Scalar(0, 0, 0), -1, 8);
+        int ind = addFeature(*mpNewFeature);
+        if(ind >= 0){
+          newSet.insert(ind);
+        }
         addedCount++;
         for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
           for (auto it_cand = buckets[bucketID2].begin();it_cand != buckets[bucketID2].end();) {
@@ -459,24 +535,39 @@ class FeatureManager{
         }
       }
     }
+    return newSet;
   }
   void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
-    bool success;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      success = true;
+      mpFeature->foundInImage_ = true;
       for(int level = start_level;level>=end_level;--level){
-        if(!mpFeature->align2DSingleLevel(pyr,c_new,level)){
-          mpFeature->addFailure();
-          success = false;
+        if(!mpFeature->align2D(pyr,c_new,level,start_level)){
+          mpFeature->foundInImage_ = false;
           break;
         }
       }
-      if(success){
-        mpFeature->addSuccess();
+      if(mpFeature->foundInImage_){
+        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
+        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+        cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
+        mpFeature->c_ = c_new;
+      }
+    }
+  }
+  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int level1,const int level2){
+    cv::Point2f c_new;
+    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      mpFeature = &features_[*it_f];
+      c_new = mpFeature->c_;
+      if(!mpFeature->align2D(pyr,c_new,level1,level2)){
+        mpFeature->foundInImage_ = false;
+      } else {
+        mpFeature->foundInImage_ = true;
         cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -486,21 +577,18 @@ class FeatureManager{
   }
   void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
     cv::Point2f c_new;
-    bool success;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      success = true;
+      mpFeature->foundInImage_ = true;
       for(int level = start_level;level>=end_level;--level){
         if(!mpFeature->align2DSingleLevel(pyr,c_new,level) && level==end_level){
-          mpFeature->addFailure();
-          success = false;
+          mpFeature->foundInImage_ = false;
           break;
         }
       }
-      if(success){
-        mpFeature->addSuccess();
+      if(mpFeature->foundInImage_){
         cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -525,7 +613,7 @@ class FeatureManager{
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();){
       int ind = *it_f;
       it_f++;
-      if(!features_[ind].isGoodFeature()){
+      if(!features_[ind].isGoodFeature()){ // TODO: handle inFrame
         removeFeature(ind);
       }
     }

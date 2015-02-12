@@ -38,6 +38,7 @@
 #include "Camera.hpp"
 #include "common_vision_old.hpp"
 #include <camera_calibration_parsers/parse.h>
+#include "PixelOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -65,7 +66,7 @@ class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<n
     }
   };
   ~ImgUpdateMeasAuxiliary(){};
-  cv::Mat img_;
+  ImagePyramid<4> pyr_;
   double imgTime_;
 };
 template<typename STATE>
@@ -87,6 +88,7 @@ class ImgUpdateNoise: public State<ArrayElement<VectorElement<2>,STATE::nMax_>>{
   static constexpr unsigned int _nor = 0;
   ImgUpdateNoise(){
     static_assert(_nor+1==E_,"Error with indices");
+    this->template getName<_nor>() = "nor";
   };
   ~ImgUpdateNoise(){};
 };
@@ -103,6 +105,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
+  using Base::updnoiP_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtCovMat mtCovMat;
   typedef typename Base::mtInnovation mtInnovation;
@@ -111,64 +114,75 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
-  ImgUpdate(){
+  M3D initCovFeature_;
+  double initDepth_;
+  rovio::Camera camera_;
+  PixelOutputCF<STATE> pixelOutputCF_;
+  PixelOutput pixelOutput_;
+  typename PixelOutput::mtCovMat pixelOutputCov_;
+  ImgUpdate(): pixelOutputCF_(&camera_){
     std::string camera_name;
     sensor_msgs::CameraInfo cam_info;
-    camera_calibration_parsers::readCalibration("fpga21_cam0.yaml",camera_name,cam_info);
-    Eigen::Matrix3d K; K << cam_info.K[0], cam_info.K[1], cam_info.K[2], cam_info.K[3], cam_info.K[4], cam_info.K[5], cam_info.K[6], cam_info.K[7], cam_info.K[8];
+    camera_calibration_parsers::readCalibration("camchain-imucam-run2.yaml",camera_name,cam_info);
+    M3D K; K << cam_info.K[0], cam_info.K[1], cam_info.K[2], cam_info.K[3], cam_info.K[4], cam_info.K[5], cam_info.K[6], cam_info.K[7], cam_info.K[8];
     camera_.setCameraMatrix(K);
     camera_.setDistortionParameterSimple(cam_info.D[0],cam_info.D[1],cam_info.D[4],cam_info.D[2],cam_info.D[3]);
-    qVM_.setIdentity();
-    MrMV_.setZero();
+//    camera_.testCameraModel();
     initCovFeature_.setIdentity();
     initDepth_ = 0;
-    timeForRemoval_ = 10.0;
-    minFeatureForDetection_ = 10;
-    doubleRegister_.registerScaledUnitMatrix("initCovFeature",initCovFeature_);
+    doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
-    doubleRegister_.registerVector("MrMV",MrMV_);
-    doubleRegister_.registerQuaternion("qVM",qVM_);
-    doubleRegister_.registerScalar("timeForRemoval",timeForRemoval_);
-    intRegister_.registerScalar("minFeatureForDetection",minFeatureForDetection_);
+    int ind;
+    for(int i=0;i<STATE::nMax_;i++){
+      ind = mtNoise::template getId<mtNoise::_nor>(i);
+      doubleRegister_.removeScalarByVar(updnoiP_(ind,ind));
+      doubleRegister_.removeScalarByVar(updnoiP_(ind+1,ind+1));
+      doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(ind,ind));
+      doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(ind+1,ind+1));
+    }
   };
   ~ImgUpdate(){};
-  rot::RotationQuaternionPD qVM_;
-  Eigen::Vector3d MrMV_;
-  Eigen::Matrix3d initCovFeature_;
-  double initDepth_;
-  double timeForRemoval_;
-  int minFeatureForDetection_;
-  rovio::Camera camera_;
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
+    const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     mtInnovation y;
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
 //     */
     NormalVectorElement m_meas;
-    for(unsigned int i=0;i<STATE::nMax_;i++){ // Iterate over valid set (do invalid as well)
-      if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
-        m_meas.setFromVector(state.template get<mtState::_aux>().norInCurrentFrame_[i]);
-        state.template get<mtState::_nor>(i).boxMinus(m_meas,y.template get<mtInnovation::_nor>(i));
-        y.template get<mtInnovation::_nor>(i) += noise.template get<mtNoise::_nor>(i);
+    V3D bearing_meas;
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      if(fManager.features_[ind].foundInImage_){  // TODO fManager.features_[ind].inFrame_ &&
+        camera_.pixelToBearing(fManager.features_[ind].c_,bearing_meas);
+        m_meas.setFromVector(bearing_meas);
+        state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
+        y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
       } else {
-        y.template get<mtInnovation::_nor>(i) = noise.template get<mtNoise::_nor>(i);
+        y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
       }
+    }
+    for(auto it_f = fManager.invalidSet_.begin();it_f != fManager.invalidSet_.end(); ++it_f){
+      const int ind = *it_f;
+      y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
     }
     return y;
   }
   mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+    const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     mtJacInput J;
     J.setZero();
     NormalVectorElement m_meas;
-    Eigen::Vector3d vec;
+    V3D bearing_meas;
     double a, vecNorm, c;
-    for(unsigned int i=0;i<STATE::nMax_;i++){
-      if(state.template get<mtState::_aux>().ID_[i] != 0 && state.template get<mtState::_aux>().isVisible_[i]){
-        m_meas.setFromVector(state.template get<mtState::_aux>().norInCurrentFrame_[i]);
-        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      if(fManager.features_[ind].foundInImage_){  // TODO fManager.features_[ind].inFrame_ &&
+        camera_.pixelToBearing(fManager.features_[ind].c_,bearing_meas);
+        m_meas.setFromVector(bearing_meas);
+        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
             m_meas.getN().transpose()
-            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(i),m_meas)
-            *state.template get<mtState::_nor>(i).getM();
+            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(ind),m_meas)
+            *state.template get<mtState::_nor>(ind).getM();
       }
     }
     return J;
@@ -182,86 +196,101 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     return J;
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
-    state.template get<mtState::_aux>().resetVisible();
-    if(meas.template get<mtMeas::_aux>().img_.empty()){
-      std::cout << "Img Update Error: Image is empty" << std::endl;
-      return;
-    } else {
-      // Search visible features
-      unsigned int ID;
-      Eigen::Vector2d vec2; // TODO: delete
-      cv::Point2f pixel; // TODO: delete
-      const Eigen::Vector3d e3(0,0,1);
-      bool converged;
-      uint8_t patch[64] __attribute__ ((aligned (16)));
-      for(unsigned int i=0;i<STATE::nMax_;i++){
-        ID = state.template get<mtState::_aux>().ID_[i];
-        if(ID != 0 && e3.dot(state.template get<mtState::_nor>(i).getVec())>0){ // TODO check if on front side of camera (should be done by camera)
-          camera_.bearingToPixel(state.template get<mtState::_nor>(i),pixel);
-          vec2 = Eigen::Vector2d(pixel.x,pixel.y);
-          createPatchFromPatchWithBorder(state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch);
-          // TODO: make multiple samples depending on covariance
-          converged = align2D(meas.template get<mtMeas::_aux>().img_,state.template get<mtState::_aux>().patchesWithBorder_[i].data_,patch,10,vec2);
-          if(converged){
-            state.template get<mtState::_aux>().isVisible_[i] = true;
-            pixel = cv::Point2f(vec2.x(),vec2.y());
-            camera_.pixelToBearing(pixel,state.template get<mtState::_aux>().norInCurrentFrame_[i]);
-          }
-        }
+    cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
+    FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+
+      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_prediction_.c_);
+      pixelOutputCF_.setIndex(ind);
+      pixelOutput_ = pixelOutputCF_.transformState(state);
+      pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+      fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
+
+      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
+    }
+    const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
+    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,3,1); // TODO implement different methods
+    const double t2 = (double) cv::getTickCount();
+    ROS_INFO_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      if(fManager.features_[ind].foundInImage_){
+        fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
       }
     }
   };
   void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas, mtOutlierDetection* mpOutlierDetection){
-    unsigned int stateInd, ID; // TODO: improve feature handling, keep some feature for relocalization (depending on amount of tracked features)
-    for(unsigned int i=0;i<STATE::nMax_;i++){
-      ID = state.template get<mtState::_aux>().ID_[i];
-      if(ID != 0 && state.template get<mtState::_aux>().timeSinceVisible_[i] > timeForRemoval_){
-        state.template get<mtState::_aux>().removeID(ID);
+    // TODO: refresh pixel coordinates
+    FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+
+
+      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_current_.c_);
+      pixelOutputCF_.setIndex(ind);
+      pixelOutput_ = pixelOutputCF_.transformState(state);
+      pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+      fManager.features_[ind].log_current_.setSigmaFromCov(pixelOutputCov_);
+
+      if(fManager.features_[ind].foundInImage_){
+        fManager.features_[ind].log_prediction_.drawLine(state.template get<mtState::_aux>().img_,fManager.features_[ind].log_meas_,cv::Scalar(0,255,255));
+        fManager.features_[ind].log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
+        if(!mpOutlierDetection->isOutlier(ind)){
+          fManager.features_[ind].addSuccess();
+          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 250, 0));
+        }
+        if(mpOutlierDetection->isOutlier(ind)){
+          fManager.features_[ind].addFailure();
+          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 250));
+        }
+      } else {
+        fManager.features_[ind].addFailure();
       }
     }
 
-    // Check if new feature should be added to the state
-    if(meas.template get<mtMeas::_aux>().img_.empty()){
-      std::cout << "Img Update Error: Image is empty" << std::endl;
-      return;
-    } else {
-      Eigen::Vector2d vec2; // TODO: delete
-      cv::Point2f pixel; // TODO: delete
-      std::vector<cv::Point2f> points_current;
-      std::vector<cv::Point2f> points_temp;
-      state.template get<mtState::_aux>().img_ = meas.template get<mtMeas::_aux>().img_;
-      state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
-      for(auto it = state.template get<mtState::_aux>().indFeature_.begin();it != state.template get<mtState::_aux>().indFeature_.end();++it){
-        camera_.bearingToPixel(state.template get<mtState::_nor>(it->second),pixel);
-        vec2 = Eigen::Vector2d(pixel.x,pixel.y);
-        points_current.emplace_back(vec2(0),vec2(1));
-      }
-      const int missingFeatureCount = STATE::nMax_-state.template get<mtState::_aux>().getTotFeatureNo();
-      if(missingFeatureCount > minFeatureForDetection_){
-        DetectFastCorners(state.template get<mtState::_aux>().img_, points_temp, points_current,missingFeatureCount);
-      }
-      for(auto it = points_temp.begin();it != points_temp.end();++it){
-        pixel = cv::Point2f(vec2.x(),vec2.y());
-        Eigen::Vector3d vec3;
-        camera_.pixelToBearing(pixel,vec3);
-        ID = state.template get<mtState::_aux>().maxID_;
-        stateInd = state.template get<mtState::_aux>().addID(ID);
-        if(getPatchInterpolated(state.template get<mtState::_aux>().img_,Eigen::Vector2d(it->x,it->y),5,state.template get<mtState::_aux>().patchesWithBorder_[stateInd].data_)){
-          state.initializeFeatureState(cov,stateInd,vec3,initDepth_,initCovFeature_);
-        } else {
-          state.template get<mtState::_aux>().removeID(ID);
-        }
-      }
 
-      // Get newest patch
-      for(unsigned int i=0;i<STATE::nMax_;i++){
-        ID = state.template get<mtState::_aux>().ID_[i];
-        if(ID != 0){
-          camera_.bearingToPixel(state.template get<mtState::_nor>(i),pixel);
-          vec2 = Eigen::Vector2d(pixel.x,pixel.y);
-          getPatchInterpolated(state.template get<mtState::_aux>().img_,vec2,5,state.template get<mtState::_aux>().patchesWithBorder_[i].data_);
-        }
+    fManager.removeInvisible();
+    fManager.extractFeaturePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+    fManager.candidates_.clear();
+
+//    fManager.invalidSet_.clear();
+//    fManager.validSet_.clear();
+//    for(unsigned int i=0;i<mtState::nMax_;i++){
+//      fManager.invalidSet_.insert(i);
+//    }
+
+    if(fManager.validSet_.size() < 0.9*mtState::nMax_){ // TODO param
+      ROS_INFO_STREAM(" Adding keypoints");
+      const double t1 = (double) cv::getTickCount();
+      const int detect_level = 1;
+      std::vector<cv::Point2f> detected_keypoints;
+      DetectFastCorners(meas.template get<mtMeas::_aux>().pyr_,detected_keypoints,detect_level);
+      const double t2 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Detected " << detected_keypoints.size() << " on level " << detect_level << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+      fManager.selectCandidates(detected_keypoints);
+      const double t3 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Selected " << fManager.candidates_.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
+      fManager.extractCandidatePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+      fManager.computeCandidatesScore(-1);
+      const double t4 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
+      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_);
+      const double t5 = (double) cv::getTickCount();
+      ROS_INFO_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
+      for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
+        const int ind = *it_f;
+        V3D vec3;
+        camera_.pixelToBearing(fManager.features_[ind].c_,vec3);
+        state.initializeFeatureState(cov,ind,vec3,initDepth_,initCovFeature_);
       }
+    }
+
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_previous_.c_);
     }
   };
 };

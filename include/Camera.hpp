@@ -37,6 +37,8 @@ using namespace Eigen;
 
 namespace rovio{
 
+// TODO: implement equidistant
+
 class Camera{
  public:
   Matrix3d K_;
@@ -58,7 +60,7 @@ class Camera{
     k1_ = k1; k2_ = k2; k3_ = k3; p1_ = p1; p2_ = p2;
     std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
-  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out){
+  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
     const double xy = in(0) * in(1);
@@ -67,7 +69,7 @@ class Camera{
     out(0) = in(0) * kr + p1_ * 2 * xy + p2_ * (r2 + 2 * x2);
     out(1) = in(1) * kr + p1_ * (r2 + 2 * y2) + p2_ * 2 * xy;
   }
-  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J){
+  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
     const double xy = in(0) * in(1);
@@ -80,7 +82,7 @@ class Camera{
     J(1,0) = J(0,1);
     J(1,1) = kr + 2.0 * k1_ * y2 + 4.0 * k2_ * y2 * r2 + 6.0 * k3_ * y2 * r2 * r2 + 6.0 * p1_ * in(1) + 2.0 * p2_ * in(0);
   }
-  bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c){
+  bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c) const{
     // Project
     if(vec(2)<=0) return false;
     const Eigen::Vector2d undistorted = Eigen::Vector2d(vec(0)/vec(2),vec(1)/vec(2));
@@ -97,7 +99,7 @@ class Camera{
     }
     return true;
   }
-  bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c, Eigen::Matrix<double,2,3>& J){
+  bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c, Eigen::Matrix<double,2,3>& J) const{
     // Project
     if(vec(2)<=0) return false;
     const Eigen::Vector2d undistorted = Eigen::Vector2d(vec(0)/vec(2),vec(1)/vec(2));
@@ -126,10 +128,10 @@ class Camera{
     }
     return true;
   }
-  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c){
+  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c) const{
     return bearingToPixel(n.getVec(),c);
   }
-  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c, Eigen::Matrix<double,2,2>& J){
+  bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c, Eigen::Matrix<double,2,2>& J) const{
     Eigen::Matrix<double,3,2> J1;
     J1 = n.getM();
     Eigen::Matrix<double,2,3> J2;
@@ -137,22 +139,21 @@ class Camera{
     J = J2*J1;
     return success;
   }
-  bool pixelToBearing(const cv::Point2f& c,Eigen::Vector3d& vec){
+  bool pixelToBearing(const cv::Point2f& c,Eigen::Vector3d& vec) const{
     // Shift origin and scale
     Eigen::Vector2d y;
     y(0) = (static_cast<double>(c.x) - K_(0, 2)) / K_(0, 0);
     y(1) = (static_cast<double>(c.y) - K_(1, 2)) / K_(1, 1);
 
     // Undistort by optimizing
-    const int max_iter = 5;
-    const double tolerance = 1e-15;
-    Eigen::Vector2d ybar = y;
+    const int max_iter = 100;
+    const double tolerance = 1e-10;
+    Eigen::Vector2d ybar = y; // current guess (undistorted)
     Eigen::Matrix2d J;
-    Eigen::Vector2d y_tmp;
+    Eigen::Vector2d y_tmp; // current guess (distorted)
     Eigen::Vector2d e;
     Eigen::Vector2d du;
     for (int i = 0; i < max_iter; i++) {
-      y_tmp = ybar;
       distort(ybar,y_tmp,J);
       e = y - y_tmp;
       du = (J.transpose() * J).inverse() * J.transpose() * e;
@@ -163,7 +164,7 @@ class Camera{
     vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
     return true;
   }
-  bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n){
+  bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n) const{
     Eigen::Vector3d vec;
     bool success = pixelToBearing(c,vec);
     n.setFromVector(vec);

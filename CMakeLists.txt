@@ -1,10 +1,10 @@
 cmake_minimum_required (VERSION 2.6)
 project(rovio)
 add_definitions(-std=c++0x)
+add_definitions(-O3)
 
 ##################### Set some variables #####################
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
-SET(CMAKE_BUILD_TYPE "Release")
 
 
 ##################### Find, include, and compile library #####################
@@ -20,6 +20,7 @@ include_directories(${Kindr_INCLUDE_DIRS})
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
 	roscpp
+	roslib
 	cv_bridge
 	camera_calibration_parsers
 )
@@ -31,6 +32,7 @@ catkin_package(
 	CATKIN_DEPENDS
 	lightweight_filtering 
 	roscpp
+	roslib
 	cv_bridge
 	camera_calibration_parsers
 )

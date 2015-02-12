@@ -53,22 +53,39 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
   using Base::safe_;
   using Base::front_;
   using Base::readFromInfo;
+  using Base::doubleRegister_;
+  using Base::mUpdates_;
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtPrediction mtPrediction;
+  typedef typename Base::mtState mtState;
   Filter(){
-    readFromInfo("rovio.info");
+    int ind;
+    for(int i=0;i<STATE::nMax_;i++){
+      ind = mtState::template getId<mtState::_nor>(i);
+      doubleRegister_.removeScalarByVar(init_.cov_(ind,ind));
+      doubleRegister_.removeScalarByVar(init_.cov_(ind+1,ind+1));
+      ind = mtState::template getId<mtState::_dep>(i);
+      doubleRegister_.removeScalarByVar(init_.cov_(ind,ind));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_dep>(i));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().w());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().x());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().y());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().z());
+      std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(init_.outlierDetectionTuple_).getMahalTh(i));
+      std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(init_.outlierDetectionTuple_).getMahalTh(i));
+    }
     std::get<0>(init_.outlierDetectionTuple_).setEnabledAll(true);
     reset(0.0);
   }
   ~Filter(){};
-//  void resetToImuPose(Eigen::Vector3d IrIM, rot::RotationQuaternionPD qMI, double t = 0.0){
+//  void resetToImuPose(V3D IrIM, QPD qMI, double t = 0.0){
 //    init_.state_.initWithImuPose(IrIM,qMI);
 //    reset(t);
 //  }
-//  void resetWithAccelerometer(const Eigen::Vector3d& fMeasInit, double t = 0.0){
-//    init_.state_.initWithAccelerometer(fMeasInit);
-//    reset(t);
-//  }
+  void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
+    init_.state_.initWithAccelerometer(fMeasInit);
+    reset(t);
+  }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;
 //    double imuMeasTime = 0.0;

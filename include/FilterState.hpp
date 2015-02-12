@@ -35,7 +35,6 @@
 #include <map>
 #include <unordered_set>
 
-#include "common_vision_old.hpp"
 #include "common_vision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -43,6 +42,15 @@ namespace rot = kindr::rotations::eigen_impl;
 namespace rovio {
 
 using namespace LWF;
+
+// TODO remove when including in LWFM
+typedef rot::RotationQuaternionPD QPD;
+typedef rot::RotationMatrixPD MPD;
+typedef Eigen::Vector3d V3D;
+typedef Eigen::Matrix3d M3D;
+static M3D gSM(const V3D& vec){
+  return kindr::linear_algebra::getSkewMatrixFromVector(vec);
+}
 
 template<unsigned int nMax>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
@@ -52,71 +60,27 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
     MwIMest_.setZero();
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
-    maxID_ = 0;
-    for(unsigned int i=0;i<nMax;i++){
-      ID_[i] = 0;
-      timeSinceVisible_[i] = 0;
-      isVisible_[i] = false;
-      indEmpty_.insert(i);
-    }
   };
   ~StateAuxiliary(){};
   FeatureManager<4,8,nMax> fManager_;
-  cv::Mat img_;
+  cv::Mat img_; // Mainly used for drawing
   double imgTime_;
-  std::map<unsigned int,unsigned int> indFeature_;
-  std::unordered_set<unsigned int> indEmpty_;
-  unsigned int ID_[nMax];
-  Patch<10> patchesWithBorder_[nMax];
-  bool isVisible_[nMax];
-  double timeSinceVisible_[nMax];
-  Eigen::Vector3d norInCurrentFrame_[nMax];
-  Eigen::Vector3d MwIMest_;
-  Eigen::Vector3d MwIMmeas_;
-  Eigen::Matrix3d wMeasCov_;
-  unsigned int maxID_;
-  unsigned int addID(unsigned int ID){
-    assert(ID>0);
-    if(indEmpty_.empty()){
-      std::cout << "STATE: maximal number of feature reached" << std::endl;
-      return 0;
-    } else {
-      unsigned int ind = *(indEmpty_.begin());
-      ID_[ind] = ID;
-      indFeature_[ID] = ind;
-      timeSinceVisible_[ind] = 0;
-      isVisible_[ind] = false;
-      indEmpty_.erase(ind);
-      if(ID > maxID_) maxID_ = ID;
-      return ind;
-    }
-  }
-  void removeID(unsigned int ID){
-    ID_[indFeature_.at(ID)] = 0;
-    indEmpty_.insert(indFeature_.at(ID));
-    indFeature_.erase (ID);
-  }
-  void resetVisible(){
-    for(unsigned int i=0;i<nMax;i++){
-      isVisible_[i] = false;
-    }
-  }
-  unsigned int getTotFeatureNo(){
-    return indFeature_.size();
-  }
+  V3D MwIMest_;
+  V3D MwIMmeas_;
+  M3D wMeasCov_;
 };
 
 template<unsigned int nMax>
 class FilterState: public State<
-    TH_multiple_elements<VectorElement<3>,4>,
-    QuaternionElement,
+    TH_multiple_elements<VectorElement<3>,5>,
+    TH_multiple_elements<QuaternionElement,2>,
     ArrayElement<ScalarElement,nMax>,
     ArrayElement<NormalVectorElement,nMax>,
     StateAuxiliary<nMax>>{
  public:
   typedef State<
-      TH_multiple_elements<VectorElement<3>,4>,
-      QuaternionElement,
+      TH_multiple_elements<VectorElement<3>,5>,
+      TH_multiple_elements<QuaternionElement,2>,
       ArrayElement<ScalarElement,nMax>,
       ArrayElement<NormalVectorElement,nMax>,
       StateAuxiliary<nMax>> Base;
@@ -128,8 +92,10 @@ class FilterState: public State<
   static constexpr unsigned int _vel = _pos+1;
   static constexpr unsigned int _acb = _vel+1;
   static constexpr unsigned int _gyb = _acb+1;
-  static constexpr unsigned int _att = _gyb+1;
-  static constexpr unsigned int _dep = _att+1;
+  static constexpr unsigned int _vep = _gyb+1;
+  static constexpr unsigned int _att = _vep+1;
+  static constexpr unsigned int _vea = _att+1;
+  static constexpr unsigned int _dep = _vea+1;
   static constexpr unsigned int _nor = _dep+1;
   static constexpr unsigned int _aux = _nor+1;
   FilterState(){
@@ -138,25 +104,27 @@ class FilterState: public State<
     this->template getName<_vel>() = "vel";
     this->template getName<_acb>() = "acb";
     this->template getName<_gyb>() = "gyb";
+    this->template getName<_vep>() = "vep";
     this->template getName<_att>() = "att";
+    this->template getName<_vea>() = "vea";
     this->template getName<_dep>() = "dep";
     this->template getName<_nor>() = "nor";
     this->template getName<_aux>() = "auxiliary";
   }
   ~FilterState(){};
-  void initWithImuPose(Eigen::Vector3d IrIM, rot::RotationQuaternionPD qMI){
+  void initWithImuPose(V3D IrIM, QPD qMI){
     this->template get<_pos>() = qMI.rotate(IrIM);
     this->template get<_att>() = qMI.inverted();
   }
-  void initWithAccelerometer(const Eigen::Vector3d& fMeasInit){
-    Eigen::Vector3d unitZ(0,0,1);
+  void initWithAccelerometer(const V3D& fMeasInit){
+    V3D unitZ(0,0,1);
     if(fMeasInit.norm()>1e-6){
-      this->template get<_att>().setFromVectors(fMeasInit,unitZ); // TODO: check
+      this->template get<_att>().setFromVectors(unitZ,fMeasInit);
     } else {
       this->template get<_att>().setIdentity();
     }
   }
-  void initializeFeatureState(mtCovMat& stateCov, unsigned int i, Eigen::Vector3d n, double d,const Eigen::Matrix<double,3,3>& initCov){
+  void initializeFeatureState(mtCovMat& stateCov, unsigned int i, V3D n, double d,const Eigen::Matrix<double,3,3>& initCov){
     this->template get<_dep>(i) = d;
     this->template get<_nor>(i).setFromVector(n);
     stateCov.template block<D_,1>(0,this->template getId<_dep>(i)).setZero();
