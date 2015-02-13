@@ -61,9 +61,7 @@ template<unsigned int nMax>
 class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<nMax>>{
  public:
   ImgUpdateMeasAuxiliary(){
-    for(unsigned int i=0;i<nMax;i++){
-      imgTime_ = 0.0;
-    }
+    imgTime_ = 0.0;
   };
   ~ImgUpdateMeasAuxiliary(){};
   ImagePyramid<4> pyr_;
@@ -119,6 +117,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   rovio::Camera camera_;
   PixelOutputCF<STATE> pixelOutputCF_;
   PixelOutput pixelOutput_;
+  int startLevel_;
+  int endLevel_;
   typename PixelOutput::mtCovMat pixelOutputCov_;
   ImgUpdate(): pixelOutputCF_(&camera_){
     std::string camera_name;
@@ -126,12 +126,18 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     camera_calibration_parsers::readCalibration("camchain-imucam-run2.yaml",camera_name,cam_info);
     M3D K; K << cam_info.K[0], cam_info.K[1], cam_info.K[2], cam_info.K[3], cam_info.K[4], cam_info.K[5], cam_info.K[6], cam_info.K[7], cam_info.K[8];
     camera_.setCameraMatrix(K);
-    camera_.setDistortionParameterSimple(cam_info.D[0],cam_info.D[1],cam_info.D[4],cam_info.D[2],cam_info.D[3]);
+    camera_.setDistortionParameterRadtanSimple(cam_info.D[0],cam_info.D[1],cam_info.D[4],cam_info.D[2],cam_info.D[3]);
+//    camera_.setDistortionParameterEquidist(0.004759479145602963,-0.009010017812421325,0.029080984773410406-0.02090553003503771); // TODO: cleanup
+
 //    camera_.testCameraModel();
     initCovFeature_.setIdentity();
     initDepth_ = 0;
+    startLevel_ = 3;
+    endLevel_ = 1;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
+    intRegister_.registerScalar("startLevel",startLevel_);
+    intRegister_.registerScalar("endLevel",endLevel_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -208,10 +214,10 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
 
-      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
+      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO: store in frame
     }
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
-    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,3,1); // TODO implement different methods
+    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods
     const double t2 = (double) cv::getTickCount();
     ROS_INFO_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
@@ -235,9 +241,9 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       fManager.features_[ind].log_current_.setSigmaFromCov(pixelOutputCov_);
 
+      fManager.features_[ind].log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
       if(fManager.features_[ind].foundInImage_){
         fManager.features_[ind].log_prediction_.drawLine(state.template get<mtState::_aux>().img_,fManager.features_[ind].log_meas_,cv::Scalar(0,255,255));
-        fManager.features_[ind].log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
         if(!mpOutlierDetection->isOutlier(ind)){
           fManager.features_[ind].addSuccess();
           fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 250, 0));

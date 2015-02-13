@@ -70,28 +70,37 @@ class TestFilter{
     if(makeTest){
       mtState testState;
       testState.setRandom(1);
+      std::cout << testState.template get<mtState::_dep>(15) << std::endl;
+      std::cout << testState.template getId<mtState::_dep>(15) << std::endl;
+      std::cout << testState.template get<mtState::_nor>(15).getVec().transpose() << std::endl;
+      std::cout << testState.template getId<mtState::_nor>(15) << std::endl; // TODO: investigate error for regular depth parametrization
       rovio::MultilevelPatchFeature<n_levels_,8> feature;
       unsigned int s = 1;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
+      LWF::QuaternionElement q_temp;
+      LWF::VectorElement<3> vec_temp;
       q.setRandom(s);
       vec.setRandom(s);
+      q_temp.q_ = mpFilter->mPrediction_.qVM_;
+      vec_temp.v_ = mpFilter->mPrediction_.MrMV_;
       mpFilter->mPrediction_.qVM_ = q.q_;
       mpFilter->mPrediction_.MrMV_ = vec.v_;
       for(unsigned int i=0;i<nMax_;i++){
         testState.template get<mtState::_aux>().fManager_.addFeature(feature);
-        testState.template get<mtState::_aux>().fManager_.features_[i].inFrame_ = true;
-        testState.template get<mtState::_aux>().fManager_.features_[i].trackingSuccess_ = true;
+        testState.template get<mtState::_aux>().fManager_.features_[i].foundInImage_ = true;
         testState.template get<mtState::_aux>().fManager_.features_[i].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
       }
-      testState.template get<mtState::_aux>().fManager_.features_[2].inFrame_ = false;
-      testState.template get<mtState::_aux>().fManager_.features_[1].trackingSuccess_ = false;
+      testState.template get<mtState::_aux>().fManager_.features_[1].foundInImage_ = false;
       testState.template get<mtState::_aux>().fManager_.removeFeature(0);
       predictionMeas_.setRandom(1);
       imgUpdateMeas_.setRandom(1);
 
       mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
       std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-9,1e-6,0,0.1);
+
+      mpFilter->mPrediction_.qVM_ = q_temp.q_;
+      mpFilter->mPrediction_.MrMV_ = vec_temp.v_;
     }
   }
   ~TestFilter(){
@@ -122,9 +131,12 @@ class TestFilter{
 
     if(isInitialized_ && !cv_img.empty()){
       imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img);
-      mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec()-0.05); // TODO
+      mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
 
       mpFilter->updateSafe();
+      std::cout << "Filter calibration: " << std::endl;
+      std::cout << mpFilter->safe_.state_.template get<mtState::_acb>().transpose() << std::endl;
+      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
       std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
       std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
       if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty()){

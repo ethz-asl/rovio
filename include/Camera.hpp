@@ -41,6 +41,10 @@ namespace rovio{
 
 class Camera{
  public:
+  enum ModelType{
+    RADTAN,
+    EQUIDIST
+  } type_;
   Matrix3d K_;
   int h_,w_;
   double k1_,k2_,k3_,k4_,k5_,k6_;
@@ -50,17 +54,22 @@ class Camera{
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
     h_ = 480; w_ = 640;
     K_.setIdentity();
+    type_ = RADTAN;
   };
   ~Camera(){};
   void setCameraMatrix(Matrix3d K){
     K_ = K;
     std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
   }
-  void setDistortionParameterSimple(double k1, double k2, double k3, double p1, double p2){
+  void setDistortionParameterRadtanSimple(double k1, double k2, double k3, double p1, double p2){
     k1_ = k1; k2_ = k2; k3_ = k3; p1_ = p1; p2_ = p2;
     std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
-  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
+  void setDistortionParameterEquidist(double k1, double k2, double k3, double k4){
+    k1_ = k1; k2_ = k2; k3_ = k3; k4_ = k4;
+    std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
+  }
+  void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
     const double xy = in(0) * in(1);
@@ -69,7 +78,7 @@ class Camera{
     out(0) = in(0) * kr + p1_ * 2 * xy + p2_ * (r2 + 2 * x2);
     out(1) = in(1) * kr + p1_ * (r2 + 2 * y2) + p2_ * 2 * xy;
   }
-  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
+  void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
     const double xy = in(0) * in(1);
@@ -81,6 +90,88 @@ class Camera{
     J(0,1) = 2.0 * k1_ * xy + 4.0 * k2_ * xy * r2 + 6.0 * k3_ * xy * r2 * r2 + 2 * p1_ * in(0) + 2 * p2_ * in(1);
     J(1,0) = J(0,1);
     J(1,1) = kr + 2.0 * k1_ * y2 + 4.0 * k2_ * y2 * r2 + 6.0 * k3_ * y2 * r2 * r2 + 6.0 * p1_ * in(1) + 2.0 * p2_ * in(0);
+  }
+  void distortEquidist(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
+    const double x2 = in(0) * in(0);
+    const double y2 = in(1) * in(1);
+    const double r = std::sqrt(x2 + y2); // 1/r*x
+
+    if(r < 1e-8){
+      out(0) = in(0);
+      out(1) = in(1);
+      return;
+    }
+
+    const double th = atan(r); // 1/(r^2 + 1)
+    const double th2 = th*th;
+    const double th4 = th2*th2;
+    const double th6 = th2*th4;
+    const double th8 = th2*th6;
+    const double thd = th * (1.0 + k1_ * th2 + k2_ * th4 + k3_ * th6 + k4_ * th8);
+    const double s = thd/r;
+
+    out(0) = in(0) * s;
+    out(1) = in(1) * s;
+  }
+  void distortEquidist(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
+    const double x2 = in(0) * in(0);
+    const double y2 = in(1) * in(1);
+    const double r = std::sqrt(x2 + y2);
+
+    if(r < 1e-8){
+      out(0) = in(0);
+      out(1) = in(1);
+      J.setIdentity();
+      return;
+    }
+
+    const double r_x = 1/r*in(0);
+    const double r_y = 1/r*in(1);
+
+    const double th = atan(r); // 1/(r^2 + 1)
+    const double th_r = 1/(r*r+1);
+    const double th2 = th*th;
+    const double th4 = th2*th2;
+    const double th6 = th2*th4;
+    const double th8 = th2*th6;
+    const double thd = th * (1.0 + k1_ * th2 + k2_ * th4 + k3_ * th6 + k4_ * th8);
+    const double thd_th = 1.0 + 3 * k1_ * th2 + 5* k2_ * th4 + 7 * k3_ * th6 + 9 * k4_ * th8;
+    const double s = thd/r;
+    const double s_r = thd_th*th_r/r - thd/(r*r);
+
+    out(0) = in(0) * s;
+    out(1) = in(1) * s;
+
+    J(0,0) = s + in(0)*s_r*r_x;
+    J(0,1) = in(0)*s_r*r_y;
+    J(1,0) = in(1)*s_r*r_x;
+    J(1,1) = s + in(1)*s_r*r_y;
+  }
+  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
+    switch(type_){
+      case RADTAN:
+        distortRadtan(in,out);
+        break;
+      case EQUIDIST:
+        distortEquidist(in,out);
+        break;
+      default:
+        distortRadtan(in,out);
+        break;
+    }
+  }
+  void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
+    switch(type_){
+      case RADTAN:
+        distortRadtan(in,out,J);
+        break;
+      case EQUIDIST:
+        distortEquidist(in,out,J);
+        break;
+      default:
+        distortRadtan(in,out,J);
+        break;
+    }
   }
   bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c) const{
     // Project

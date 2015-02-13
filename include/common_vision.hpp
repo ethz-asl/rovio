@@ -54,10 +54,10 @@ class DrawPoint{
     sigmaAngle_ = 0.0;
   }
   void draw(cv::Mat& drawImg,const cv::Scalar& color){
+    cv::Size size(2,2);
+    cv::ellipse(drawImg,c_,size,0,0,360,color,-1,8,0);
     if(hasSigma_){
       cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,1,8,0);
-    } else {
-      cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,-1,8,0);
     }
   }
   void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color){
@@ -83,6 +83,12 @@ class ImagePyramid{
     for(int i=1; i<n_levels; ++i){
       cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
     }
+  }
+  ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {
+    for(unsigned int i=0;i<n_levels;i++){
+      rhs.imgs_[i].copyTo(imgs_[i]);
+    }
+    return *this;
   }
 };
 
