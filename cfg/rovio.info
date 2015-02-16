@@ -73,6 +73,7 @@ Update0
 Prediction
 {
     doVECalibration true
+    depthType 1
     PredictionNoise
     {
         pos_0 1e-8

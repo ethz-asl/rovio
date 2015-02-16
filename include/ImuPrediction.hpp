@@ -41,6 +41,59 @@ namespace rovio {
 
 using namespace LWF;
 
+class DepthMap{
+ public:
+  enum DepthType{
+   REGULAR,
+   INVERSE
+  } type_;
+  DepthMap(const DepthType& type = REGULAR){
+    setType(type);
+  }
+  void setType(const DepthType& type){
+    type_ = type;
+  }
+  void setType(const int& type){
+    switch(type){
+      case 0:
+        type_ = REGULAR;
+        break;
+      case 1:
+        type_ = INVERSE;
+        break;
+      default:
+        std::cout << "Invalid type for depth parametrization: " << type << std::endl;
+        type_ = REGULAR;
+        break;
+    }
+  }
+  void map(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    switch(type_){
+      case REGULAR:
+        mapRegular(p,d,d_p,p_d,p_d_p);
+        break;
+      case INVERSE:
+        mapInverse(p,d,d_p,p_d,p_d_p);
+        break;
+      default:
+        mapRegular(p,d,d_p,p_d,p_d_p);
+        break;
+    }
+  }
+  void mapRegular(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    d = p;
+    d_p = 1.0;
+    p_d = 1.0;
+    p_d_p = 0.0;
+  }
+  void mapInverse(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    d = 1/p; // TODO: handle 0 and negativ
+    d_p = -d*d;
+    p_d = -p*p;
+    p_d_p = -2*p;
+  }
+};
+
 class PredictionMeas: public State<VectorElement<3>,VectorElement<3>>{
  public:
   static constexpr unsigned int _acc = 0;
@@ -90,6 +143,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   using Base::eval;
   using Base::prenoiP_;
   using Base::doubleRegister_;
+  using Base::intRegister_;
   using Base::boolRegister_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtMeas mtMeas;
@@ -101,11 +155,16 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   QPD qVM_;
   V3D MrMV_;
   bool doVECalibration_;
+  DepthMap depthMap_;
+  int depthTypeInt_;
   ImuPrediction():g_(0,0,-9.81), Base(false){
     qVM_.setIdentity();
     MrMV_.setZero();
     doVECalibration_ = true;
+    depthTypeInt_ = 1;
+    depthMap_.setType(depthTypeInt_);
     boolRegister_.registerScalar("doVECalibration",doVECalibration_);
+    intRegister_.registerScalar("depthType",depthTypeInt_);
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
     int ind;
@@ -121,19 +180,9 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     }
   };
   ~ImuPrediction(){};
-  static void depthMap(const double& p, double& d, double& d_p, double& p_d, double& p_d_p){
-//    if(p<0) std::cout << "Warning: depth parameter for inverse depth is smaller than 0" << std::endl; // TODO
-    d = 1/p;
-    d_p = -d*d;
-    p_d = -p*p;
-    p_d_p = -2*p;
-  }
-//  static void depthMap(const double& p, double& d, double& d_p, double& p_d, double& p_d_p){ // TODO: cleanup
-//    d = p;
-//    d_p = 1.0;
-//    p_d = 1.0;
-//    p_d_p = 0.0;
-//  }
+  void refreshProperties(){
+    depthMap_.setType(depthTypeInt_);
+  };
   mtState eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
     mtState output;
     output.template get<mtState::_aux>().MwIMmeas_ = meas.template get<mtMeas::_gyr>();
@@ -165,7 +214,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      depthMap(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
+      depthMap_.map(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
       output.template get<mtState::_dep>(ind) = state.template get<mtState::_dep>(ind)-dt*p_d
           *state.template get<mtState::_nor>(ind).getVec().transpose()*camVel + noise.template get<mtNoise::_dep>(ind)*sqrt(dt);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
@@ -216,7 +265,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      depthMap(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
+      depthMap_.map(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
           + (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
       QPD qm = qm.exponentialMap(dm);
@@ -298,7 +347,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      depthMap(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
+      depthMap_.map(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
           + (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
       QPD qm = qm.exponentialMap(dm);
