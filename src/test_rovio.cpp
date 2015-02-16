@@ -31,6 +31,9 @@
 #include <ros/package.h>
 #include "rovio_filter.hpp"
 #include <geometry_msgs/PoseStamped.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/image_encodings.h>
 
 
 class TestFilter{

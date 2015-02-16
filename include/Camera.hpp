@@ -32,12 +32,12 @@
 #include <Eigen/Dense>
 #include <opencv2/features2d/features2d.hpp>
 #include "State.hpp"
+#include "yaml-cpp/yaml.h"
+
 
 using namespace Eigen;
 
 namespace rovio{
-
-// TODO: implement equidistant
 
 class Camera{
  public:
@@ -57,16 +57,36 @@ class Camera{
     type_ = RADTAN;
   };
   ~Camera(){};
-  void setCameraMatrix(Matrix3d K){
-    K_ = K;
+  void loadCameraMatrix(const std::string& filename){
+    YAML::Node config = YAML::LoadFile(filename);
+    K_(0,0) = config["camera_matrix"]["data"][0].as<double>();
+    K_(0,1) = config["camera_matrix"]["data"][1].as<double>();
+    K_(0,2) = config["camera_matrix"]["data"][2].as<double>();
+    K_(1,0) = config["camera_matrix"]["data"][3].as<double>();
+    K_(1,1) = config["camera_matrix"]["data"][4].as<double>();
+    K_(1,2) = config["camera_matrix"]["data"][5].as<double>();
+    K_(2,0) = config["camera_matrix"]["data"][6].as<double>();
+    K_(2,1) = config["camera_matrix"]["data"][7].as<double>();
+    K_(2,2) = config["camera_matrix"]["data"][8].as<double>();
     std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
   }
-  void setDistortionParameterRadtanSimple(double k1, double k2, double k3, double p1, double p2){
-    k1_ = k1; k2_ = k2; k3_ = k3; p1_ = p1; p2_ = p2;
+  void loadRadtan(const std::string& filename){
+    loadCameraMatrix(filename);
+    YAML::Node config = YAML::LoadFile(filename);
+    k1_ = config["distortion_coefficients"]["data"][0].as<double>();
+    k2_ = config["distortion_coefficients"]["data"][1].as<double>();
+    p1_ = config["distortion_coefficients"]["data"][2].as<double>();
+    p2_ = config["distortion_coefficients"]["data"][3].as<double>();
+    k3_ = config["distortion_coefficients"]["data"][4].as<double>();
     std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
-  void setDistortionParameterEquidist(double k1, double k2, double k3, double k4){
-    k1_ = k1; k2_ = k2; k3_ = k3; k4_ = k4;
+  void loadEquidist(const std::string& filename){
+    loadCameraMatrix(filename);
+    YAML::Node config = YAML::LoadFile(filename);
+    k1_ = config["distortion_coefficients"]["data"][0].as<double>();
+    k2_ = config["distortion_coefficients"]["data"][1].as<double>();
+    k3_ = config["distortion_coefficients"]["data"][2].as<double>();
+    k4_ = config["distortion_coefficients"]["data"][3].as<double>();
     std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
   }
   void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{

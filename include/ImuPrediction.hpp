@@ -124,7 +124,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   };
   ~ImuPrediction(){};
   static void depthMap(const double& p, double& d, double& d_p, double& p_d, double& p_d_p){
-    if(p<0) std::cout << "Warning: depth parameter for inverse depth is smaller than 0" << std::endl;
+//    if(p<0) std::cout << "Warning: depth parameter for inverse depth is smaller than 0" << std::endl; // TODO
     d = 1/p;
     d_p = -d*d;
     p_d = -p*p;

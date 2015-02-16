@@ -36,8 +36,6 @@
 #include "FilterState.hpp"
 #include <cv_bridge/cv_bridge.h>
 #include "Camera.hpp"
-#include "common_vision_old.hpp"
-#include <camera_calibration_parsers/parse.h>
 #include "PixelOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -121,13 +119,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   int endLevel_;
   typename PixelOutput::mtCovMat pixelOutputCov_;
   ImgUpdate(): pixelOutputCF_(&camera_){
-    std::string camera_name;
-    sensor_msgs::CameraInfo cam_info;
-    camera_calibration_parsers::readCalibration("camchain-imucam-run2.yaml",camera_name,cam_info);
-    M3D K; K << cam_info.K[0], cam_info.K[1], cam_info.K[2], cam_info.K[3], cam_info.K[4], cam_info.K[5], cam_info.K[6], cam_info.K[7], cam_info.K[8];
-    camera_.setCameraMatrix(K);
-    camera_.setDistortionParameterRadtanSimple(cam_info.D[0],cam_info.D[1],cam_info.D[4],cam_info.D[2],cam_info.D[3]);
-//    camera_.setDistortionParameterEquidist(0.004759479145602963,-0.009010017812421325,0.029080984773410406-0.02090553003503771); // TODO: cleanup
+    camera_.type_ = Camera::RADTAN;
+    camera_.loadRadtan("Sammy11_02_2015_radtan.yaml"); // TODO: test equisdist
 
 //    camera_.testCameraModel();
     initCovFeature_.setIdentity();

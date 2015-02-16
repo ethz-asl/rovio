@@ -18,6 +18,5 @@
   <depend>roscpp</depend>
   <depend>roslib</depend>
   <depend>cv_bridge</depend>
-  <depend>camera_calibration_parsers</depend>
   
 </package>

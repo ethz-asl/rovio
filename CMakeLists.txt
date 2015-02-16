@@ -15,6 +15,9 @@ include_directories(./include)
 include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(${Kindr_INCLUDE_DIRS})
 
+find_package(PkgConfig)
+pkg_check_modules(YamlCpp yaml-cpp)
+
 
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
@@ -22,7 +25,6 @@ find_package(catkin REQUIRED COMPONENTS
 	roscpp
 	roslib
 	cv_bridge
-	camera_calibration_parsers
 )
 include_directories(include ${catkin_INCLUDE_DIRS})
 
@@ -34,11 +36,10 @@ catkin_package(
 	roscpp
 	roslib
 	cv_bridge
-	camera_calibration_parsers
 )
 
 add_executable(rovioNode src/rovioNode.cpp)
-target_link_libraries(rovioNode ${catkin_LIBRARIES})
+target_link_libraries(rovioNode ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
 
 add_executable(test_rovio src/test_rovio.cpp)
-target_link_libraries(test_rovio ${catkin_LIBRARIES})
+target_link_libraries(test_rovio ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
