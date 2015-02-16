@@ -101,7 +101,6 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   QPD qVM_;
   V3D MrMV_;
   bool doVECalibration_;
-  double sign; // TODO: delete
   ImuPrediction():g_(0,0,-9.81), Base(false){
     qVM_.setIdentity();
     MrMV_.setZero();
@@ -110,7 +109,6 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
     int ind;
-    sign = -1.0; // TODO: why the hell is this -1?????????????????
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
       doubleRegister_.removeScalarByVar(prenoiP_(ind,ind));
@@ -171,7 +169,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       output.template get<mtState::_dep>(ind) = state.template get<mtState::_dep>(ind)-dt*p_d
           *state.template get<mtState::_nor>(ind).getVec().transpose()*camVel + noise.template get<mtNoise::_dep>(ind)*sqrt(dt);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
-          - sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor)
+          + (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor)
           + state.template get<mtState::_nor>(ind).getN()*noise.template get<mtNoise::_nor>(ind)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind).rotated(qm);
@@ -220,7 +218,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       const int ind = *it_f;
       depthMap(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
-          - sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
+          + (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
       QPD qm = qm.exponentialMap(dm);
       nOut = state.template get<mtState::_nor>(ind).rotated(qm);
       J(mtState::template getId<mtState::_dep>(ind),mtState::template getId<mtState::_dep>(ind)) = 1.0 - dt*p_d_p
@@ -235,7 +233,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           nOut.getM().transpose()*(
                   dt*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*(
                       -1.0/d*gSM(camVel)
-                      +sign*(M3D::Identity()*(state.template get<mtState::_nor>(ind).getVec().dot(camRor))+state.template get<mtState::_nor>(ind).getVec()*camRor.transpose()))
+                      - (M3D::Identity()*(state.template get<mtState::_nor>(ind).getVec().dot(camRor))+state.template get<mtState::_nor>(ind).getVec()*camRor.transpose()))
                   +MPD(qm).matrix()
           )*state.template get<mtState::_nor>(ind).getM();
       J.template block<2,1>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_dep>(ind)) =
@@ -246,7 +244,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
               *dt/d*gSM(state.template get<mtState::_nor>(ind).getVec())*MPD(qVM).matrix();
       J.template block<2,3>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_gyb>()) =
           nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*(
-              sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
+              - (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
               +1.0/d*gSM(state.template get<mtState::_nor>(ind).getVec())*gSM(qVM.rotate(MrMV))
           )*dt*MPD(qVM).matrix();
       if(doVECalibration_){
@@ -256,8 +254,8 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
             -dt*p_d*state.template get<mtState::_nor>(ind).getVec().transpose()*MPD(qVM).matrix()*gSM(imuRor);
 
         J.template block<2,3>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_vea>()) =
-            -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*(
-                sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
+            nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*(
+                (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
             )*dt*gSM(camRor)
             +nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)
                 *dt/d*gSM(state.template get<mtState::_nor>(ind).getVec())*gSM(camVel);
@@ -302,7 +300,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       const int ind = *it_f;
       depthMap(state.template get<mtState::_dep>(ind),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(ind).getVec())*camVel/d
-          - sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
+          + (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())*camRor);
       QPD qm = qm.exponentialMap(dm);
       nOut = state.template get<mtState::_nor>(ind).rotated(qm);
       J(mtState::template getId<mtState::_dep>(ind),mtNoise::template getId<mtNoise::_dep>(ind)) = sqrt(dt);
@@ -312,7 +310,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*state.template get<mtState::_nor>(ind).getN()*sqrt(dt);
       J.template block<2,3>(mtState::template getId<mtState::_nor>(ind),mtNoise::template getId<mtNoise::_att>()) =
           -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)*(
-              sign*(M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
+              - (M3D::Identity()-state.template get<mtState::_nor>(ind).getVec()*state.template get<mtState::_nor>(ind).getVec().transpose())
               +1.0/d*gSM(state.template get<mtState::_nor>(ind).getVec())*gSM(qVM.rotate(MrMV))
            )*sqrt(dt)*MPD(qVM).matrix();
     }

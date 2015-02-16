@@ -210,7 +210,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO: store in frame
     }
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
-    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods
+    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods, adaptiv search (depending on covariance)
     const double t2 = (double) cv::getTickCount();
     ROS_INFO_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){

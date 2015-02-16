@@ -335,21 +335,6 @@ class Camera{
       std::cout << J2_FD << std::endl;
     }
   }
-  //  void pixelToBearingVector(const cv::Point2f& c,Eigen::Vector3d& v){ // radtan (extended)
-  //    // Shift origin and scale for undistortion
-  //    double x = (c.x - K_(0, 2)) / K_(0, 0);
-  //    double y = (c.y - K_(1, 2)) / K_(1, 1);
-  //    // Undistortion // TODO this is distortion!!!!!!!!!!!!!!!
-  //    double x2 = x * x;
-  //    double y2 = y * y;
-  //    double r2 = x2 + y2;
-  //    double kr = (1 + ((k3_ * r2 + k2_) * r2 + k1_) * r2) / (1 + ((k6_ * r2 + k5_) * r2 + k4_) * r2);
-  //    double xd = x * kr + p1_ * 2 * x * y + p2_ * (r2 + 2 * x2) + s1_ * r2
-  //    + s2_ * r2 * r2;
-  //    double yd = y * kr + p1_ * (r2 + 2 * y2) + p2_ * 2 * x * y + s3_ * r2
-  //    + s4_ * r2 * r2;
-  //    v = Eigen::Vector3d(xd,yd,1.0).normalized();
-  //  }
 };
 
 }

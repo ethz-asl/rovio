@@ -374,7 +374,7 @@ class MultilevelPatchFeature{
       }
     }
 
-    c.x = u; // TODO
+    c.x = u;
     c.y = v;
     return converged;
   }
