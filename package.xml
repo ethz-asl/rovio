@@ -15,8 +15,8 @@
 
   <depend>cmake_modules</depend>
   <depend>lightweight_filtering</depend>
+  <depend>kindr</depend>
   <depend>roscpp</depend>
   <depend>roslib</depend>
   <depend>cv_bridge</depend>
-  
 </package>
