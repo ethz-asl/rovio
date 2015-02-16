@@ -144,7 +144,7 @@ class TestFilter{
       std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
       if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty()){
         cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
-        cv::waitKey(30);
+        cv::waitKey(1);
       }
       if(pubPose_.getNumSubscribers() > 0){
         poseMsg_.header.seq = poseMsgSeq_++;
