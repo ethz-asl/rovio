@@ -55,20 +55,20 @@ class ImgInnovation: public State<ArrayElement<VectorElement<2>,STATE::nMax_>>{
   };
   ~ImgInnovation(){};
 };
-template<unsigned int nMax>
-class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<nMax>>{
+template<typename STATE>
+class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<STATE>>{
  public:
   ImgUpdateMeasAuxiliary(){
     imgTime_ = 0.0;
   };
   ~ImgUpdateMeasAuxiliary(){};
-  ImagePyramid<4> pyr_;
+  ImagePyramid<STATE::nLevels_> pyr_;
   double imgTime_;
 };
 template<typename STATE>
-class ImgUpdateMeas: public State<ImgUpdateMeasAuxiliary<STATE::nMax_>>{
+class ImgUpdateMeas: public State<ImgUpdateMeasAuxiliary<STATE>>{
  public:
-  typedef State<ImgUpdateMeasAuxiliary<STATE::nMax_>> Base;
+  typedef State<ImgUpdateMeasAuxiliary<STATE>> Base;
   using Base::E_;
   static constexpr unsigned int _aux = 0;
   ImgUpdateMeas(){
@@ -142,7 +142,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   };
   ~ImgUpdate(){};
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
-    const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     mtInnovation y;
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
@@ -167,7 +167,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     return y;
   }
   mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt = 0.0) const{
-    const FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     mtJacInput J;
     J.setZero();
     NormalVectorElement m_meas;
@@ -196,7 +196,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
     cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
-    FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
 
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
@@ -222,7 +222,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   };
   void postProcess(mtState& state, mtCovMat& cov, const mtMeas& meas, mtOutlierDetection* mpOutlierDetection){
     // TODO: refresh pixel coordinates
-    FeatureManager<4,8,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
 
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;

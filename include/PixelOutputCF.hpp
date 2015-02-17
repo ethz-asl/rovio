@@ -33,7 +33,7 @@
 #include "CoordinateTransform.hpp"
 #include "Camera.hpp"
 
-namespace LWF {
+namespace rovio {
 
 class PixelOutput: public State<VectorElement<2>>{
  public:

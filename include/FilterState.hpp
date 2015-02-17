@@ -52,8 +52,8 @@ static M3D gSM(const V3D& vec){
   return kindr::linear_algebra::getSkewMatrixFromVector(vec);
 }
 
-template<unsigned int nMax>
-class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
+template<unsigned int nMax, int nLevels, int patchSize>
+class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patchSize>>{
  public:
   StateAuxiliary(){
     imgTime_ = 0.0;
@@ -62,7 +62,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
     wMeasCov_.setIdentity();
   };
   ~StateAuxiliary(){};
-  FeatureManager<4,8,nMax> fManager_;
+  FeatureManager<nLevels,patchSize,nMax> fManager_;
   cv::Mat img_; // Mainly used for drawing
   double imgTime_;
   V3D MwIMest_;
@@ -70,24 +70,26 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax>>{
   M3D wMeasCov_;
 };
 
-template<unsigned int nMax>
+template<unsigned int nMax, int nLevels, int patchSize>
 class FilterState: public State<
     TH_multiple_elements<VectorElement<3>,5>,
     TH_multiple_elements<QuaternionElement,2>,
     ArrayElement<ScalarElement,nMax>,
     ArrayElement<NormalVectorElement,nMax>,
-    StateAuxiliary<nMax>>{
+    StateAuxiliary<nMax,nLevels,patchSize>>{
  public:
   typedef State<
       TH_multiple_elements<VectorElement<3>,5>,
       TH_multiple_elements<QuaternionElement,2>,
       ArrayElement<ScalarElement,nMax>,
       ArrayElement<NormalVectorElement,nMax>,
-      StateAuxiliary<nMax>> Base;
+      StateAuxiliary<nMax,nLevels,patchSize>> Base;
   typedef typename Base::mtCovMat mtCovMat;
   using Base::D_;
   using Base::E_;
   static constexpr unsigned int nMax_ = nMax;
+  static constexpr unsigned int nLevels_ = nLevels;
+  static constexpr unsigned int patchSize_ = patchSize;
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _vel = _pos+1;
   static constexpr unsigned int _acb = _vel+1;

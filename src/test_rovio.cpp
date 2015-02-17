@@ -34,6 +34,7 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include "CameraOutputCF.hpp"
 
 
 class TestFilter{
@@ -43,25 +44,30 @@ class TestFilter{
   ros::Subscriber subImg_;
   ros::Publisher pubPose_;
   static constexpr unsigned int nMax_ = 50;
-  static constexpr int n_levels_ = 4; // TODO: pull everywhere
-  typedef rovio::FilterState<nMax_> mtState;
+  static constexpr int nLevels_ = 4;
+  static constexpr int patchSize_ = 8;
+  typedef rovio::FilterState<nMax_,nLevels_,patchSize_> mtState;
   typedef rovio::PredictionMeas mtPredictionMeas;
   mtPredictionMeas predictionMeas_;
   typedef rovio::ImgUpdateMeas<mtState> mtImgMeas;
   mtImgMeas imgUpdateMeas_;
-  rovio::Filter<mtState>* mpFilter;
+  typedef rovio::Filter<mtState> mtFilter;
+  mtFilter* mpFilter;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
   int poseMsgSeq_;
+  typedef rovio::StandardOutput mtOutput;
+  mtOutput output_;
+  mtOutput::mtCovMat outputCov_;
+  rovio::CameraOutputCF<typename mtFilter::mtPrediction> cameraOutputCF_;
 
-  TestFilter(ros::NodeHandle& nh): nh_(nh){
+  TestFilter(ros::NodeHandle& nh): nh_(nh), mpFilter(new rovio::Filter<mtState>()), cameraOutputCF_(mpFilter->mPrediction_){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
     subImu_ = nh_.subscribe("/imu0", 1000, &TestFilter::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestFilter::imgCallback,this);
     pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("/rovio/pose", 1);
-    mpFilter = new rovio::Filter<mtState>();
     std::string rootdir = ros::package::getPath("rovio");
     mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
     poseMsg_.header.frame_id = "/world";
@@ -77,7 +83,7 @@ class TestFilter{
       std::cout << testState.template getId<mtState::_dep>(15) << std::endl;
       std::cout << testState.template get<mtState::_nor>(15).getVec().transpose() << std::endl;
       std::cout << testState.template getId<mtState::_nor>(15) << std::endl; // TODO: investigate error for regular depth parametrization
-      rovio::MultilevelPatchFeature<n_levels_,8> feature;
+      rovio::MultilevelPatchFeature<nLevels_,patchSize_> feature;
       unsigned int s = 1;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
@@ -104,6 +110,8 @@ class TestFilter{
 
       mpFilter->mPrediction_.qVM_ = q_temp.q_;
       mpFilter->mPrediction_.MrMV_ = vec_temp.v_;
+
+      cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0,0.1);
     }
   }
   ~TestFilter(){
@@ -135,7 +143,11 @@ class TestFilter{
     if(isInitialized_ && !cv_img.empty()){
       imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img);
       mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
-
+      updateAndPublish(); // TODO: position elsewhere
+    }
+  }
+  void updateAndPublish(){
+    if(isInitialized_){
       mpFilter->updateSafe();
       std::cout << "Filter calibration: " << std::endl;
       std::cout << mpFilter->safe_.state_.template get<mtState::_acb>().transpose() << std::endl;
@@ -147,16 +159,20 @@ class TestFilter{
         cv::waitKey(1);
       }
       if(pubPose_.getNumSubscribers() > 0){
+        output_ = cameraOutputCF_.transformState(mpFilter->safe_.state_);
+        outputCov_ = cameraOutputCF_.transformCovMat(mpFilter->safe_.state_,mpFilter->safe_.cov_);
+
+
         poseMsg_.header.seq = poseMsgSeq_++;
         poseMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
 
-        poseMsg_.pose.position.x = mpFilter->safe_.state_.template get<mtState::_pos>()(0);
-        poseMsg_.pose.position.y = mpFilter->safe_.state_.template get<mtState::_pos>()(1);
-        poseMsg_.pose.position.z = mpFilter->safe_.state_.template get<mtState::_pos>()(2);
-        poseMsg_.pose.orientation.w = mpFilter->safe_.state_.template get<mtState::_att>().w();
-        poseMsg_.pose.orientation.x = -mpFilter->safe_.state_.template get<mtState::_att>().x();
-        poseMsg_.pose.orientation.y = -mpFilter->safe_.state_.template get<mtState::_att>().y();
-        poseMsg_.pose.orientation.z = -mpFilter->safe_.state_.template get<mtState::_att>().z();
+        poseMsg_.pose.position.x = output_.template get<mtOutput::_pos>()(0);
+        poseMsg_.pose.position.y = output_.template get<mtOutput::_pos>()(1);
+        poseMsg_.pose.position.z = output_.template get<mtOutput::_pos>()(2);
+        poseMsg_.pose.orientation.w = output_.template get<mtOutput::_att>().w();
+        poseMsg_.pose.orientation.x = output_.template get<mtOutput::_att>().x();
+        poseMsg_.pose.orientation.y = output_.template get<mtOutput::_att>().y();
+        poseMsg_.pose.orientation.z = output_.template get<mtOutput::_att>().z();
         pubPose_.publish(poseMsg_);
       }
     }
