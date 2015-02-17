@@ -212,7 +212,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
     fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods, adaptiv search (depending on covariance)
     const double t2 = (double) cv::getTickCount();
-    ROS_INFO_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       if(fManager.features_[ind].foundInImage_){
@@ -262,23 +262,23 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 //    }
 
     if(fManager.validSet_.size() < 0.9*mtState::nMax_){ // TODO param
-      ROS_INFO_STREAM(" Adding keypoints");
+      ROS_DEBUG_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       const int detect_level = 1;
       std::vector<cv::Point2f> detected_keypoints;
       DetectFastCorners(meas.template get<mtMeas::_aux>().pyr_,detected_keypoints,detect_level);
       const double t2 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Detected " << detected_keypoints.size() << " on level " << detect_level << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Detected " << detected_keypoints.size() << " on level " << detect_level << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
       fManager.selectCandidates(detected_keypoints);
       const double t3 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Selected " << fManager.candidates_.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Selected " << fManager.candidates_.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
       fManager.extractCandidatePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
       fManager.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_);
       const double t5 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
         const int ind = *it_f;
         V3D vec3;

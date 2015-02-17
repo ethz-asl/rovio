@@ -78,13 +78,9 @@ class TestFilter{
     bool makeTest = true;
     if(makeTest){
       mtState testState;
-      testState.setRandom(1);
-      std::cout << testState.template get<mtState::_dep>(15) << std::endl;
-      std::cout << testState.template getId<mtState::_dep>(15) << std::endl;
-      std::cout << testState.template get<mtState::_nor>(15).getVec().transpose() << std::endl;
-      std::cout << testState.template getId<mtState::_nor>(15) << std::endl; // TODO: investigate error for regular depth parametrization
+      unsigned int s = 2;
+      testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
       rovio::MultilevelPatchFeature<nLevels_,patchSize_> feature;
-      unsigned int s = 1;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
       LWF::QuaternionElement q_temp;
@@ -102,8 +98,31 @@ class TestFilter{
       }
       testState.template get<mtState::_aux>().fManager_.features_[1].foundInImage_ = false;
       testState.template get<mtState::_aux>().fManager_.removeFeature(0);
-      predictionMeas_.setRandom(1);
-      imgUpdateMeas_.setRandom(1);
+      predictionMeas_.setRandom(s);
+      imgUpdateMeas_.setRandom(s);
+
+//      std::cout << testState.template get<mtState::_dep>(15) << std::endl;
+//      std::cout << testState.template getId<mtState::_dep>(15) << std::endl;
+//      std::cout << testState.template get<mtState::_nor>(15).getVec().transpose() << std::endl;
+//      std::cout << testState.template getId<mtState::_nor>(15) << std::endl; // TODO: investigate error for regular depth parametrization
+//      std::cout << predictionMeas_.template get<mtPredictionMeas::_acc>().transpose() << std::endl;
+//      std::cout << predictionMeas_.template get<mtPredictionMeas::_gyr>().transpose() << std::endl;
+//      std::cout << testState.template get<mtState::_vel>().transpose() << std::endl;
+//
+//      double dt = 0.1;
+//      const Eigen::Vector3d imuRor = (predictionMeas_.template get<mtPredictionMeas::_gyr>()-testState.template get<mtState::_gyb>());
+//      const Eigen::Vector3d dOmega = dt*imuRor;
+//      const Eigen::Vector3d camRor = q.q_.rotate(imuRor);
+//      const Eigen::Vector3d camVel = q.q_.rotate(Eigen::Vector3d(imuRor.cross(vec.v_)-testState.template get<mtState::_vel>()));
+//      std::cout << imuRor.transpose() << std::endl;
+//      std::cout << dOmega.transpose() << std::endl;
+//      std::cout << camRor.transpose() << std::endl;
+//      std::cout << camVel.transpose() << std::endl;
+//      std::cout << (rovio::gSM(testState.template get<mtState::_nor>(15).getVec())*camVel).transpose() << std::endl;
+//      std::cout << ((rovio::M3D::Identity()-testState.template get<mtState::_nor>(15).getVec()*testState.template get<mtState::_nor>(15).getVec().transpose())*camRor).transpose() << std::endl;
+//      const Eigen::Vector3d dm = dt*(rovio::gSM(testState.template get<mtState::_nor>(15).getVec())*camVel/testState.template get<mtState::_dep>(15)
+//          + (rovio::M3D::Identity()-testState.template get<mtState::_nor>(15).getVec()*testState.template get<mtState::_nor>(15).getVec().transpose())*camRor);
+//      std::cout << dm << std::endl;
 
       mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
       std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-9,1e-6,0,0.1);
@@ -143,17 +162,26 @@ class TestFilter{
     if(isInitialized_ && !cv_img.empty()){
       imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img);
       mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
-      updateAndPublish(); // TODO: position elsewhere
+      double lastImuTime;
+      if(mpFilter->predictionTimeline_.getLastTime(lastImuTime)){
+        auto rit = std::get<0>(mpFilter->updateTimelineTuple_).measMap_.rbegin();
+        while(rit != std::get<0>(mpFilter->updateTimelineTuple_).measMap_.rend() && rit->first > lastImuTime){
+          ++rit;
+        }
+        if(rit != std::get<0>(mpFilter->updateTimelineTuple_).measMap_.rend()){
+          updateAndPublish(rit->first);
+        }
+      }
     }
   }
-  void updateAndPublish(){
+  void updateAndPublish(const double& updateTime){
     if(isInitialized_){
-      mpFilter->updateSafe();
-      std::cout << "Filter calibration: " << std::endl;
-      std::cout << mpFilter->safe_.state_.template get<mtState::_acb>().transpose() << std::endl;
-      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
-      std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
-      std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
+      mpFilter->updateSafe(updateTime);
+//      std::cout << "Filter calibration: " << std::endl;
+//      std::cout << mpFilter->safe_.state_.template get<mtState::_acb>().transpose() << std::endl;
+//      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
+//      std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
+//      std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
       if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty()){
         cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
         cv::waitKey(1);

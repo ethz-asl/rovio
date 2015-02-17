@@ -87,10 +87,18 @@ class DepthMap{
     p_d_p = 0.0;
   }
   void mapInverse(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    d = 1/p; // TODO: handle 0 and negativ
+    double p_temp = p;
+    if(fabs(p_temp) < 1e-6){
+      if(p_temp >= 0){
+        p_temp = 1e-6;
+      } else {
+        p_temp = -1e-6;
+      }
+    }
+    d = 1/p_temp;
     d_p = -d*d;
-    p_d = -p*p;
-    p_d_p = -2*p;
+    p_d = -p_temp*p_temp;
+    p_d_p = -2*p_temp;
   }
 };
 
@@ -157,7 +165,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   bool doVECalibration_;
   DepthMap depthMap_;
   int depthTypeInt_;
-  ImuPrediction():g_(0,0,-9.81), Base(false){
+  ImuPrediction():g_(0,0,-9.81), Base(true){
     qVM_.setIdentity();
     MrMV_.setZero();
     doVECalibration_ = true;
@@ -286,7 +294,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
                   +MPD(qm).matrix()
           )*state.template get<mtState::_nor>(ind).getM();
       J.template block<2,1>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_dep>(ind)) =
-          -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)
+          -nOut.getM().transpose()*gSM(nOut.getVec())*Lmat(dm)
               *dt*gSM(state.template get<mtState::_nor>(ind).getVec())*camVel*(d_p/(d*d));
       J.template block<2,3>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_vel>()) =
           -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)
