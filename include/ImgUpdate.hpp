@@ -101,6 +101,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
+  using Base::stringRegister_;
   using Base::updnoiP_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtCovMat mtCovMat;
@@ -118,21 +119,18 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   int startLevel_;
   int endLevel_;
   typename PixelOutput::mtCovMat pixelOutputCov_;
+  std::string cameraCalibrationFile_;
   ImgUpdate(): pixelOutputCF_(&camera_){
-    camera_.type_ = Camera::RADTAN;
-    camera_.loadRadtan("Sammy11_02_2015_radtan.yaml"); // TODO: test equisdist
-//    camera_.type_ = Camera::EQUIDIST;
-//    camera_.loadEquidist("p21012.yaml"); // TODO: test equisdist
-
-//    camera_.testCameraModel();
     initCovFeature_.setIdentity();
     initDepth_ = 0;
     startLevel_ = 3;
     endLevel_ = 1;
+    cameraCalibrationFile_ = "calib.yaml";
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
+    stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -143,6 +141,9 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
   };
   ~ImgUpdate(){};
+  void refreshProperties(){
+    camera_.load(cameraCalibrationFile_);
+  };
   mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     mtInnovation y;
@@ -258,12 +259,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     fManager.removeInvisible();
     fManager.extractFeaturePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
     fManager.candidates_.clear();
-
-//    fManager.invalidSet_.clear();
-//    fManager.validSet_.clear();
-//    for(unsigned int i=0;i<mtState::nMax_;i++){
-//      fManager.invalidSet_.insert(i);
-//    }
 
     if(fManager.validSet_.size() < 0.9*mtState::nMax_){ // TODO param
       ROS_DEBUG_STREAM(" Adding keypoints");

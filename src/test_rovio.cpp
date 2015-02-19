@@ -43,7 +43,7 @@ class TestFilter{
   ros::Subscriber subImu_;
   ros::Subscriber subImg_;
   ros::Publisher pubPose_;
-  static constexpr unsigned int nMax_ = 50;
+  static constexpr unsigned int nMax_ = 40;
   static constexpr int nLevels_ = 4;
   static constexpr int patchSize_ = 8;
   typedef rovio::FilterState<nMax_,nLevels_,patchSize_> mtState;
@@ -125,16 +125,17 @@ class TestFilter{
 //          + (rovio::M3D::Identity()-testState.template get<mtState::_nor>(15).getVec()*testState.template get<mtState::_nor>(15).getVec().transpose())*camRor);
 //      std::cout << dm << std::endl;
 
-      mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0,0.1);
-      std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-9,1e-6,0,0.1);
+      mpFilter->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
+      std::get<0>(mpFilter->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-9,1e-6,0.1);
 
       mpFilter->mPrediction_.qVM_ = q_temp.q_;
       mpFilter->mPrediction_.MrMV_ = vec_temp.v_;
 
-      cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0,0.1);
+      cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
     }
   }
   ~TestFilter(){
+    delete mpFilter;
     cv::destroyWindow("Tracker");
   }
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){

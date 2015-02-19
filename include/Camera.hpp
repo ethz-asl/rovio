@@ -78,7 +78,7 @@ class Camera{
     p1_ = config["distortion_coefficients"]["data"][2].as<double>();
     p2_ = config["distortion_coefficients"]["data"][3].as<double>();
     k3_ = config["distortion_coefficients"]["data"][4].as<double>();
-    std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
+    std::cout << "Set distortion parameters (Radtan) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
   void loadEquidist(const std::string& filename){
     loadCameraMatrix(filename);
@@ -87,7 +87,21 @@ class Camera{
     k2_ = config["distortion_coefficients"]["data"][1].as<double>();
     k3_ = config["distortion_coefficients"]["data"][2].as<double>();
     k4_ = config["distortion_coefficients"]["data"][3].as<double>();
-    std::cout << "Set distortion parameters to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
+    std::cout << "Set distortion parameters (Equidist) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
+  }
+  void load(const std::string& filename){
+    YAML::Node config = YAML::LoadFile(filename);
+    std::string distortionModel;
+    distortionModel = config["distortion_model"].as<std::string>();
+    if(distortionModel == "plumb_bob"){
+        type_ = RADTAN;
+        loadRadtan(filename);
+    } else if(distortionModel == "equidistant"){
+        type_ = EQUIDIST;
+        loadEquidist(filename);
+    } else {
+        std::cout << "ERROR: no camera Model detected!";
+    }
   }
   void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     const double x2 = in(0) * in(0);
