@@ -259,13 +259,27 @@ class MultilevelPatchFeature{
     }
     return c;
   }
+  double getLocalQuality(){
+    // Local quality of feature for last inFrames
+    const int localRange = 10; // param
+    int countTracked = 0;
+    int countInImage = 0;
+    for(auto it = trackingStatistics_.rbegin();countInImage<localRange && it != trackingStatistics_.rend();++it){
+      if(it->second.inFrame_){
+        if(it->second.status_ == TrackingStatistics::TRACKED || it->second.status_ == TrackingStatistics::INIT) countTracked++;
+        countInImage++;
+      }
+    }
+    return static_cast<double>(countTracked)/static_cast<double>(countInImage);
+  }
   bool isGoodFeature(){  // TODO param
     const int numTracked = countStatistics(TrackingStatistics::TRACKED);
     const double trackingRatio = static_cast<double>(numTracked)/static_cast<double>(totCount_-1);
     const double globalQuality = trackingRatio*std::min(static_cast<double>(cumulativeStatistics_[TrackingStatistics::TRACKED])/100.0,1.0); // param
-    const int localRange = 10; // TODO: param
-    const int localFailures = countStatistics(TrackingStatistics::FOUND,localRange)+countStatistics(TrackingStatistics::NOTFOUND,localRange)+countStatistics(TrackingStatistics::OUTLIER,localRange);
-    const double localQuality = static_cast<double>(countStatistics(TrackingStatistics::TRACKED,localRange))/static_cast<double>(std::min(localRange,totCount_-1));
+//    const int localRange = 10; // TODO: param
+//    const int localFailures = countStatistics(TrackingStatistics::FOUND,localRange)+countStatistics(TrackingStatistics::NOTFOUND,localRange)+countStatistics(TrackingStatistics::OUTLIER,localRange);
+//    const double localQuality = static_cast<double>(countStatistics(TrackingStatistics::TRACKED,localRange))/static_cast<double>(std::min(localRange,totCount_-1));
+    const double localQuality = getLocalQuality();
 //    return localFailures < 2+globalQuality*5; // TODO: modes
     const double upper = 0.9; // TODO: param
     const double lower = 0.2; // TODO: param
