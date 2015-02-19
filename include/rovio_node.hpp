@@ -52,6 +52,10 @@ class TestNode{
   unsigned int min_feature_count_, max_feature_count_;
   ImagePyramid<n_levels_> pyr_;
   FeatureManager<n_levels_,8,100> fManager_;
+  static constexpr int nDetectionBuckets_ = 100;
+  static constexpr double scoreDetectionExponent_ = 0.5;
+  static constexpr double penaltyDistance_ = 20;
+  static constexpr double zeroDistancePenalty_ = nDetectionBuckets_*1.0;
 
   TestNode(ros::NodeHandle& nh): nh_(nh){
     subImu_ = nh_.subscribe("imuMeas", 1000, &TestNode::imuCallback,this);
@@ -135,7 +139,8 @@ class TestNode{
       fManager_.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-      std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,draw_image_);
+      std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,draw_image_,
+                                                                            nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_);
       const double t5 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
 

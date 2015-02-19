@@ -270,6 +270,11 @@ class MultilevelPatchFeature{
     const double upper = 0.9; // TODO: param
     const double lower = 0.2; // TODO: param
     return localQuality > upper-(upper-lower)*globalQuality;
+
+    /*
+     * Local Quality: how is the tracking within the local range, OUTLIER/NOTFOUND is worse than not inImage
+     * Global Quality:
+     */
   }
   MultilevelPatchFeature(){
     idx_ = -1;
@@ -490,7 +495,7 @@ class FeatureManager{
       }
     }
   }
-  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg){
+  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg, const int nDetectionBuckets, const double scoreDetectionExponent, const double penaltyDistance, const double zeroDistancePenalty){
     std::unordered_set<unsigned int> newSet;
     float maxScore = -1.0;
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
@@ -498,27 +503,24 @@ class FeatureManager{
     }
 
     // Make buckets and fill based on score
-    const unsigned int nBuckets = 100; // TODO param
-    const float exponent = 0.5; // TODO param
-    std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*> buckets[nBuckets];
+    std::vector<std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>> buckets(nDetectionBuckets,std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>());
     unsigned int newBucketID;
     for (auto it_cand = candidates_.begin(); it_cand != candidates_.end(); ++it_cand) {
       if(it_cand->s_ > 0.0){
-        newBucketID = std::ceil(nBuckets*(pow(it_cand->s_/maxScore,exponent)))-1;
-        if(newBucketID>nBuckets-1) newBucketID = nBuckets-1;
+        newBucketID = std::ceil(nDetectionBuckets*(pow(it_cand->s_/maxScore,static_cast<float>(scoreDetectionExponent))))-1;
+        if(newBucketID>nDetectionBuckets-1) newBucketID = nDetectionBuckets-1;
         buckets[newBucketID].insert(&(*it_cand));
       }
     }
 
     // Move buckets based on current features
     double d2;
-    double t2 = pow(20,2); // TODO param
-    double zeroDistancePenalty = nBuckets*1.0; // TODO param
+    double t2 = pow(penaltyDistance,2);
     bool doDelete;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      for (unsigned int bucketID = 1;bucketID < nBuckets;bucketID++) {
+      for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
         for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
           doDelete = false;
           d2 = std::pow(mpFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpFeature->c_.y - (*it_cand)->c_.y,2);
@@ -541,7 +543,7 @@ class FeatureManager{
     // Incrementally add features and update candidate buckets
     MultilevelPatchFeature<n_levels,patch_size>* mpNewFeature;
     int addedCount = 0;
-    for (int bucketID = nBuckets-1;bucketID >= 0;bucketID--) {
+    for (int bucketID = nDetectionBuckets-1;bucketID >= 0;bucketID--) {
       while(!buckets[bucketID].empty() && addedCount < maxN) {
         mpNewFeature = *(buckets[bucketID].begin());
         buckets[bucketID].erase(mpNewFeature);

@@ -119,17 +119,32 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   int startLevel_;
   int endLevel_;
   typename PixelOutput::mtCovMat pixelOutputCov_;
+  double startDetectionTh_;
+  int nDetectionBuckets_;
+  double scoreDetectionExponent_;
+  double penaltyDistance_;
+  double zeroDistancePenalty_;
   std::string cameraCalibrationFile_;
   ImgUpdate(): pixelOutputCF_(&camera_){
     initCovFeature_.setIdentity();
     initDepth_ = 0;
     startLevel_ = 3;
     endLevel_ = 1;
+    startDetectionTh_ = 0.9;
+    nDetectionBuckets_ = 100;
+    scoreDetectionExponent_ = 0.5;
+    penaltyDistance_ = 20;
+    zeroDistancePenalty_ = nDetectionBuckets_*1.0;
     cameraCalibrationFile_ = "calib.yaml";
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
+    doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
+    doubleRegister_.registerScalar("scoreDetectionExponent",scoreDetectionExponent_);
+    doubleRegister_.registerScalar("penaltyDistance",penaltyDistance_);
+    doubleRegister_.registerScalar("zeroDistancePenalty",zeroDistancePenalty_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
+    intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
@@ -244,6 +259,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         if(!mpOutlierDetection->isOutlier(ind)){
           fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 255, 0));
           fManager.features_[ind].lastStatistics().status_ = TrackingStatistics::TRACKED;
+          fManager.features_[ind].log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(fManager.features_[ind].totCount_),cv::Scalar(0,255,0));
         }
         if(mpOutlierDetection->isOutlier(ind)){
           fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 255));
@@ -260,7 +276,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     fManager.extractFeaturePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
     fManager.candidates_.clear();
 
-    if(fManager.validSet_.size() < 0.9*mtState::nMax_){ // TODO param
+    if(fManager.validSet_.size() < startDetectionTh_*mtState::nMax_){ // TODO param
       ROS_DEBUG_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       const int detect_level = 1;
@@ -275,7 +291,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       fManager.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_);
+      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_,
+                                                                           nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_);
       const double t5 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
