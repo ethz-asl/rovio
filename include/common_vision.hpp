@@ -40,6 +40,23 @@ using namespace Eigen;
 
 namespace rovio{
 
+class TrackingStatistics{
+ public:
+  TrackingStatistics(){
+    inFrame_ = false;
+    status_ = NOTFOUND;
+  };
+  ~TrackingStatistics(){};
+  bool inFrame_;
+  enum Status{
+    TRACKED,
+    OUTLIER,
+    FOUND,
+    INIT,
+    NOTFOUND
+  } status_;
+};
+
 class DrawPoint{
  public:
   cv::Point2f c_;
@@ -62,6 +79,9 @@ class DrawPoint{
   }
   void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color){
     cv::line(drawImg,c_,p.c_,color, 2);
+  }
+  void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
+    cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
   }
   void setSigmaFromCov(const Eigen::Matrix2d& cov){
     es_.compute(cov);
@@ -203,42 +223,53 @@ class MultilevelPatchFeature{
   int idx_;
   Matrix3f H_;
   float s_;
-  bool foundInImage_;
-  bool trackingSuccess_;
-  int numConsecutiveFailures_;
-  double localQuality_;
-  double localQualityGain_;
-  int numSuccess_;
-  int numFailures_;
   bool hasValidPatches_;
-  bool inFrame_;
-  bool inFrameWithBorder_;
+  std::map<double,TrackingStatistics> trackingStatistics_;
+  std::map<TrackingStatistics::Status,int> cumulativeStatistics_; // Should be 0 initialized
+  int totCount_;
 
   DrawPoint log_previous_;
   DrawPoint log_prediction_;
   DrawPoint log_meas_;
   DrawPoint log_current_;
 
+  void increaseStatistics(const double& t){
+    if(!trackingStatistics_.empty() && t<trackingStatistics_.rbegin()->first) std::cout << "Warning: adding statistics NOT at end" << std::endl;
+    if(!trackingStatistics_.empty()) cumulativeStatistics_[lastStatistics().status_]++;
+    totCount_++;
+    trackingStatistics_[t] = TrackingStatistics();
+  }
+  TrackingStatistics& lastStatistics(){
+    assert(trackingStatistics_.rbegin() != trackingStatistics_.rend());
+    return trackingStatistics_.rbegin()->second;
+  }
+  const TrackingStatistics& lastStatistics() const{
+    assert(trackingStatistics_.rbegin() != trackingStatistics_.rend());
+    return trackingStatistics_.rbegin()->second;
+  }
+  int countStatistics(const TrackingStatistics::Status s){
+    return cumulativeStatistics_[s] + (int)(lastStatistics().status_ == s);
+  }
+  int countStatistics(const TrackingStatistics::Status s, const int n){
+    int c = 0;
+    auto it = trackingStatistics_.rbegin();
+    for(int i=0;i<n && it != trackingStatistics_.rend();++i){
+      if(it->second.status_ == s) c++;
+      ++it;
+    }
+    return c;
+  }
   bool isGoodFeature(){  // TODO param
-    double r = static_cast<double>(numSuccess_)/static_cast<double>(numSuccess_+numFailures_);
-    double s = r*std::max(static_cast<double>(numSuccess_)/100.0,1.0);
-    int threshold = 2+s*5;
-    return numConsecutiveFailures_ < threshold;
-//    double upper = 0.9;
-//    double lower = 0.2;
-//    return localQuality_ > upper-(upper-lower)*s;
-  }
-  void addSuccess(){
-    trackingSuccess_ = true;
-    numSuccess_++;
-    numConsecutiveFailures_ = 0;
-    localQuality_ = (1-localQualityGain_)*localQuality_ + localQualityGain_;
-  }
-  void addFailure(){
-    trackingSuccess_ = false;
-    numFailures_++;
-    numConsecutiveFailures_++;
-    localQuality_ = (1-localQualityGain_)*localQuality_;
+    const int numTracked = countStatistics(TrackingStatistics::TRACKED);
+    const double trackingRatio = static_cast<double>(numTracked)/static_cast<double>(totCount_-1);
+    const double globalQuality = trackingRatio*std::min(static_cast<double>(cumulativeStatistics_[TrackingStatistics::TRACKED])/100.0,1.0); // param
+    const int localRange = 10; // TODO: param
+    const int localFailures = countStatistics(TrackingStatistics::FOUND,localRange)+countStatistics(TrackingStatistics::NOTFOUND,localRange)+countStatistics(TrackingStatistics::OUTLIER,localRange);
+    const double localQuality = static_cast<double>(countStatistics(TrackingStatistics::TRACKED,localRange))/static_cast<double>(std::min(localRange,totCount_-1));
+//    return localFailures < 2+globalQuality*5; // TODO: modes
+    const double upper = 0.9; // TODO: param
+    const double lower = 0.2; // TODO: param
+    return localQuality > upper-(upper-lower)*globalQuality;
   }
   MultilevelPatchFeature(){
     idx_ = -1;
@@ -253,16 +284,14 @@ class MultilevelPatchFeature{
   ~MultilevelPatchFeature(){}
   void reset(){
     s_ = 0;
-    foundInImage_ = false;
     hasValidPatches_ = false;
-    trackingSuccess_ = false;
-    numConsecutiveFailures_ = 0;
-    numSuccess_ = 0;
-    numFailures_ = 0;
-    inFrame_ = false;
-    inFrameWithBorder_ = false;
-    localQuality_ = 1.0;
-    localQualityGain_ = 0.1;
+    totCount_ = 0;
+    cumulativeStatistics_.clear();
+    trackingStatistics_.clear();
+  }
+  void init(const double& t){
+    increaseStatistics(t);
+    lastStatistics().status_ = TrackingStatistics::INIT;
   }
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
@@ -445,7 +474,7 @@ class FeatureManager{
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      if(mpFeature->trackingSuccess_){
+      if(mpFeature->lastStatistics().status_ == TrackingStatistics::TRACKED){ // TODO: adapt?
         mpFeature->extractPatchesFromImage(pyr);
       }
     }
@@ -543,23 +572,20 @@ class FeatureManager{
     }
     return newSet;
   }
-  void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){
+  void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level){ // TODO: clean
     cv::Point2f c_new;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      mpFeature->foundInImage_ = true;
+      mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
       for(int level = start_level;level>=end_level;--level){
         if(!mpFeature->align2D(pyr,c_new,level,start_level)){
-          mpFeature->foundInImage_ = false;
+          mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
           break;
         }
       }
-      if(mpFeature->foundInImage_){
-        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
-        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-        cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
+      if(mpFeature->lastStatistics().status_ == TrackingStatistics::FOUND){
         mpFeature->c_ = c_new;
       }
     }
@@ -571,9 +597,9 @@ class FeatureManager{
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
       if(!mpFeature->align2D(pyr,c_new,level1,level2)){
-        mpFeature->foundInImage_ = false;
+        mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
       } else {
-        mpFeature->foundInImage_ = true;
+        mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
         cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -587,17 +613,14 @@ class FeatureManager{
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      mpFeature->foundInImage_ = true;
+      mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
       for(int level = start_level;level>=end_level;--level){
         if(!mpFeature->align2DSingleLevel(pyr,c_new,level) && level==end_level){
-          mpFeature->foundInImage_ = false;
+          mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
           break;
         }
       }
-      if(mpFeature->foundInImage_){
-        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
-        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-        cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
+      if(mpFeature->lastStatistics().status_ == TrackingStatistics::FOUND){
         mpFeature->c_ = c_new;
       }
     }

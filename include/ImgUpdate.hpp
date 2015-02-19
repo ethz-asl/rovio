@@ -121,6 +121,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   ImgUpdate(): pixelOutputCF_(&camera_){
     camera_.type_ = Camera::RADTAN;
     camera_.loadRadtan("Sammy11_02_2015_radtan.yaml"); // TODO: test equisdist
+//    camera_.type_ = Camera::EQUIDIST;
+//    camera_.loadEquidist("p21012.yaml"); // TODO: test equisdist
 
 //    camera_.testCameraModel();
     initCovFeature_.setIdentity();
@@ -151,7 +153,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     V3D bearing_meas;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager.features_[ind].foundInImage_){  // TODO fManager.features_[ind].inFrame_ &&
+      if(fManager.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
         camera_.pixelToBearing(fManager.features_[ind].c_,bearing_meas);
         m_meas.setFromVector(bearing_meas);
         state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
@@ -175,7 +177,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     double a, vecNorm, c;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager.features_[ind].foundInImage_){  // TODO fManager.features_[ind].inFrame_ &&
+      if(fManager.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
         camera_.pixelToBearing(fManager.features_[ind].c_,bearing_meas);
         m_meas.setFromVector(bearing_meas);
         J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
@@ -200,6 +202,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
+      fManager.features_[ind].increaseStatistics(meas.template get<mtMeas::_aux>().imgTime_);
 
       camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_prediction_.c_);
       pixelOutputCF_.setIndex(ind);
@@ -207,7 +210,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
 
-      camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO: store in frame
+      fManager.features_[ind].lastStatistics().inFrame_ = camera_.bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO: store in frame
     }
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
     fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods, adaptiv search (depending on covariance)
@@ -215,7 +218,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager.features_[ind].foundInImage_){
+      if(fManager.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
         fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
       }
     }
@@ -235,18 +238,19 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       fManager.features_[ind].log_current_.setSigmaFromCov(pixelOutputCov_);
 
       fManager.features_[ind].log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
-      if(fManager.features_[ind].foundInImage_){
+      if(fManager.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
         fManager.features_[ind].log_prediction_.drawLine(state.template get<mtState::_aux>().img_,fManager.features_[ind].log_meas_,cv::Scalar(0,255,255));
         if(!mpOutlierDetection->isOutlier(ind)){
-          fManager.features_[ind].addSuccess();
-          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 250, 0));
+          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 255, 0));
+          fManager.features_[ind].lastStatistics().status_ = TrackingStatistics::TRACKED;
         }
         if(mpOutlierDetection->isOutlier(ind)){
-          fManager.features_[ind].addFailure();
-          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 250));
+          fManager.features_[ind].log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 255));
+          fManager.features_[ind].lastStatistics().status_ = TrackingStatistics::OUTLIER;
+          fManager.features_[ind].log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(fManager.features_[ind].countStatistics(TrackingStatistics::OUTLIER,10)),cv::Scalar(0,0,255));
         }
       } else {
-        fManager.features_[ind].addFailure();
+        fManager.features_[ind].log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(fManager.features_[ind].countStatistics(TrackingStatistics::NOTFOUND,10)),cv::Scalar(0,255,255));
       }
     }
 
@@ -284,6 +288,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         V3D vec3;
         camera_.pixelToBearing(fManager.features_[ind].c_,vec3);
         state.initializeFeatureState(cov,ind,vec3,initDepth_,initCovFeature_);
+        fManager.features_[ind].init(meas.template get<mtMeas::_aux>().imgTime_);
       }
     }
 

@@ -97,7 +97,7 @@ Prediction
         vea_0 1e-8
         vea_1 1e-8
         vea_2 1e-8
-        dep 0.001 ; m/sqrt(dt)
+        dep 0.000001 ; m/sqrt(dt)
         nor 0.0001 ; rad/sqrt(dt)
     }
     alpha 0.001

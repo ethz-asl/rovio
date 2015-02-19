@@ -95,16 +95,23 @@ class TestNode{
       cv_ptr->image.copyTo(draw_image_);
 
 
+    for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      fManager_.features_[ind].increaseStatistics(current_timeStamp);
+      fManager_.features_[ind].log_prediction_.c_ = fManager_.features_[ind].c_;
+    }
     const double t1 = (double) cv::getTickCount();
     fManager_.alignFeaturesSeq(pyr_,draw_image_,3,1);
     const double t2 = (double) cv::getTickCount();
     ROS_INFO_STREAM(" Matching " << fManager_.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager_.features_[ind].foundInImage_){
-        fManager_.features_[ind].addSuccess();
-      } else {
-        fManager_.features_[ind].addFailure();
+      if(fManager_.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
+        fManager_.features_[ind].lastStatistics().status_ = TrackingStatistics::TRACKED;
+        fManager_.features_[ind].log_meas_.c_ = fManager_.features_[ind].c_;
+        fManager_.features_[ind].log_meas_.draw(draw_image_,cv::Scalar(255,255,255));
+        fManager_.features_[ind].log_meas_.drawLine(draw_image_,fManager_.features_[ind].log_prediction_,cv::Scalar(255,255,255));
+        fManager_.features_[ind].log_meas_.drawText(draw_image_,std::to_string(fManager_.features_[ind].idx_),cv::Scalar(255,255,255));
       }
 
     }
@@ -128,9 +135,14 @@ class TestNode{
       fManager_.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-      fManager_.addBestCandidates(max_feature_count_,draw_image_);
+      std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,draw_image_);
       const double t5 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
+
+      for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
+        const int ind = *it_f;
+        fManager_.features_[ind].init(current_timeStamp);
+      }
     }
     if (doVisualization) {
       cv::imshow("test1", pyr_.imgs_[1]);

@@ -81,6 +81,8 @@ class TestFilter{
       unsigned int s = 2;
       testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
       rovio::MultilevelPatchFeature<nLevels_,patchSize_> feature;
+      feature.increaseStatistics(0.0);
+      feature.lastStatistics().status_ = rovio::TrackingStatistics::FOUND;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
       LWF::QuaternionElement q_temp;
@@ -92,11 +94,10 @@ class TestFilter{
       mpFilter->mPrediction_.qVM_ = q.q_;
       mpFilter->mPrediction_.MrMV_ = vec.v_;
       for(unsigned int i=0;i<nMax_;i++){
-        testState.template get<mtState::_aux>().fManager_.addFeature(feature);
-        testState.template get<mtState::_aux>().fManager_.features_[i].foundInImage_ = true;
-        testState.template get<mtState::_aux>().fManager_.features_[i].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
+        int ind = testState.template get<mtState::_aux>().fManager_.addFeature(feature);
+        testState.template get<mtState::_aux>().fManager_.features_[ind].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
       }
-      testState.template get<mtState::_aux>().fManager_.features_[1].foundInImage_ = false;
+      testState.template get<mtState::_aux>().fManager_.features_[1].lastStatistics().status_ = rovio::TrackingStatistics::NOTFOUND;
       testState.template get<mtState::_aux>().fManager_.removeFeature(0);
       predictionMeas_.setRandom(s);
       imgUpdateMeas_.setRandom(s);
@@ -161,6 +162,7 @@ class TestFilter{
 
     if(isInitialized_ && !cv_img.empty()){
       imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img);
+      imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_ = img->header.stamp.toSec();
       mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
       double lastImuTime;
       if(mpFilter->predictionTimeline_.getLastTime(lastImuTime)){
