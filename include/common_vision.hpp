@@ -272,22 +272,37 @@ class MultilevelPatchFeature{
     }
     return static_cast<double>(countTracked)/static_cast<double>(countInImage);
   }
-  bool isGoodFeature(){  // TODO param
-    const int numTracked = countStatistics(TrackingStatistics::TRACKED);
-    const double trackingRatio = static_cast<double>(numTracked)/static_cast<double>(totCount_-1);
-    const double globalQuality = trackingRatio*std::min(static_cast<double>(cumulativeStatistics_[TrackingStatistics::TRACKED])/100.0,1.0); // param
-//    const int localRange = 10; // TODO: param
-//    const int localFailures = countStatistics(TrackingStatistics::FOUND,localRange)+countStatistics(TrackingStatistics::NOTFOUND,localRange)+countStatistics(TrackingStatistics::OUTLIER,localRange);
-//    const double localQuality = static_cast<double>(countStatistics(TrackingStatistics::TRACKED,localRange))/static_cast<double>(std::min(localRange,totCount_-1));
+  double getLocalVisibilityQuality(){
+    const int localRange = 10; // param
+    int countTot = 0;
+    int lastInImage = localRange;
+    for(auto it = trackingStatistics_.rbegin();countTot<localRange && it != trackingStatistics_.rend();++it){
+      if(it->second.inFrame_){
+        lastInImage = countTot;
+        break;
+      }
+      countTot++;
+    }
+    return static_cast<double>(localRange-lastInImage)/static_cast<double>(localRange);
+  }
+  double getGlobalQuality(){
+    const double trackingRatio = static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/static_cast<double>(totCount_-1); // INIT is considered
+    return trackingRatio*std::min(static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/100.0,1.0); // param
+  }
+  bool isGoodFeature(){
+    const double globalQuality = getGlobalQuality();
     const double localQuality = getLocalQuality();
-//    return localFailures < 2+globalQuality*5; // TODO: modes
+    const double localVisibilityQuality = getLocalVisibilityQuality();
     const double upper = 0.9; // TODO: param
     const double lower = 0.2; // TODO: param
-    return localQuality > upper-(upper-lower)*globalQuality;
+    return localQuality*localVisibilityQuality > upper-(upper-lower)*globalQuality;
 
     /*
      * Local Quality: how is the tracking within the local range, OUTLIER/NOTFOUND is worse than not inImage
-     * Global Quality:
+     * Global Quality: how was the overall tracking of the feature (only consider visible)
+     * Local Visibility: what was the last frame the feature was seen in
+     * Information Quality: what is the nearest neighbour
+     * How strong we need place for new features
      */
   }
   MultilevelPatchFeature(){
