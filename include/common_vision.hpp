@@ -142,8 +142,7 @@ class PatchNew {
     Vector3f J;
     for(int y=0; y<size_; ++y){
       it = patchWithBorder_ + (y+1)*refStep + 1;
-      for(int x=0; x<size_; ++x, ++it, ++it_dx, ++it_dy)
-      {
+      for(int x=0; x<size_; ++x, ++it, ++it_dx, ++it_dy){
         J[0] = 0.5 * (it[1] - it[-1]);
         J[1] = 0.5 * (it[refStep] - it[-refStep]);
         J[2] = 1;
@@ -220,10 +219,12 @@ class MultilevelPatchFeature{
   static const int nLevels_ = n_levels;
   PatchNew<patch_size> patches_[nLevels_];
   cv::Point2f c_;
+  cv::Point2f corners_[n_levels][3];
   int idx_;
   Matrix3f H_;
   float s_;
   bool hasValidPatches_;
+  TrackingStatistics currentStatistics_;
   std::map<double,TrackingStatistics> trackingStatistics_;
   std::map<TrackingStatistics::Status,int> cumulativeStatistics_; // Should be 0 initialized
   int totCount_;
@@ -235,38 +236,35 @@ class MultilevelPatchFeature{
 
   void increaseStatistics(const double& t){
     if(!trackingStatistics_.empty() && t<trackingStatistics_.rbegin()->first) std::cout << "Warning: adding statistics NOT at end" << std::endl;
-    if(!trackingStatistics_.empty()) cumulativeStatistics_[lastStatistics().status_]++;
+    cumulativeStatistics_[currentStatistics_.status_]++;
     totCount_++;
-    trackingStatistics_[t] = TrackingStatistics();
-  }
-  TrackingStatistics& lastStatistics(){
-    assert(trackingStatistics_.rbegin() != trackingStatistics_.rend());
-    return trackingStatistics_.rbegin()->second;
-  }
-  const TrackingStatistics& lastStatistics() const{
-    assert(trackingStatistics_.rbegin() != trackingStatistics_.rend());
-    return trackingStatistics_.rbegin()->second;
+    trackingStatistics_[t] = currentStatistics_;
+    currentStatistics_ = TrackingStatistics();
   }
   int countStatistics(const TrackingStatistics::Status s){
-    return cumulativeStatistics_[s] + (int)(lastStatistics().status_ == s);
+    return cumulativeStatistics_[s] + (int)(currentStatistics_.status_ == s);
   }
   int countStatistics(const TrackingStatistics::Status s, const int n){
     int c = 0;
     auto it = trackingStatistics_.rbegin();
-    for(int i=0;i<n && it != trackingStatistics_.rend();++i){
+    for(int i=0;i<n-1 && it != trackingStatistics_.rend();++i){
       if(it->second.status_ == s) c++;
       ++it;
     }
-    return c;
+    return c + (int)(currentStatistics_.status_ == s);
   }
   double getLocalQuality(){
     // Local quality of feature for last inFrames
     const int localRange = 10; // param
     int countTracked = 0;
     int countInImage = 0;
+    if(currentStatistics_.inFrame_){
+      if(currentStatistics_.status_ == TrackingStatistics::TRACKED) countTracked++;
+      countInImage++;
+    }
     for(auto it = trackingStatistics_.rbegin();countInImage<localRange && it != trackingStatistics_.rend();++it){
       if(it->second.inFrame_){
-        if(it->second.status_ == TrackingStatistics::TRACKED || it->second.status_ == TrackingStatistics::INIT) countTracked++;
+        if(it->second.status_ == TrackingStatistics::TRACKED) countTracked++;
         countInImage++;
       }
     }
@@ -276,12 +274,17 @@ class MultilevelPatchFeature{
     const int localRange = 10; // param
     int countTot = 0;
     int lastInImage = localRange;
-    for(auto it = trackingStatistics_.rbegin();countTot<localRange && it != trackingStatistics_.rend();++it){
-      if(it->second.inFrame_){
-        lastInImage = countTot;
-        break;
-      }
+    if(currentStatistics_.inFrame_){
+      lastInImage = 0;
+    } else {
       countTot++;
+      for(auto it = trackingStatistics_.rbegin();countTot<localRange && it != trackingStatistics_.rend();++it){
+        if(it->second.inFrame_){
+          lastInImage = countTot;
+          break;
+        }
+        countTot++;
+      }
     }
     return static_cast<double>(localRange-lastInImage)/static_cast<double>(localRange);
   }
@@ -322,14 +325,14 @@ class MultilevelPatchFeature{
     totCount_ = 0;
     cumulativeStatistics_.clear();
     trackingStatistics_.clear();
-  }
-  void init(const double& t){
-    increaseStatistics(t);
-    lastStatistics().status_ = TrackingStatistics::INIT;
+    currentStatistics_.status_ = TrackingStatistics::INIT; // TODO: rethink
   }
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
     for(unsigned int i=0;i<nLevels_;i++){
+      corners_[i][0] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // (-4,-4), (-7.5,-7.5), (-15,-15), (-30.5,-30.5)
+      corners_[i][1] = c_+cv::Point2f(patch_size/2*pow(2.0,i)-1-i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // 3, 6.5, 14, 29.5
+      corners_[i][2] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,patch_size/2*pow(2.0,i)-1-i*0.5);
       success = success & patches_[i].extractPatchFromImage(pyr.imgs_[i],c_*pow(0.5,i));
     }
     hasValidPatches_ = success;
@@ -503,12 +506,12 @@ class FeatureManager{
       it->extractPatchesFromImage(pyr);
     }
   }
-  void extractFeaturePatchesFromImage(const ImagePyramid<n_levels>& pyr){
+  void extractFeaturePatchesFromImage(const ImagePyramid<n_levels>& pyr){ // TODO: delete
     // TODO: should feature only be extracted if extractable on all levels?
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      if(mpFeature->lastStatistics().status_ == TrackingStatistics::TRACKED){ // TODO: adapt?
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){ // TODO: adapt?
         mpFeature->extractPatchesFromImage(pyr);
       }
     }
@@ -609,14 +612,14 @@ class FeatureManager{
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
+      mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
       for(int level = start_level;level>=end_level;--level){
         if(!mpFeature->align2D(pyr,c_new,level,start_level)){
-          mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
+          mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
           break;
         }
       }
-      if(mpFeature->lastStatistics().status_ == TrackingStatistics::FOUND){
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
         mpFeature->c_ = c_new;
       }
     }
@@ -628,9 +631,9 @@ class FeatureManager{
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
       if(!mpFeature->align2D(pyr,c_new,level1,level2)){
-        mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
+        mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
       } else {
-        mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
+        mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
         cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
         cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
         cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
@@ -644,14 +647,14 @@ class FeatureManager{
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       c_new = mpFeature->c_;
-      mpFeature->lastStatistics().status_ = TrackingStatistics::FOUND;
+      mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
       for(int level = start_level;level>=end_level;--level){
         if(!mpFeature->align2DSingleLevel(pyr,c_new,level) && level==end_level){
-          mpFeature->lastStatistics().status_ = TrackingStatistics::NOTFOUND;
+          mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
           break;
         }
       }
-      if(mpFeature->lastStatistics().status_ == TrackingStatistics::FOUND){
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
         mpFeature->c_ = c_new;
       }
     }
@@ -669,7 +672,6 @@ class FeatureManager{
     }
   }
   void removeInvisible(){
-    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();){
       int ind = *it_f;
       it_f++;

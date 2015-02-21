@@ -101,7 +101,7 @@ class TestNode{
 
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      fManager_.features_[ind].increaseStatistics(current_timeStamp);
+      fManager_.features_[ind].increaseStatistics(last_timeStamp);
       fManager_.features_[ind].log_prediction_.c_ = fManager_.features_[ind].c_;
     }
     const double t1 = (double) cv::getTickCount();
@@ -110,8 +110,9 @@ class TestNode{
     ROS_INFO_STREAM(" Matching " << fManager_.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager_.features_[ind].lastStatistics().status_ == TrackingStatistics::FOUND){
-        fManager_.features_[ind].lastStatistics().status_ = TrackingStatistics::TRACKED;
+      if(fManager_.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
+        fManager_.features_[ind].currentStatistics_.status_ = TrackingStatistics::TRACKED;
+        fManager_.features_[ind].currentStatistics_.inFrame_ = true;
         fManager_.features_[ind].log_meas_.c_ = fManager_.features_[ind].c_;
         fManager_.features_[ind].log_meas_.draw(draw_image_,cv::Scalar(255,255,255));
         fManager_.features_[ind].log_meas_.drawLine(draw_image_,fManager_.features_[ind].log_prediction_,cv::Scalar(255,255,255));
@@ -120,8 +121,22 @@ class TestNode{
 
     }
 
-    fManager_.removeInvisible();
-    fManager_.extractFeaturePatchesFromImage(pyr_);
+    // Remove bad feature
+    for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end();){
+      const int ind = *it_f;
+      ++it_f;
+      if(!fManager_.features_[ind].isGoodFeature()){ // TODO: handle inFrame
+        fManager_.removeFeature(ind);
+      }
+    }
+
+    // Extract feature patches
+    for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      if(fManager_.features_[ind].currentStatistics_.status_ == TrackingStatistics::TRACKED){
+        fManager_.features_[ind].extractPatchesFromImage(pyr_);
+      }
+    }
 
     fManager_.candidates_.clear();
     if(fManager_.validSet_.size() < min_feature_count_){
@@ -143,11 +158,6 @@ class TestNode{
                                                                             nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_);
       const double t5 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
-
-      for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
-        const int ind = *it_f;
-        fManager_.features_[ind].init(current_timeStamp);
-      }
     }
     if (doVisualization) {
       cv::imshow("test1", pyr_.imgs_[1]);

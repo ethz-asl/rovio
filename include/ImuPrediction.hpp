@@ -34,6 +34,7 @@
 #include "Prediction.hpp"
 #include "State.hpp"
 #include "FilterState.hpp"
+#include "Camera.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -165,7 +166,9 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   bool doVECalibration_;
   DepthMap depthMap_;
   int depthTypeInt_;
+  Camera* mpCamera_;
   ImuPrediction():g_(0,0,-9.81), Base(true){
+    mpCamera_ = nullptr;
     qVM_.setIdentity();
     MrMV_.setZero();
     doVECalibration_ = true;
@@ -188,17 +191,20 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     }
   };
   ~ImuPrediction(){};
+  void setCamera(Camera* mpCamera){
+    mpCamera_ = mpCamera;
+  }
   void refreshProperties(){
     depthMap_.setType(depthTypeInt_);
   };
   mtState eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
     mtState output;
+    output.template get<mtState::_aux>().fManager_ = state.template get<mtState::_aux>().fManager_;
     output.template get<mtState::_aux>().MwIMmeas_ = meas.template get<mtMeas::_gyr>();
     output.template get<mtState::_aux>().MwIMest_ = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
     const V3D imuRor = output.template get<mtState::_aux>().MwIMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
     const V3D dOmega = dt*imuRor;
-    QPD dQ;
-    dQ = dQ.exponentialMap(-dOmega);
+    QPD dQ = dQ.exponentialMap(-dOmega);
     QPD qVM = qVM_;
     V3D MrMV = MrMV_;
     if(doVECalibration_){
@@ -230,11 +236,31 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           + state.template get<mtState::_nor>(ind).getN()*noise.template get<mtNoise::_nor>(ind)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind).rotated(qm);
+//      // WARP corners
+//      V3D cornerVec;
+//      cv::Point2f cornerPoint;
+//      cv::Point2f centerPointPre;
+//      cv::Point2f centerPointPost;
+//      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),centerPointPre);
+//      mpCamera_->bearingToPixel(output.template get<mtState::_nor>(ind),centerPointPost);
+//      for(unsigned int level=0;level<STATE::nLevels_;level++){ // TODO: Only if required
+//        for(unsigned int i=0;i<3;i++){
+//          cornerPoint = centerPointPre + fManager.features_[ind].corners_[level][i];
+//          mpCamera_->pixelToBearing(cornerPoint,cornerVec);
+//          cornerVec = qm.rotate(cornerVec);
+//          mpCamera_->bearingToPixel(cornerVec,cornerPoint);
+//          output.template get<mtState::_aux>().fManager_.features_[ind].corners_[level][i] = cornerPoint - centerPointPost;
+//        }
+//      }
+    }
+    for(auto it_f = fManager.invalidSet_.begin();it_f != fManager.invalidSet_.end(); ++it_f){
+      const int ind = *it_f;
+      output.template get<mtState::_dep>(ind) = state.template get<mtState::_dep>(ind);
+      output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind);
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
     output.template get<mtState::_aux>().imgTime_ = state.template get<mtState::_aux>().imgTime_;
-    output.template get<mtState::_aux>().fManager_ = state.template get<mtState::_aux>().fManager_;
 
     // todo: change to avoid copy
     output.fix();
@@ -320,6 +346,11 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
             nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(ind).getVec()))*Lmat(dm)
                 *dt/d*gSM(state.template get<mtState::_nor>(ind).getVec())*MPD(qVM).matrix()*gSM(imuRor);
       }
+    }
+    for(auto it_f = fManager.invalidSet_.begin();it_f != fManager.invalidSet_.end(); ++it_f){
+      const int ind = *it_f;
+      J(mtState::template getId<mtState::_dep>(ind),mtState::template getId<mtState::_dep>(ind)) = 1.0;
+      J.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).setIdentity();
     }
     J.template block<3,3>(mtState::template getId<mtState::_vep>(),mtState::template getId<mtState::_vep>()) = M3D::Identity();
     J.template block<3,3>(mtState::template getId<mtState::_vea>(),mtState::template getId<mtState::_vea>()) = M3D::Identity();

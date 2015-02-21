@@ -82,7 +82,7 @@ class TestFilter{
       testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
       rovio::MultilevelPatchFeature<nLevels_,patchSize_> feature;
       feature.increaseStatistics(0.0);
-      feature.lastStatistics().status_ = rovio::TrackingStatistics::FOUND;
+      feature.currentStatistics_.status_ = rovio::TrackingStatistics::FOUND;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
       LWF::QuaternionElement q_temp;
@@ -97,7 +97,7 @@ class TestFilter{
         int ind = testState.template get<mtState::_aux>().fManager_.addFeature(feature);
         testState.template get<mtState::_aux>().fManager_.features_[ind].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
       }
-      testState.template get<mtState::_aux>().fManager_.features_[1].lastStatistics().status_ = rovio::TrackingStatistics::NOTFOUND;
+      testState.template get<mtState::_aux>().fManager_.features_[1].currentStatistics_.status_ = rovio::TrackingStatistics::NOTFOUND;
       testState.template get<mtState::_aux>().fManager_.removeFeature(0);
       predictionMeas_.setRandom(s);
       imgUpdateMeas_.setRandom(s);

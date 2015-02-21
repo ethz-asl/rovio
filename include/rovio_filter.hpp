@@ -36,6 +36,7 @@
 #include "FilterState.hpp"
 #include "ImgUpdate.hpp"
 #include "ImuPrediction.hpp"
+#include "Camera.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -55,10 +56,18 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
   using Base::readFromInfo;
   using Base::doubleRegister_;
   using Base::mUpdates_;
+  using Base::mPrediction_;
+  using Base::stringRegister_;
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtPrediction mtPrediction;
   typedef typename Base::mtState mtState;
+  rovio::Camera camera_;
+  std::string cameraCalibrationFile_;
   Filter(){
+    mPrediction_.setCamera(&camera_);
+    std::get<0>(mUpdates_).setCamera(&camera_);
+    cameraCalibrationFile_ = "calib.yaml";
+    stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtState::template getId<mtState::_nor>(i);
@@ -77,6 +86,9 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
     std::get<0>(init_.outlierDetectionTuple_).setEnabledAll(true);
     reset(0.0);
   }
+  void refreshProperties(){
+    camera_.load(cameraCalibrationFile_);
+  };
   ~Filter(){};
 //  void resetToImuPose(V3D IrIM, QPD qMI, double t = 0.0){
 //    init_.state_.initWithImuPose(IrIM,qMI);

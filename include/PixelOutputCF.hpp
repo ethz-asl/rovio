@@ -53,10 +53,13 @@ class PixelOutputCF:public CoordinateTransform<STATE,PixelOutput>{
   typedef typename Base::mtJacInput mtJacInput;
   int ind_;
   rovio::Camera* mpCamera_;
-  PixelOutputCF(rovio::Camera* mpCamera){
+  PixelOutputCF(){
     ind_ = 0;
-    mpCamera_ = mpCamera;
+    mpCamera_ = nullptr;
   };
+  void setCamera(Camera* mpCamera){
+    mpCamera_ = mpCamera;
+  }
   void setIndex(int ind){
     ind_ = ind;
   }
