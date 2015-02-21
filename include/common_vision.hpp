@@ -77,8 +77,8 @@ class DrawPoint{
       cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,1,8,0);
     }
   }
-  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color){
-    cv::line(drawImg,c_,p.c_,color, 2);
+  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
+    cv::line(drawImg,c_,p.c_,color, thickness);
   }
   void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
     cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
@@ -231,6 +231,8 @@ class MultilevelPatchFeature{
 
   DrawPoint log_previous_;
   DrawPoint log_prediction_;
+  DrawPoint log_predictionC0_;
+  DrawPoint log_predictionC1_;
   DrawPoint log_meas_;
   DrawPoint log_current_;
 

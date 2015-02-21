@@ -233,6 +233,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
         fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
+        fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ + 2.0*fManager.features_[ind].corners_[0];
+        fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + 2.0*fManager.features_[ind].corners_[1];
       }
     }
   };
@@ -251,6 +253,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
       mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
+      mpFeature->log_meas_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC0_,cv::Scalar(0,255,255),1);
+      mpFeature->log_meas_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
         mpFeature->log_prediction_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_meas_,cv::Scalar(0,255,255));
         if(!mpOutlierDetection->isOutlier(ind)){

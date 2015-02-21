@@ -236,6 +236,9 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind).rotated(qm);
       // WARP corners
       for(unsigned int i=0;i<2;i++){
+        dm = dt*(gSM(state.template get<mtState::_aux>().corners_[ind][i].getVec())*camVel/d
+            + (M3D::Identity()-state.template get<mtState::_aux>().corners_[ind][i].getVec()*state.template get<mtState::_aux>().corners_[ind][i].getVec().transpose())*camRor);
+        qm = qm.exponentialMap(dm);
         output.template get<mtState::_aux>().corners_[ind][i] = state.template get<mtState::_aux>().corners_[ind][i].rotated(qm);
       }
     }
