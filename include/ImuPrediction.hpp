@@ -234,22 +234,10 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
           + state.template get<mtState::_nor>(ind).getN()*noise.template get<mtNoise::_nor>(ind)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind).rotated(qm);
-//      // WARP corners
-//      V3D cornerVec;
-//      cv::Point2f cornerPoint;
-//      cv::Point2f centerPointPre;
-//      cv::Point2f centerPointPost;
-//      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),centerPointPre);
-//      mpCamera_->bearingToPixel(output.template get<mtState::_nor>(ind),centerPointPost);
-//      for(unsigned int level=0;level<STATE::nLevels_;level++){ // TODO: Only if required
-//        for(unsigned int i=0;i<3;i++){
-//          cornerPoint = centerPointPre + fManager.features_[ind].corners_[level][i];
-//          mpCamera_->pixelToBearing(cornerPoint,cornerVec);
-//          cornerVec = qm.rotate(cornerVec);
-//          mpCamera_->bearingToPixel(cornerVec,cornerPoint);
-//          output.template get<mtState::_aux>().fManager_.features_[ind].corners_[level][i] = cornerPoint - centerPointPost;
-//        }
-//      }
+      // WARP corners
+      for(unsigned int i=0;i<2;i++){
+        output.template get<mtState::_aux>().corners_[ind][i] = state.template get<mtState::_aux>().corners_[ind][i].rotated(qm);
+      }
     }
     for(auto it_f = fManager.invalidSet_.begin();it_f != fManager.invalidSet_.end(); ++it_f){
       const int ind = *it_f;

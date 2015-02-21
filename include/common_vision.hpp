@@ -219,7 +219,7 @@ class MultilevelPatchFeature{
   static const int nLevels_ = n_levels;
   PatchNew<patch_size> patches_[nLevels_];
   cv::Point2f c_;
-  cv::Point2f corners_[n_levels][3];
+  cv::Point2f corners_[2];
   int idx_;
   Matrix3f H_;
   float s_;
@@ -329,10 +329,12 @@ class MultilevelPatchFeature{
   }
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
+    corners_[0] = cv::Point2f(-patch_size/2,0);
+    corners_[1] = cv::Point2f(0,-patch_size/2);
     for(unsigned int i=0;i<nLevels_;i++){
-      corners_[i][0] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // (-4,-4), (-7.5,-7.5), (-15,-15), (-30.5,-30.5)
-      corners_[i][1] = c_+cv::Point2f(patch_size/2*pow(2.0,i)-1-i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // 3, 6.5, 14, 29.5
-      corners_[i][2] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,patch_size/2*pow(2.0,i)-1-i*0.5);
+//      corners_[i][0] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // (-4,-4), (-7.5,-7.5), (-15,-15), (-30.5,-30.5)
+//      corners_[i][1] = c_+cv::Point2f(patch_size/2*pow(2.0,i)-1-i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // 3, 6.5, 14, 29.5
+//      corners_[i][2] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,patch_size/2*pow(2.0,i)-1-i*0.5);
       success = success & patches_[i].extractPatchFromImage(pyr.imgs_[i],c_*pow(0.5,i));
     }
     hasValidPatches_ = success;

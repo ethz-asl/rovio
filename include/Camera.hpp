@@ -278,16 +278,20 @@ class Camera{
     Eigen::Vector2d y_tmp; // current guess (distorted)
     Eigen::Vector2d e;
     Eigen::Vector2d du;
+    bool success = false;
     for (int i = 0; i < max_iter; i++) {
       distort(ybar,y_tmp,J);
       e = y - y_tmp;
       du = (J.transpose() * J).inverse() * J.transpose() * e;
       ybar += du;
-      if (e.dot(e) <= tolerance) break;
+      if (e.dot(e) <= tolerance){
+        success = true;
+        break;
+      }
     }
     y = ybar;
     vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
-    return true;
+    return success;
   }
   bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n) const{
     Eigen::Vector3d vec;

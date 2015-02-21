@@ -222,7 +222,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
 
-      fManager.features_[ind].currentStatistics_.inFrame_ = mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO: store in frame
+      fManager.features_[ind].currentStatistics_.inFrame_ = mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
+      extractPixelCorner(state,ind); // TODO only if inFrame_;
     }
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
     fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods, adaptiv search (depending on covariance)
@@ -282,6 +283,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       mpFeature = &fManager.features_[ind];
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
         mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+        extractBearingCorner(state,ind);
       }
     }
 
@@ -311,6 +313,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         V3D vec3;
         mpCamera_->pixelToBearing(fManager.features_[ind].c_,vec3);
         state.initializeFeatureState(cov,ind,vec3,initDepth_,initCovFeature_);
+        extractBearingCorner(state,ind);
       }
     }
 
@@ -319,6 +322,24 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_previous_.c_);
     }
   };
+  bool extractBearingCorner(mtState& state, const int& ind) const{ // TODO: think about not in frame
+    bool success = true;
+    cv::Point2f pixelCorner;
+    for(unsigned int i=0;i<2;i++){
+      pixelCorner = state.template get<mtState::_aux>().fManager_.features_[ind].c_+state.template get<mtState::_aux>().fManager_.features_[ind].corners_[i];
+      success = success & mpCamera_->pixelToBearing(pixelCorner,state.template get<mtState::_aux>().corners_[ind][i]);
+    }
+    return success;
+  }
+  bool extractPixelCorner(mtState& state, const int& ind) const{ // TODO: think about not in frame
+    bool success = true;
+    cv::Point2f pixelCorner;
+    for(unsigned int i=0;i<2;i++){
+      success = success & mpCamera_->bearingToPixel(state.template get<mtState::_aux>().corners_[ind][i],pixelCorner);
+      state.template get<mtState::_aux>().fManager_.features_[ind].corners_[i] = pixelCorner - state.template get<mtState::_aux>().fManager_.features_[ind].c_;
+    }
+    return success;
+  }
 };
 
 }

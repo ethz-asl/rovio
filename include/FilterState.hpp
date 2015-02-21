@@ -65,6 +65,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   FeatureManager<nLevels,patchSize,nMax> fManager_;
   cv::Mat img_; // Mainly used for drawing
   double imgTime_;
+  LWF::NormalVectorElement corners_[nMax][2];
   V3D MwIMest_;
   V3D MwIMmeas_;
   M3D wMeasCov_;
