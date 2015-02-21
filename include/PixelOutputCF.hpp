@@ -64,14 +64,12 @@ class PixelOutputCF:public CoordinateTransform<STATE,PixelOutput>{
     ind_ = ind;
   }
   ~PixelOutputCF(){};
-  mtOutput eval(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    mtOutput output;
+  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // MrMV = MrMV
     // qVM = qVM
     cv::Point2f c;
     mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
-    return output;
   }
   mtJacInput jacInput(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     mtJacInput J;

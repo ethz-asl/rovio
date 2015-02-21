@@ -43,7 +43,7 @@ class TestFilter{
   ros::Subscriber subImu_;
   ros::Subscriber subImg_;
   ros::Publisher pubPose_;
-  static constexpr unsigned int nMax_ = 40;
+  static constexpr unsigned int nMax_ = 50;
   static constexpr int nLevels_ = 4;
   static constexpr int patchSize_ = 8;
   typedef rovio::FilterState<nMax_,nLevels_,patchSize_> mtState;

@@ -58,8 +58,7 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
   CameraOutputCF(const ImuPrediction& imuPrediction): mpImuPrediction_(&imuPrediction){};
   ~CameraOutputCF(){};
   const ImuPrediction* mpImuPrediction_;
-  mtOutput eval(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    mtOutput output;
+  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // IrIV = qIM*(MrIM + MrMV)
     // VvV = qVM*(MvM + MwIM x MrMV)
     // qVI = qVM*qIM^T
@@ -75,7 +74,6 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
     output.template get<mtOutput::_vel>() =
         qVM.rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*MrMV));
     output.template get<mtOutput::_att>() = qVM*input.template get<mtInput::_att>().inverted();
-    return output;
   }
   mtJacInput jacInput(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     mtJacInput J;

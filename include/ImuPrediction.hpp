@@ -197,9 +197,7 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   void refreshProperties(){
     depthMap_.setType(depthTypeInt_);
   };
-  mtState eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
-    mtState output;
-    output.template get<mtState::_aux>().fManager_ = state.template get<mtState::_aux>().fManager_;
+  void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
     output.template get<mtState::_aux>().MwIMmeas_ = meas.template get<mtMeas::_gyr>();
     output.template get<mtState::_aux>().MwIMest_ = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
     const V3D imuRor = output.template get<mtState::_aux>().MwIMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
@@ -215,13 +213,13 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
     const V3D camVel = qVM.rotate(V3D(imuRor.cross(MrMV)-state.template get<mtState::_vel>()));
     double d, d_p, p_d, p_d_p;
 
-    output.template get<mtState::_att>() = state.template get<mtState::_att>()*dQ;
     output.template get<mtState::_pos>() = (M3D::Identity()-gSM(dOmega))*state.template get<mtState::_pos>()
         -dt*(state.template get<mtState::_vel>()-noise.template get<mtNoise::_pos>()/sqrt(dt));
     output.template get<mtState::_vel>() = (M3D::Identity()-gSM(dOmega))*state.template get<mtState::_vel>()
         -dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
+    output.template get<mtState::_att>() = state.template get<mtState::_att>()*dQ;
     output.template get<mtState::_vep>() = state.template get<mtState::_vep>()+noise.template get<mtNoise::_vep>()*sqrt(dt);
     dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>()*sqrt(dt));
     output.template get<mtState::_vea>() = dQ*state.template get<mtState::_vea>();
@@ -259,12 +257,9 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind);
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
-    output.template get<mtState::_aux>().img_ = state.template get<mtState::_aux>().img_;
-    output.template get<mtState::_aux>().imgTime_ = state.template get<mtState::_aux>().imgTime_;
 
     // todo: change to avoid copy
     output.fix();
-    return output;
   }
   void noMeasCase(mtState& state, mtCovMat& cov, mtMeas& meas, double dt){
     meas.template get<mtMeas::_gyr>() = state.template get<mtState::_gyb>();

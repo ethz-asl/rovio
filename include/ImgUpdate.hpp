@@ -157,9 +157,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     mpCamera_ = mpCamera;
     pixelOutputCF_.setCamera(mpCamera);
   }
-  mtInnovation eval(const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
+  void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
-    mtInnovation y;
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
 //     */
@@ -180,7 +179,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
     }
-    return y;
   }
   mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
