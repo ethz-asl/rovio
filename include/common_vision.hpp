@@ -219,6 +219,7 @@ class MultilevelPatchFeature{
   static const int nLevels_ = n_levels;
   PatchNew<patch_size> patches_[nLevels_];
   cv::Point2f c_;
+  static constexpr float warpDistance = static_cast<float>(patch_size);
   cv::Point2f corners_[2];
   int idx_;
   Matrix3f H_;
@@ -331,8 +332,8 @@ class MultilevelPatchFeature{
   }
   bool extractPatchesFromImage(const ImagePyramid<n_levels>& pyr){
     bool success = true;
-    corners_[0] = cv::Point2f(-patch_size/2,0);
-    corners_[1] = cv::Point2f(0,-patch_size/2);
+    corners_[0] = cv::Point2f(warpDistance,0);
+    corners_[1] = cv::Point2f(0,warpDistance);
     for(unsigned int i=0;i<nLevels_;i++){
 //      corners_[i][0] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // (-4,-4), (-7.5,-7.5), (-15,-15), (-30.5,-30.5)
 //      corners_[i][1] = c_+cv::Point2f(patch_size/2*pow(2.0,i)-1-i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // 3, 6.5, 14, 29.5
@@ -385,6 +386,11 @@ class MultilevelPatchFeature{
     Matrix3f Hinv = H.inverse();
     float mean_diff = 0;
     const int max_iter = 10;
+    Matrix2f Aff;
+    Aff(0,0) = corners_[0].x/warpDistance;
+    Aff(1,0) = corners_[0].y/warpDistance;
+    Aff(0,1) = corners_[1].x/warpDistance;
+    Aff(1,1) = corners_[1].y/warpDistance;
 
     // Compute pixel location in new image:
     float u = c.x;
@@ -429,6 +435,26 @@ class MultilevelPatchFeature{
             Jres[0] -= pow(0.5,level)*res*(*it_dx);
             Jres[1] -= pow(0.5,level)*res*(*it_dy);
             Jres[2] -= res;
+
+            const int dx = x - halfpatch_size; // TODO: can be made directly
+            const int dy = y - halfpatch_size; // TODO: can be made directly
+            const int wdx = Aff(0,0)*dx + Aff(0,1)*dy;
+            const int wdy = Aff(1,0)*dx + Aff(1,1)*dy;
+            const int u_pixel = u_level+wdx;
+            const int v_pixel = v_level+wdy;
+            const int u_pixel_r = floor(u_level);
+            const int v_pixel_r = floor(v_level);
+            if(u_pixel_r < 0 || v_pixel_r < 0 || u_pixel_r >= pyr.imgs_[level].cols-1 || v_pixel_r >= pyr.imgs_[level].rows-1){ // TODO: check limits
+              return false;
+            }
+            const float pixel_subpix_x = u_pixel-u_pixel_r;
+            const float pixel_subpix_y = v_pixel-v_pixel_r;
+            const float pixel_wTL = (1.0-pixel_subpix_x)*(1.0-pixel_subpix_y);
+            const float pixel_wTR = pixel_subpix_x * (1.0-pixel_subpix_y);
+            const float pixel_wBL = (1.0-pixel_subpix_x)*pixel_subpix_y;
+            const float pixel_wBR = pixel_subpix_x * pixel_subpix_y;
+            const uint8_t* pixel_data = (uint8_t*) pyr.imgs_[level].data + v_pixel_r*refStep + u_pixel_r;
+            const float pixel_intensity = pixel_wTL*pixel_data[0] + pixel_wTR*pixel_data[1] + pixel_wBL*pixel_data[refStep] + pixel_wBR*pixel_data[refStep+1];
           }
         }
       }
