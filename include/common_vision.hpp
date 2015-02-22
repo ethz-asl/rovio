@@ -234,6 +234,8 @@ class MultilevelPatchFeature{
   DrawPoint log_prediction_;
   DrawPoint log_predictionC0_;
   DrawPoint log_predictionC1_;
+  DrawPoint log_predictionC2_;
+  DrawPoint log_predictionC3_;
   DrawPoint log_meas_;
   DrawPoint log_current_;
 
@@ -335,13 +337,15 @@ class MultilevelPatchFeature{
     corners_[0] = cv::Point2f(warpDistance,0);
     corners_[1] = cv::Point2f(0,warpDistance);
     for(unsigned int i=0;i<nLevels_;i++){
-//      corners_[i][0] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // (-4,-4), (-7.5,-7.5), (-15,-15), (-30.5,-30.5)
-//      corners_[i][1] = c_+cv::Point2f(patch_size/2*pow(2.0,i)-1-i*0.5,-patch_size/2*pow(2.0,i)+i*0.5); // 3, 6.5, 14, 29.5
-//      corners_[i][2] = c_+cv::Point2f(-patch_size/2*pow(2.0,i)+i*0.5,patch_size/2*pow(2.0,i)-1-i*0.5);
       success = success & patches_[i].extractPatchFromImage(pyr.imgs_[i],c_*pow(0.5,i));
     }
     hasValidPatches_ = success;
     return success;
+  }
+  bool isMultilevelPatchInFrame(const ImagePyramid<n_levels>& pyr,const int hLevel){
+    const int halfpatch_size = patch_size/2*pow(2,hLevel);
+    bool outside = c_.x < halfpatch_size | c_.y < halfpatch_size | c_.x > pyr.imgs_[0].cols-halfpatch_size | c_.y > pyr.imgs_[0].rows-halfpatch_size;
+    return !outside;
   }
   void computeMultilevelShiTomasiScore(){
     if(hasValidPatches_){
