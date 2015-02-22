@@ -30,6 +30,7 @@
 #define COMMON_VISION_HPP_
 
 #include <Eigen/Dense>
+#include <Eigen/Cholesky>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -238,6 +239,10 @@ class MultilevelPatchFeature{
   DrawPoint log_predictionC3_;
   DrawPoint log_meas_;
   DrawPoint log_current_;
+
+  Eigen::MatrixXf A_;
+  Eigen::MatrixXf b_;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
 
   void increaseStatistics(const double& t){
     if(!trackingStatistics_.empty() && t<trackingStatistics_.rbegin()->first) std::cout << "Warning: adding statistics NOT at end" << std::endl;
@@ -496,6 +501,116 @@ class MultilevelPatchFeature{
   bool align2DSingleLevel(const ImagePyramid<n_levels>& pyr,cv::Point2f& c, const int level, const bool doWarping){
     return align2D(pyr,c,level,level,doWarping);
   }
+  bool getLinearAlignEquations(const ImagePyramid<n_levels>& pyr,const cv::Point2f& c, const int level1, const int level2, const bool doWarping,
+                               Eigen::MatrixXf& A, Eigen::MatrixXf& b){ // TODO: cleanup
+    A.resize((level2-level1+1)*patch_size*patch_size,2);
+    b.resize((level2-level1+1)*patch_size*patch_size,1);
+    for(int level = level1; level <= level2; level++){
+      if(!patches_[level].hasValidPatch_) return false;
+    }
+    Matrix2f Aff,AffInv; Aff.setIdentity();
+    if(doWarping){
+      Aff(0,0) = corners_[0].x/warpDistance;
+      Aff(1,0) = corners_[0].y/warpDistance;
+      Aff(0,1) = corners_[1].x/warpDistance;
+      Aff(1,1) = corners_[1].y/warpDistance;
+      AffInv = Aff.inverse();
+    } // TODO: catch if too distorted, or if warping not required
+    const int halfpatch_size = patch_size/2;
+    float mean_diff = 0;
+
+    // Compute pixel location in new image:
+    const float u = c.x;
+    const float v = c.y;
+
+    for(int level = level1; level <= level2; level++){
+      const int refStep = pyr.imgs_[level].step.p[0];
+      const float u_level = u*pow(0.5,level);
+      const float v_level = v*pow(0.5,level);
+
+      uint8_t* it_patch = patches_[level].patch_;
+      float* it_dx = patches_[level].dx_;
+      float* it_dy = patches_[level].dy_;
+      if(!doWarping){
+        const int u_r = floor(u_level);
+        const int v_r = floor(v_level);
+        if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[level].cols-halfpatch_size || v_r >= pyr.imgs_[level].rows-halfpatch_size){ // TODO: check limits
+          return false;
+        }
+        // compute interpolation weights
+        const float subpix_x = u_level-u_r;
+        const float subpix_y = v_level-v_r;
+        const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
+        const float wTR = subpix_x * (1.0-subpix_y);
+        const float wBL = (1.0-subpix_x)*subpix_y;
+        const float wBR = subpix_x * subpix_y;
+
+        uint8_t* it_img;        // loop through search_patch, interpolate
+        for(int y=0; y<patch_size; ++y){
+          it_img = (uint8_t*) pyr.imgs_[level].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
+          for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
+            const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
+            const float res = intensity - *it_patch;
+            mean_diff += res;
+            b((level-level1)*patch_size*patch_size+y*patch_size+x,0) = res;
+            A((level-level1)*patch_size*patch_size+y*patch_size+x,0) = pow(0.5,level)*(*it_dx);
+            A((level-level1)*patch_size*patch_size+y*patch_size+x,1) = pow(0.5,level)*(*it_dy);
+          }
+        }
+      } else {
+        for(int y=0; y<patch_size; ++y){ // TODO: renaming
+          for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
+            const float dx = x - halfpatch_size;
+            const float dy = y - halfpatch_size;
+            const float wdx = Aff(0,0)*dx + Aff(0,1)*dy;
+            const float wdy = Aff(1,0)*dx + Aff(1,1)*dy;
+            const float u_pixel = u_level+wdx;
+            const float v_pixel = v_level+wdy;
+            const int u_pixel_r = floor(u_pixel);
+            const int v_pixel_r = floor(v_pixel);
+            if(u_pixel_r < 0 || v_pixel_r < 0 || u_pixel_r >= pyr.imgs_[level].cols-1 || v_pixel_r >= pyr.imgs_[level].rows-1){ // TODO: check limits
+              return false;
+            }
+            const float pixel_subpix_x = u_pixel-u_pixel_r;
+            const float pixel_subpix_y = v_pixel-v_pixel_r;
+            const float pixel_wTL = (1.0-pixel_subpix_x) * (1.0-pixel_subpix_y);
+            const float pixel_wTR = pixel_subpix_x * (1.0-pixel_subpix_y);
+            const float pixel_wBL = (1.0-pixel_subpix_x) * pixel_subpix_y;
+            const float pixel_wBR = pixel_subpix_x * pixel_subpix_y;
+            const uint8_t* pixel_data = (uint8_t*) pyr.imgs_[level].data + v_pixel_r*refStep + u_pixel_r;
+            const float pixel_intensity = pixel_wTL*pixel_data[0] + pixel_wTR*pixel_data[1] + pixel_wBL*pixel_data[refStep] + pixel_wBR*pixel_data[refStep+1];
+            const float res = pixel_intensity - *it_patch;
+            mean_diff += res;
+            b((level-level1)*patch_size*patch_size+y*patch_size+x,0) = res;
+            A((level-level1)*patch_size*patch_size+y*patch_size+x,0) = pow(0.5,level)*(*it_dx)*AffInv(0,0)+pow(0.5,level)*(*it_dy)*AffInv(1,0);
+            A((level-level1)*patch_size*patch_size+y*patch_size+x,1) = pow(0.5,level)*(*it_dx)*AffInv(0,1)+pow(0.5,level)*(*it_dy)*AffInv(1,1);
+          }
+        }
+      }
+    }
+    mean_diff = mean_diff/static_cast<float>((level2-level1+1)*patch_size*patch_size);
+    for(int level = level1; level <= level2; level++){
+      for(int y=0; y<patch_size; ++y){
+        for(int x=0; x<patch_size; ++x){
+          b((level-level1)*patch_size*patch_size+y*patch_size+x,0) -= mean_diff;
+        }
+      }
+    }
+    return true;
+  }
+  bool getLinearAlignEquationsReduced(const ImagePyramid<n_levels>& pyr,const cv::Point2f& c, const int level1, const int level2, const bool doWarping,
+                               Eigen::Matrix2d& A_red, Eigen::Vector2d& b_red){
+    bool success = getLinearAlignEquations(pyr,c,level1,level2,doWarping,A_,b_);
+    if(success){
+      mColPivHouseholderQR_.compute(A_);
+      b_red = (mColPivHouseholderQR_.householderQ().inverse()*b_).block<2,1>(0,0).cast<double>();
+      A_red(0,0) = static_cast<double>(mColPivHouseholderQR_.matrixR()(0,0));
+      A_red(0,1) = static_cast<double>(mColPivHouseholderQR_.matrixR()(0,1));
+      A_red(1,0) = 0.0;
+      A_red(1,1) = static_cast<double>(mColPivHouseholderQR_.matrixR()(1,1));
+    }
+    return success;
+  }
 };
 
 template<int n_levels,int patch_size,int nMax>
@@ -670,6 +785,14 @@ class FeatureManager{
       }
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
         mpFeature->c_ = c_new;
+        Eigen::Matrix2d A_red; // TODO: testing, remove afterwards
+        Eigen::Vector2d b_red;
+        mpFeature->getLinearAlignEquationsReduced(pyr,c_new,end_level,start_level,doWarping,A_red,b_red);
+        if(*it_f == 0){
+          std::cout << A_red << std::endl;
+          std::cout << b_red.transpose() << std::endl;
+          std::cout << A_red.inverse()*b_red << std::endl;
+        }
       }
     }
   }
