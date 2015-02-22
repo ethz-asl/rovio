@@ -54,6 +54,7 @@ Init
 }
 Update0
 {
+    doPatchWarping true
     maxNumIteration 10
     startLevel 3
     endLevel 1

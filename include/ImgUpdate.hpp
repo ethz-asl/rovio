@@ -101,6 +101,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
+  using Base::boolRegister_;
   using Base::updnoiP_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtCovMat mtCovMat;
@@ -123,6 +124,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double scoreDetectionExponent_;
   double penaltyDistance_;
   double zeroDistancePenalty_;
+  bool doPatchWarping_;
   ImgUpdate(){
     mpCamera_ = nullptr;
     initCovFeature_.setIdentity();
@@ -134,6 +136,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     scoreDetectionExponent_ = 0.5;
     penaltyDistance_ = 20;
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
+    doPatchWarping_ = true;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -143,6 +146,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
+    boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -228,7 +232,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + 2.0*fManager.features_[ind].corners_[1];
     }
     const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
-    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_); // TODO implement different methods, adaptiv search (depending on covariance)
+    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_,doPatchWarping_); // TODO implement different methods, adaptiv search (depending on covariance)
     const double t2 = (double) cv::getTickCount();
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
