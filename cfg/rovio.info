@@ -67,10 +67,10 @@ Update0
     beta 2
     kappa 0
     updateVecNormTermination 1e-06
-    initCovFeature_0 0.5
+    initCovFeature_0 1.0
     initCovFeature_1 0.00001
     initCovFeature_2 0.00001
-    initDepth 0.5
+    initDepth 1.0
     startDetectionTh 0.9
     scoreDetectionExponent 0.5
     penaltyDistance 50
