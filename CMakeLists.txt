@@ -36,7 +36,7 @@ catkin_package(
 )
 
 add_executable(rovioNode src/rovioNode.cpp)
-target_link_libraries(rovioNode ${catkin_LIBRARIES} -lyaml-cpp05 ${OpenMP_EXE_LINKER_FLAGS})
+target_link_libraries(rovioNode ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
 
 add_executable(test_rovio src/test_rovio.cpp)
-target_link_libraries(test_rovio ${catkin_LIBRARIES} -lyaml-cpp05 ${OpenMP_EXE_LINKER_FLAGS})
+target_link_libraries(test_rovio ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
