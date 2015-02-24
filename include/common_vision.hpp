@@ -343,8 +343,13 @@ class MultilevelPatchFeature{
     hasValidPatches_ = success;
     return success;
   }
-  bool isMultilevelPatchInFrame(const ImagePyramid<n_levels>& pyr,const int hLevel){
+  bool isMultilevelPatchInFrame(const ImagePyramid<n_levels>& pyr,const int hLevel){ // TODO: clean and improve
     const int halfpatch_size = patch_size/2*pow(2,hLevel);
+    bool outside = c_.x < halfpatch_size | c_.y < halfpatch_size | c_.x > pyr.imgs_[0].cols-halfpatch_size | c_.y > pyr.imgs_[0].rows-halfpatch_size;
+    return !outside;
+  }
+  bool isMultilevelPatchWithBorderInFrame(const ImagePyramid<n_levels>& pyr,const int hLevel){
+    const int halfpatch_size = (patch_size/2+1)*pow(2,hLevel);
     bool outside = c_.x < halfpatch_size | c_.y < halfpatch_size | c_.x > pyr.imgs_[0].cols-halfpatch_size | c_.y > pyr.imgs_[0].rows-halfpatch_size;
     return !outside;
   }
@@ -685,16 +690,6 @@ class FeatureManager{
   void extractCandidatePatchesFromImage(const ImagePyramid<n_levels>& pyr){
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){
       it->extractPatchesFromImage(pyr);
-    }
-  }
-  void extractFeaturePatchesFromImage(const ImagePyramid<n_levels>& pyr){ // TODO: delete
-    // TODO: should feature only be extracted if extractable on all levels?
-    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
-    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
-      mpFeature = &features_[*it_f];
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){ // TODO: adapt?
-        mpFeature->extractPatchesFromImage(pyr);
-      }
     }
   }
   void computeCandidatesScore(int mode){

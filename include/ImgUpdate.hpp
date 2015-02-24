@@ -196,9 +196,13 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
       mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
-      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_ &&
-          fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
-        y.template get<mtInnovation::_nor>(ind) = b_red+noise.template get<mtNoise::_nor>(ind);
+      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_){
+        if(fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
+          y.template get<mtInnovation::_nor>(ind) = b_red+noise.template get<mtNoise::_nor>(ind);
+        } else {
+          y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
+          fManager.features_[ind].currentStatistics_.inFrame_ = false; //TODO: should not be changed here
+        }
       } else if(!useDirectMethod_ && fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
         state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
         y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
@@ -224,9 +228,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
       mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
-      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_ &&
-          fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
-        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) = -A_red*c_J;
+      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_){
+        if(fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
+          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) = -A_red*c_J;
+        } else {
+          fManager.features_[ind].currentStatistics_.inFrame_ = false; //TODO: should not be changed here
+        }
       } else if(!useDirectMethod_ && fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
         J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
               m_meas.getN().transpose()
@@ -262,10 +269,10 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       fManager.features_[ind].c_ = c_temp;
       fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
       if(fManager.features_[ind].currentStatistics_.inFrame_) extractPixelCorner(state,ind);
-      fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ - fManager.features_[ind].corners_[0] - fManager.features_[ind].corners_[1];
-      fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + fManager.features_[ind].corners_[0] - fManager.features_[ind].corners_[1];
-      fManager.features_[ind].log_predictionC2_.c_ = fManager.features_[ind].c_ - fManager.features_[ind].corners_[0] + fManager.features_[ind].corners_[1];
-      fManager.features_[ind].log_predictionC3_.c_ = fManager.features_[ind].c_ + fManager.features_[ind].corners_[0] + fManager.features_[ind].corners_[1];
+      fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
+      fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
+      fManager.features_[ind].log_predictionC2_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] + 4*fManager.features_[ind].corners_[1];
+      fManager.features_[ind].log_predictionC3_.c_ = fManager.features_[ind].c_ + 4*fManager.features_[ind].corners_[0] + 4*fManager.features_[ind].corners_[1];
     }
     const double t1 = (double) cv::getTickCount();
     int numSeq = startLevel_-endLevel_; // TODO adaptiv search (depending on covariance)
@@ -362,9 +369,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
-        fManager.features_[ind].currentStatistics_.inFrame_ = mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO
-        mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-        extractBearingCorner(state,ind);
+        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO
+        fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
+        if(fManager.features_[ind].currentStatistics_.inFrame_){
+          mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+          extractBearingCorner(state,ind);
+        }
       }
     }
 
