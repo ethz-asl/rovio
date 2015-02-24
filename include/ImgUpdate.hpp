@@ -267,14 +267,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     const double t2 = (double) cv::getTickCount();
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     NormalVectorElement m_meas;
-    V3D bearing_meas;
     Eigen::Vector2d vec2;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
         fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
-        mpCamera_->pixelToBearing(fManager.features_[ind].c_,bearing_meas);
-        m_meas.setFromVector(bearing_meas);
+        mpCamera_->pixelToBearing(fManager.features_[ind].c_,m_meas);
         m_meas.boxMinus(state.template get<mtState::_nor>(ind),vec2);
         if(useDirectMethod_ && (vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) > 5.4){ // TODO: param
           vec2.setZero();;

@@ -93,9 +93,14 @@ class TestFilter{
       vec_temp.v_ = mpFilter->mPrediction_.MrMV_;
       mpFilter->mPrediction_.qVM_ = q.q_;
       mpFilter->mPrediction_.MrMV_ = vec.v_;
+      Eigen::Vector2d vec2;
+      LWF::NormalVectorElement m_meas;
       for(unsigned int i=0;i<nMax_;i++){
         int ind = testState.template get<mtState::_aux>().fManager_.addFeature(feature);
         testState.template get<mtState::_aux>().fManager_.features_[ind].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
+        std::get<0>(mpFilter->mUpdates_).mpCamera_->pixelToBearing(testState.template get<mtState::_aux>().fManager_.features_[ind].c_,m_meas);
+        m_meas.boxMinus(testState.template get<mtState::_nor>(ind),vec2);
+        testState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
       }
       testState.template get<mtState::_aux>().fManager_.features_[1].currentStatistics_.status_ = rovio::TrackingStatistics::NOTFOUND;
       testState.template get<mtState::_aux>().fManager_.removeFeature(0);
@@ -105,7 +110,7 @@ class TestFilter{
 //      std::cout << testState.template get<mtState::_dep>(15) << std::endl;
 //      std::cout << testState.template getId<mtState::_dep>(15) << std::endl;
 //      std::cout << testState.template get<mtState::_nor>(15).getVec().transpose() << std::endl;
-//      std::cout << testState.template getId<mtState::_nor>(15) << std::endl; // TODO: investigate error for regular depth parametrization
+//      std::cout << testState.template getId<mtState::_nor>(15) << std::endl;
 //      std::cout << predictionMeas_.template get<mtPredictionMeas::_acc>().transpose() << std::endl;
 //      std::cout << predictionMeas_.template get<mtPredictionMeas::_gyr>().transpose() << std::endl;
 //      std::cout << testState.template get<mtState::_vel>().transpose() << std::endl;
