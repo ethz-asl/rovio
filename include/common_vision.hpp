@@ -507,6 +507,7 @@ class MultilevelPatchFeature{
     b.resize((level2-level1+1)*patch_size*patch_size,1);
     for(int level = level1; level <= level2; level++){
       if(!patches_[level].hasValidPatch_) return false;
+      patches_[level].computeGradientParameters();
     }
     Matrix2f Aff,AffInv; Aff.setIdentity();
     if(doWarping){

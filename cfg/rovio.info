@@ -55,6 +55,7 @@ Init
 Update0
 {
     doPatchWarping true
+    useDirectMethod true
     maxNumIteration 10
     startLevel 3
     endLevel 1
@@ -62,7 +63,7 @@ Update0
     MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
-        nor 0.00001 ; rad (~1/f ~ 1/400^2 = 1/160000)
+        nor 1 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
     alpha 0.001
     beta 2

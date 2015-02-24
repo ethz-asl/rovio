@@ -103,6 +103,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   using Base::intRegister_;
   using Base::boolRegister_;
   using Base::updnoiP_;
+  using Base::useSpecialLinearizationPoint_;
+  using Base::difVecLin_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtCovMat mtCovMat;
   typedef typename Base::mtInnovation mtInnovation;
@@ -125,6 +127,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double penaltyDistance_;
   double zeroDistancePenalty_;
   bool doPatchWarping_;
+  bool useDirectMethod_;
   ImgUpdate(){
     mpCamera_ = nullptr;
     initCovFeature_.setIdentity();
@@ -137,6 +140,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     penaltyDistance_ = 20;
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
     doPatchWarping_ = true;
+    useDirectMethod_ = true;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -147,6 +151,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
+    boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -157,24 +162,35 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
   };
   ~ImgUpdate(){};
+  void refreshProperties(){
+    useSpecialLinearizationPoint_ = useDirectMethod_;
+  };
   void setCamera(Camera* mpCamera){
     mpCamera_ = mpCamera;
     pixelOutputCF_.setCamera(mpCamera);
   }
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
-    const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = const_cast<FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>&>(state.template get<mtState::_aux>().fManager_);
 //    /* Bearing vector error
 //     * 0 = m - m_meas + n
 //     */
     NormalVectorElement m_meas;
-    V3D bearing_meas;
+    Eigen::Matrix2d A_red;
+    Eigen::Vector2d b_red;
+    cv::Point2f c_temp;
+    Eigen::Matrix2d c_J;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
-        mpCamera_->pixelToBearing(fManager.features_[ind].c_,bearing_meas);
-        m_meas.setFromVector(bearing_meas);
-        state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
-        y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
+      state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
+      mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
+      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND
+          && (!useDirectMethod_ || fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red))){ // TODO: cleanup condition (inFrame for direct)
+        if(useDirectMethod_){
+          y.template get<mtInnovation::_nor>(ind) = b_red+noise.template get<mtNoise::_nor>(ind);
+        } else {
+          state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
+          y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
+        }
       } else {
         y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
       }
@@ -185,21 +201,28 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
   }
   mtJacInput jacInput(const mtState& state, const mtMeas& meas, double dt = 0.0) const{
-    const FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = const_cast<FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>&>(state.template get<mtState::_aux>().fManager_);
     mtJacInput J;
     J.setZero();
     NormalVectorElement m_meas;
-    V3D bearing_meas;
-    double a, vecNorm, c;
+    Eigen::Matrix2d A_red;
+    Eigen::Vector2d b_red;
+    cv::Point2f c_temp;
+    Eigen::Matrix2d c_J;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
-        mpCamera_->pixelToBearing(fManager.features_[ind].c_,bearing_meas);
-        m_meas.setFromVector(bearing_meas);
-        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
-            m_meas.getN().transpose()
-            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(ind),m_meas)
-            *state.template get<mtState::_nor>(ind).getM();
+      state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
+      mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
+      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND
+          && (!useDirectMethod_ || fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red))){
+        if(useDirectMethod_){
+          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) = -A_red*c_J;
+        } else {
+          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
+              m_meas.getN().transpose()
+              *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(ind),m_meas)
+              *state.template get<mtState::_nor>(ind).getM();
+        }
       }
     }
     return J;
@@ -238,10 +261,20 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_,doPatchWarping_); // TODO implement different methods, adaptiv search (depending on covariance)
     const double t2 = (double) cv::getTickCount();
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    NormalVectorElement m_meas;
+    V3D bearing_meas;
+    Eigen::Vector2d vec2;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
         fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
+        mpCamera_->pixelToBearing(fManager.features_[ind].c_,bearing_meas);
+        m_meas.setFromVector(bearing_meas);
+        m_meas.boxMinus(state.template get<mtState::_nor>(ind),vec2);
+        if(useDirectMethod_ && (vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) > 5.4){ // TODO: param
+          vec2.setZero();;
+        }
+        state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
       }
     }
   };
@@ -258,23 +291,27 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
+        if(!mpOutlierDetection->isOutlier(ind)){
+          mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
+        } else {
+          mpFeature->currentStatistics_.status_ = TrackingStatistics::OUTLIER;
+        }
+      }
+
       mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
 //      mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
 //      mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
 //      mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
 //      mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
         mpFeature->log_prediction_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_meas_,cv::Scalar(0,255,255));
-        if(!mpOutlierDetection->isOutlier(ind)){
-          mpFeature->log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 255, 0));
-          mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
-          mpFeature->log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
-        }
-        if(mpOutlierDetection->isOutlier(ind)){
-          mpFeature->log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 255));
-          mpFeature->currentStatistics_.status_ = TrackingStatistics::OUTLIER;
-          mpFeature->log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::OUTLIER,10)),cv::Scalar(0,0,255));
-        }
+        mpFeature->log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 255, 0));
+        mpFeature->log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
+      } else if(mpFeature->currentStatistics_.status_ == TrackingStatistics::OUTLIER){
+        mpFeature->log_prediction_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_meas_,cv::Scalar(0,255,255));
+        mpFeature->log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 0, 255));
+        mpFeature->log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::OUTLIER,10)),cv::Scalar(0,0,255));
       } else {
         mpFeature->log_current_.drawText(state.template get<mtState::_aux>().img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::NOTFOUND,10)),cv::Scalar(0,255,255));
       }
