@@ -126,7 +126,7 @@ class TestNode{
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
-      if(!fManager_.features_[ind].isGoodFeature(1,1)){
+      if(!fManager_.features_[ind].isGoodFeature(1,1,0.9,0.1)){
         fManager_.removeFeature(ind);
       }
     }

@@ -300,12 +300,10 @@ class MultilevelPatchFeature{
     const double trackingRatio = static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/static_cast<double>(totCount_-1); // INIT is considered
     return trackingRatio*std::min(static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/100.0,1.0); // param
   }
-  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100){
+  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.9, const double lower = 0.1){
     const double globalQuality = getGlobalQuality();
     const double localQuality = getLocalQuality(localRange);
     const double localVisibilityQuality = getLocalVisibilityQuality(localVisibilityRange);
-    const double upper = 0.9; // TODO: param
-    const double lower = 0.1; // TODO: param
     return localQuality*localVisibilityQuality > upper-(upper-lower)*globalQuality;
 
     /*
@@ -840,15 +838,6 @@ class FeatureManager{
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
       cv::circle(drawImg,mpFeature->c_, 3, cv::Scalar(0, 0, 0), -1, 8);
-    }
-  }
-  void removeInvisible(){
-    for(auto it_f = validSet_.begin(); it_f != validSet_.end();){
-      int ind = *it_f;
-      it_f++;
-      if(!features_[ind].isGoodFeature()){ // TODO: handle inFrame
-        removeFeature(ind);
-      }
     }
   }
 };

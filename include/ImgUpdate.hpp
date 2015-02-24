@@ -127,6 +127,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double penaltyDistance_;
   double zeroDistancePenalty_;
   double trackingLocalRange_,trackingLocalVisibilityRange_;
+  double trackingUpperBound_,trackingLowerBound_;
+  double minTrackedAndFreeFeatures_;
   bool doPatchWarping_;
   bool useDirectMethod_;
   ImgUpdate(){
@@ -144,6 +146,9 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     useDirectMethod_ = true;
     trackingLocalRange_ = 20;
     trackingLocalVisibilityRange_ = 200;
+    trackingUpperBound_ = 0.9;
+    trackingLowerBound_ = 0.1;
+    minTrackedAndFreeFeatures_ = 0.5;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -152,6 +157,9 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     doubleRegister_.registerScalar("zeroDistancePenalty",zeroDistancePenalty_);
     doubleRegister_.registerScalar("trackingLocalRange",trackingLocalRange_);
     doubleRegister_.registerScalar("trackingLocalVisibilityRange",trackingLocalVisibilityRange_);
+    doubleRegister_.registerScalar("trackingUpperBound",trackingUpperBound_);
+    doubleRegister_.registerScalar("trackingLowerBound",trackingLowerBound_);
+    doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
@@ -285,6 +293,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     MultilevelPatchFeature<STATE::nLevels_,STATE::patchSize_>* mpFeature;
 
+    int countTracked = 0;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
@@ -293,15 +302,18 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
+      // Status Handling
       if((useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_)
           || (!useDirectMethod_ && mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND)){
         if(!mpOutlierDetection->isOutlier(ind)){
           mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
+          countTracked++;
         } else {
           mpFeature->currentStatistics_.status_ = TrackingStatistics::OUTLIER;
         }
       }
 
+      // Drawing
       if(fManager.features_[ind].currentStatistics_.inFrame_){
         mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
         mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
@@ -325,10 +337,25 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
-      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_)){ // TODO: handle inFrame
+      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
         fManager.removeFeature(ind);
       }
     }
+
+    // Check if enough free features
+    int requiredFreeFeature = mtState::nMax_*minTrackedAndFreeFeatures_-countTracked;
+    double factor = 1;
+    while(static_cast<int>(fManager.invalidSet_.size()) < requiredFreeFeature){
+      factor = factor*1.1;
+      for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
+        const int ind = *it_f;
+        ++it_f;
+        if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*factor,trackingLowerBound_*factor)){ // TODO: improve
+          fManager.removeFeature(ind);
+        }
+      }
+    }
+
 
     // Extract feature patches
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){

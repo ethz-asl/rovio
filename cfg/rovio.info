@@ -79,6 +79,9 @@ Update0
     zeroDistancePenalty 100
     trackingLocalRange 10
     trackingLocalVisibilityRange 100
+    trackingUpperBound 0.9
+    trackingLowerBound 0.1
+    minTrackedAndFreeFeatures 0.5
 }
 Prediction
 {
