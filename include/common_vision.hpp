@@ -263,9 +263,8 @@ class MultilevelPatchFeature{
     }
     return c + (int)(currentStatistics_.status_ == s);
   }
-  double getLocalQuality(){
+  double getLocalQuality(const int localRange = 10){
     // Local quality of feature for last inFrames
-    const int localRange = 10; // param
     int countTracked = 0;
     int countInImage = 0;
     if(currentStatistics_.inFrame_){
@@ -280,8 +279,7 @@ class MultilevelPatchFeature{
     }
     return static_cast<double>(countTracked)/static_cast<double>(countInImage);
   }
-  double getLocalVisibilityQuality(){
-    const int localRange = 10; // param
+  double getLocalVisibilityQuality(const int localRange = 200){
     int countTot = 0;
     int lastInImage = localRange;
     if(currentStatistics_.inFrame_){
@@ -302,12 +300,12 @@ class MultilevelPatchFeature{
     const double trackingRatio = static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/static_cast<double>(totCount_-1); // INIT is considered
     return trackingRatio*std::min(static_cast<double>(countStatistics(TrackingStatistics::TRACKED))/100.0,1.0); // param
   }
-  bool isGoodFeature(){
+  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100){
     const double globalQuality = getGlobalQuality();
-    const double localQuality = getLocalQuality();
-    const double localVisibilityQuality = getLocalVisibilityQuality();
+    const double localQuality = getLocalQuality(localRange);
+    const double localVisibilityQuality = getLocalVisibilityQuality(localVisibilityRange);
     const double upper = 0.9; // TODO: param
-    const double lower = 0.2; // TODO: param
+    const double lower = 0.1; // TODO: param
     return localQuality*localVisibilityQuality > upper-(upper-lower)*globalQuality;
 
     /*
@@ -712,7 +710,8 @@ class FeatureManager{
       }
     }
   }
-  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg, const int nDetectionBuckets, const double scoreDetectionExponent, const double penaltyDistance, const double zeroDistancePenalty){
+  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg, const int nDetectionBuckets, const double scoreDetectionExponent,
+                                                     const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax){
     std::unordered_set<unsigned int> newSet;
     float maxScore = -1.0;
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
@@ -724,7 +723,7 @@ class FeatureManager{
     unsigned int newBucketID;
     for (auto it_cand = candidates_.begin(); it_cand != candidates_.end(); ++it_cand) {
       if(it_cand->s_ > 0.0){
-        newBucketID = std::ceil(nDetectionBuckets*(pow(it_cand->s_/maxScore,static_cast<float>(scoreDetectionExponent))))-1;
+        newBucketID = std::ceil((nDetectionBuckets-1)*(pow(it_cand->s_/maxScore,static_cast<float>(scoreDetectionExponent))));
         if(newBucketID>nDetectionBuckets-1) newBucketID = nDetectionBuckets-1;
         buckets[newBucketID].insert(&(*it_cand));
       }
@@ -760,7 +759,7 @@ class FeatureManager{
     // Incrementally add features and update candidate buckets
     MultilevelPatchFeature<n_levels,patch_size>* mpNewFeature;
     int addedCount = 0;
-    for (int bucketID = nDetectionBuckets-1;bucketID >= 0;bucketID--) {
+    for (int bucketID = nDetectionBuckets-1;bucketID >= 0+static_cast<int>(!requireMax);bucketID--) {
       while(!buckets[bucketID].empty() && addedCount < maxN) {
         mpNewFeature = *(buckets[bucketID].begin());
         buckets[bucketID].erase(mpNewFeature);
