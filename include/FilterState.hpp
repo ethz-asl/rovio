@@ -60,6 +60,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     MwIMest_.setZero();
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
+    imageCounter_ = 0;
   };
   ~StateAuxiliary(){};
   FeatureManager<nLevels,patchSize,nMax> fManager_;
@@ -69,6 +70,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   V3D MwIMest_;
   V3D MwIMmeas_;
   M3D wMeasCov_;
+  int imageCounter_;
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>

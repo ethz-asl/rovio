@@ -254,6 +254,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
     cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
     FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+    state.template get<mtState::_aux>().imageCounter_++;
 
     cv::Point2f c_temp;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
@@ -321,6 +322,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
 
       // Drawing
+      cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(0,15),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
       if(fManager.features_[ind].currentStatistics_.inFrame_){
         mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
         mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
@@ -352,24 +354,25 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     // Check if enough free features
     int requiredFreeFeature = mtState::nMax_*minTrackedAndFreeFeatures_-countTracked;
     double factor = 1;
+    auto it_f = fManager.validSet_.begin();
     while(static_cast<int>(fManager.invalidSet_.size()) < requiredFreeFeature){
       factor = factor*1.1;
-      for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
-        const int ind = *it_f;
-        ++it_f;
-        if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*factor,trackingLowerBound_*factor)){ // TODO: improve
-          fManager.removeFeature(ind);
-        }
+      const int ind = *it_f;
+      ++it_f;
+      if(fManager.features_[ind].currentStatistics_.status_ != TrackingStatistics::TRACKED && !fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*factor,trackingLowerBound_*factor)){ // TODO: improve
+        fManager.removeFeature(ind);
+      }
+      if(it_f == fManager.validSet_.end()){
+        auto it_f = fManager.validSet_.begin();
       }
     }
-
 
     // Extract feature patches
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
-        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_); // TODO
+        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
         fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
         if(fManager.features_[ind].currentStatistics_.inFrame_){
           mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
@@ -380,7 +383,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
 
     // Detect new feature if required
     fManager.candidates_.clear();
-    if(fManager.validSet_.size() < startDetectionTh_*mtState::nMax_){ // TODO param
+    if(fManager.validSet_.size() < startDetectionTh_*mtState::nMax_){
       ROS_DEBUG_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       const int detect_level = 1;
