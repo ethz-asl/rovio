@@ -188,14 +188,12 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
       mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
-      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND
-          && (!useDirectMethod_ || fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red))){ // TODO: cleanup condition (inFrame for direct)
-        if(useDirectMethod_){
-          y.template get<mtInnovation::_nor>(ind) = b_red+noise.template get<mtNoise::_nor>(ind);
-        } else {
-          state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
-          y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
-        }
+      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_ &&
+          fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
+        y.template get<mtInnovation::_nor>(ind) = b_red+noise.template get<mtNoise::_nor>(ind);
+      } else if(!useDirectMethod_ && fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
+        state.template get<mtState::_nor>(ind).boxMinus(m_meas,y.template get<mtInnovation::_nor>(ind));
+        y.template get<mtInnovation::_nor>(ind) += noise.template get<mtNoise::_nor>(ind);
       } else {
         y.template get<mtInnovation::_nor>(ind) = noise.template get<mtNoise::_nor>(ind);
       }
@@ -218,16 +216,14 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       state.template get<mtState::_nor>(ind).boxPlus(state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0),m_meas);
       mpCamera_->bearingToPixel(m_meas,c_temp,c_J);
-      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND
-          && (!useDirectMethod_ || fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red))){
-        if(useDirectMethod_){
-          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) = -A_red*c_J;
-        } else {
-          J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
+      if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_ &&
+          fManager.features_[ind].getLinearAlignEquationsReduced(meas.template get<mtMeas::_aux>().pyr_,c_temp,endLevel_,startLevel_,doPatchWarping_,A_red,b_red)){
+        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) = -A_red*c_J;
+      } else if(!useDirectMethod_ && fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
+        J.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(ind),mtState::template getId<mtState::_nor>(ind)) =
               m_meas.getN().transpose()
               *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(ind),m_meas)
               *state.template get<mtState::_nor>(ind).getM();
-        }
       }
     }
     return J;
@@ -281,7 +277,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         }
         state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
       } else if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_){
-        fManager.features_[ind].currentStatistics_.status_ = TrackingStatistics::FOUND;
         state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0).setZero();
       }
     }
@@ -298,7 +293,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
+      if((useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_)
+          || (!useDirectMethod_ && mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND)){
         if(!mpOutlierDetection->isOutlier(ind)){
           mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
         } else {
