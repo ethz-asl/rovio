@@ -103,9 +103,10 @@ class TestNode{
       const int ind = *it_f;
       fManager_.features_[ind].increaseStatistics(last_timeStamp);
       fManager_.features_[ind].log_prediction_.c_ = fManager_.features_[ind].c_;
+      fManager_.features_[ind].currentStatistics_.inFrame_ = true;
     }
     const double t1 = (double) cv::getTickCount();
-    fManager_.alignFeaturesSeq(pyr_,draw_image_,3,1,false);
+    fManager_.alignFeaturesCom(pyr_,draw_image_,3,1,2,false);
     const double t2 = (double) cv::getTickCount();
     ROS_INFO_STREAM(" Matching " << fManager_.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
@@ -125,7 +126,7 @@ class TestNode{
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
-      if(!fManager_.features_[ind].isGoodFeature()){ // TODO: handle inFrame
+      if(!fManager_.features_[ind].isGoodFeature(1,1)){
         fManager_.removeFeature(ind);
       }
     }

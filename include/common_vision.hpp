@@ -790,38 +790,23 @@ class FeatureManager{
     }
     return newSet;
   }
-  void alignFeaturesSeq(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level, const bool doWarping){ // TODO: clean
+  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level, const int num_seq, const bool doWarping){ // TODO: clean
     cv::Point2f c_new;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      c_new = mpFeature->c_;
-      mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
-      for(int level = start_level;level>=end_level;--level){
-        if(!mpFeature->align2D(pyr,c_new,level,start_level,doWarping)){
-          mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
-          break;
-        }
-      }
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
-        mpFeature->c_ = c_new;
-      }
-    }
-  }
-  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int level1,const int level2, const bool doWarping){
-    cv::Point2f c_new;
-    MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
-    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
-      mpFeature = &features_[*it_f];
-      c_new = mpFeature->c_;
-      if(!mpFeature->align2D(pyr,c_new,level1,level2,doWarping)){
-        mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
-      } else {
+      if(mpFeature->currentStatistics_.inFrame_){
+        c_new = mpFeature->c_;
         mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
-        cv::line(drawImg,c_new,mpFeature->c_,cv::Scalar(255,255,255), 2);
-        cv::putText(drawImg,std::to_string(mpFeature->idx_),c_new,cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-        cv::circle(drawImg,c_new, 3, cv::Scalar(0, 0, 0), -1, 8);
-        mpFeature->c_ = c_new;
+        for(int level = end_level+num_seq;level>=end_level;--level){
+          if(!mpFeature->align2D(pyr,c_new,level,start_level,doWarping)){
+            mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
+            break;
+          }
+        }
+        if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
+          mpFeature->c_ = c_new;
+        }
       }
     }
   }
@@ -830,16 +815,18 @@ class FeatureManager{
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
       mpFeature = &features_[*it_f];
-      c_new = mpFeature->c_;
-      mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
-      for(int level = start_level;level>=end_level;--level){
-        if(!mpFeature->align2DSingleLevel(pyr,c_new,level,doWarping) && level==end_level){
-          mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
-          break;
+      if(mpFeature->currentStatistics_.inFrame_){
+        c_new = mpFeature->c_;
+        mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
+        for(int level = start_level;level>=end_level;--level){
+          if(!mpFeature->align2DSingleLevel(pyr,c_new,level,doWarping) && level==end_level){
+            mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
+            break;
+          }
         }
-      }
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
-        mpFeature->c_ = c_new;
+        if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
+          mpFeature->c_ = c_new;
+        }
       }
     }
   }

@@ -77,8 +77,8 @@ Update0
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100
-    trackingLocalRange 20
-    trackingLocalVisibilityRange 200
+    trackingLocalRange 10
+    trackingLocalVisibilityRange 100
 }
 Prediction
 {

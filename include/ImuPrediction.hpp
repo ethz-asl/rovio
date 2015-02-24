@@ -248,8 +248,6 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
       output.template get<mtState::_nor>(ind) = state.template get<mtState::_nor>(ind);
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
-
-    // todo: change to avoid copy
     output.fix();
   }
   void noMeasCase(mtState& state, mtCovMat& cov, mtMeas& meas, double dt){

@@ -244,26 +244,28 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
     FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
 
+    cv::Point2f c_temp;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       fManager.features_[ind].increaseStatistics(meas.template get<mtMeas::_aux>().imgTime_); // TODO: use last image time
+      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),c_temp);
 
-      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_prediction_.c_);
       pixelOutputCF_.setIndex(ind);
-      pixelOutput_ = pixelOutputCF_.transformState(state);
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+      fManager.features_[ind].log_prediction_.c_ = c_temp;
       fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
 
-      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
+      fManager.features_[ind].c_ = c_temp;
       fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-      extractPixelCorner(state,ind); // TODO only if inFrame_;
+      if(fManager.features_[ind].currentStatistics_.inFrame_) extractPixelCorner(state,ind);
       fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ - fManager.features_[ind].corners_[0] - fManager.features_[ind].corners_[1];
       fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + fManager.features_[ind].corners_[0] - fManager.features_[ind].corners_[1];
       fManager.features_[ind].log_predictionC2_.c_ = fManager.features_[ind].c_ - fManager.features_[ind].corners_[0] + fManager.features_[ind].corners_[1];
       fManager.features_[ind].log_predictionC3_.c_ = fManager.features_[ind].c_ + fManager.features_[ind].corners_[0] + fManager.features_[ind].corners_[1];
     }
-    const double t1 = (double) cv::getTickCount(); // TODO: do next only if inFrame
-    fManager.alignFeaturesSeq(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_,doPatchWarping_); // TODO implement different methods, adaptiv search (depending on covariance)
+    const double t1 = (double) cv::getTickCount();
+    int numSeq = startLevel_-endLevel_; // TODO adaptiv search (depending on covariance)
+    fManager.alignFeaturesCom(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_,numSeq,doPatchWarping_);
     const double t2 = (double) cv::getTickCount();
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     NormalVectorElement m_meas;
@@ -274,7 +276,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
         mpCamera_->pixelToBearing(fManager.features_[ind].c_,m_meas);
         m_meas.boxMinus(state.template get<mtState::_nor>(ind),vec2);
-        if(useDirectMethod_ && (vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) > 5.4){ // TODO: param
+        if(useDirectMethod_ && (vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) > 5.886){ // TODO: param
           vec2.setZero();;
         }
         state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
@@ -293,7 +295,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       mpFeature = &fManager.features_[ind];
       mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),mpFeature->log_current_.c_);
       pixelOutputCF_.setIndex(ind);
-      pixelOutput_ = pixelOutputCF_.transformState(state);
       pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
