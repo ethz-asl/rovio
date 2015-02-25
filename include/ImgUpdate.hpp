@@ -252,14 +252,19 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     return J;
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
+    double lastImageTime = 0.0;
+    if(!state.template get<mtState::_aux>().img_.empty()){
+      lastImageTime = state.template get<mtState::_aux>().imgTime_;
+    }
     cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
+    state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
     FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     state.template get<mtState::_aux>().imageCounter_++;
 
     cv::Point2f c_temp;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
-      fManager.features_[ind].increaseStatistics(meas.template get<mtMeas::_aux>().imgTime_); // TODO: use last image time
+      fManager.features_[ind].increaseStatistics(lastImageTime);
       mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),c_temp);
 
       pixelOutputCF_.setIndex(ind);
