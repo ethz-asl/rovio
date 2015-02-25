@@ -364,11 +364,11 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       factor = factor*1.1;
       const int ind = *it_f;
       ++it_f;
+      if(it_f == fManager.validSet_.end()){
+        it_f = fManager.validSet_.begin();
+      }
       if(fManager.features_[ind].currentStatistics_.status_ != TrackingStatistics::TRACKED && !fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*factor,trackingLowerBound_*factor)){ // TODO: improve
         fManager.removeFeature(ind);
-      }
-      if(it_f == fManager.validSet_.end()){
-        auto it_f = fManager.validSet_.begin();
       }
     }
 
