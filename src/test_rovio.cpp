@@ -299,9 +299,9 @@ class TestFilter{
         rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
         rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
         rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
-        rovioOutputMsg_.ypr_odometry_sigma.x = yprOutput_.template get<mtYprOutput::_ypr>()(0)+3*yprOutputCov_(0,0);
-        rovioOutputMsg_.ypr_odometry_sigma.y = yprOutput_.template get<mtYprOutput::_ypr>()(1)+3*yprOutputCov_(1,1);
-        rovioOutputMsg_.ypr_odometry_sigma.z = yprOutput_.template get<mtYprOutput::_ypr>()(2)+3*yprOutputCov_(2,2);
+        rovioOutputMsg_.ypr_odometry_sigma.x = yprOutputCov_(0,0);
+        rovioOutputMsg_.ypr_odometry_sigma.y = yprOutputCov_(1,1);
+        rovioOutputMsg_.ypr_odometry_sigma.z = yprOutputCov_(2,2);
 
         // IMU biases
         rovioOutputMsg_.acc_bias.x = state.template get<mtState::_acb>()(0);
