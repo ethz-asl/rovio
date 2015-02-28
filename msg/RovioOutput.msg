@@ -1,0 +1,13 @@
+# Rovio state
+Header header
+nav_msgs/Odometry odometry
+geometry_msgs/Vector3 ypr_odometry
+geometry_msgs/Vector3 ypr_odometry_sigma
+geometry_msgs/PoseWithCovariance extrinsics
+geometry_msgs/Vector3 ypr_extrinsics
+geometry_msgs/Vector3 ypr_extrinsics_sigma
+geometry_msgs/Vector3 acc_bias
+geometry_msgs/Vector3 acc_bias_sigma
+geometry_msgs/Vector3 gyr_bias
+geometry_msgs/Vector3 gyr_bias_sigma
+sensor_msgs/PointCloud2 points

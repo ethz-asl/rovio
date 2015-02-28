@@ -21,8 +21,23 @@ find_package(catkin REQUIRED COMPONENTS
 	roscpp
 	roslib
 	cv_bridge
+	message_generation
+	nav_msgs
+	geometry_msgs
+	sensor_msgs
+	std_msgs
 )
-include_directories(include ${catkin_INCLUDE_DIRS})
+
+add_message_files(
+  FILES
+  RovioOutput.msg
+)
+
+## Generate added messages and services with any dependencies listed here
+generate_messages(
+   DEPENDENCIES
+   nav_msgs geometry_msgs   sensor_msgs   std_msgs
+)
 
 catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
@@ -33,7 +48,14 @@ catkin_package(
 	roscpp
 	roslib
 	cv_bridge
+	message_runtime
+	nav_msgs
+	geometry_msgs
+	sensor_msgs
+	std_msgs
 )
+
+include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(rovioNode src/rovioNode.cpp)
 target_link_libraries(rovioNode ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})

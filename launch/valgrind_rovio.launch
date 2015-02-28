@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<launch>
+  <node pkg="rovio" type="test_rovio" name="rovio" output="screen" launch-prefix="valgrind --leak-check=full">
+  </node>
+</launch>

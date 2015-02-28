@@ -194,6 +194,11 @@ class ImuPrediction: public Prediction<STATE,PredictionMeas,PredictionNoise<STAT
   void setCamera(Camera* mpCamera){
     mpCamera_ = mpCamera;
   }
+  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM){
+    rot::RotationMatrixAD R(R_VM);
+    qVM_ = QPD(R.getPassive());
+    MrMV_ = -qVM_.inverseRotate(VrVM);
+  }
   void refreshProperties(){
     depthMap_.setType(depthTypeInt_);
   };

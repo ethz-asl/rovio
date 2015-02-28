@@ -1,4 +1,4 @@
-cameraCalibrationFile Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml
+cameraCalibrationFile /home/michael/calibrations/Sammy11_02_2015_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml
 Init
 {
     State

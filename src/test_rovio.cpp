@@ -30,11 +30,14 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 #include "rovio_filter.hpp"
+#include <rovio/RovioOutput.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <nav_msgs/Odometry.h>
 #include "CameraOutputCF.hpp"
+#include "YprOutputCF.hpp"
 
 
 class TestFilter{
@@ -43,6 +46,8 @@ class TestFilter{
   ros::Subscriber subImu_;
   ros::Subscriber subImg_;
   ros::Publisher pubPose_;
+  ros::Publisher pubRovioOutput_;
+  ros::Publisher pubOdometry_;
   static constexpr unsigned int nMax_ = 50;
   static constexpr int nLevels_ = 4;
   static constexpr int patchSize_ = 8;
@@ -55,11 +60,21 @@ class TestFilter{
   mtFilter* mpFilter;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
+  nav_msgs::Odometry odometryMsg_;
+  rovio::RovioOutput rovioOutputMsg_;
   int poseMsgSeq_;
   typedef rovio::StandardOutput mtOutput;
   mtOutput output_;
   mtOutput::mtCovMat outputCov_;
   rovio::CameraOutputCF<typename mtFilter::mtPrediction> cameraOutputCF_;
+
+  typedef rovio::AttitudeOutput mtAttitudeOutput;
+  mtAttitudeOutput attitudeOutput_;
+  mtAttitudeOutput::mtCovMat attitudeOutputCov_;
+  typedef rovio::YprOutput mtYprOutput;
+  mtYprOutput yprOutput_;
+  mtYprOutput::mtCovMat yprOutputCov_;
+  rovio::AttitudeToYprCF attitudeToYprCF_;
 
   TestFilter(ros::NodeHandle& nh): nh_(nh), mpFilter(new rovio::Filter<mtState>()), cameraOutputCF_(mpFilter->mPrediction_){
     #ifndef NDEBUG
@@ -68,9 +83,32 @@ class TestFilter{
     subImu_ = nh_.subscribe("/imu0", 1000, &TestFilter::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestFilter::imgCallback,this);
     pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("/rovio/pose", 1);
+    pubRovioOutput_ = nh_.advertise<rovio::RovioOutput>("/rovio/output", 1);
+    pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("/rovio/odometry", 1);
     std::string rootdir = ros::package::getPath("rovio");
     mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
+
+//    // p21012_equidist_190215
+//    Eigen::Matrix3d R_VM;
+//    R_VM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
+//            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
+//            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
+//    Eigen::Vector3d VrVM;
+//    VrVM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
+//    // p21012_radtan_190215 (false)
+//    Eigen::Matrix3d R_VM;
+//    R_VM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
+//            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
+//            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
+//    Eigen::Vector3d VrVM;
+//    VrVM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
+//    mpFilter->mPrediction_.setExtrinsics(R_VM,VrVM);
+
     poseMsg_.header.frame_id = "/world";
+    rovioOutputMsg_.header.frame_id = "/world";
+    rovioOutputMsg_.points.header.frame_id = "/camera";
+    odometryMsg_.header.frame_id = "/world";
+    odometryMsg_.child_frame_id = "/camera";
     poseMsgSeq_ = 1;
     cv::namedWindow("Tracker");
     isInitialized_ = false;
@@ -137,6 +175,8 @@ class TestFilter{
       mpFilter->mPrediction_.MrMV_ = vec_temp.v_;
 
       cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
+
+      attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);
     }
   }
   ~TestFilter(){
@@ -194,12 +234,14 @@ class TestFilter{
         cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
         cv::waitKey(1);
       }
-      if(pubPose_.getNumSubscribers() > 0){
-        output_ = cameraOutputCF_.transformState(mpFilter->safe_.state_);
-        outputCov_ = cameraOutputCF_.transformCovMat(mpFilter->safe_.state_,mpFilter->safe_.cov_);
+      if(pubPose_.getNumSubscribers() > 0 || pubRovioOutput_.getNumSubscribers() > 0){
+        mtState& state = mpFilter->safe_.state_;
+        mtState::mtCovMat& cov = mpFilter->safe_.cov_;
+        output_ = cameraOutputCF_.transformState(state);
+        outputCov_ = cameraOutputCF_.transformCovMat(state,cov);
 
 
-        poseMsg_.header.seq = poseMsgSeq_++;
+        poseMsg_.header.seq = poseMsgSeq_;
         poseMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
 
         poseMsg_.pose.position.x = output_.template get<mtOutput::_pos>()(0);
@@ -210,6 +252,112 @@ class TestFilter{
         poseMsg_.pose.orientation.y = output_.template get<mtOutput::_att>().y();
         poseMsg_.pose.orientation.z = output_.template get<mtOutput::_att>().z();
         pubPose_.publish(poseMsg_);
+
+
+        rovioOutputMsg_.header.seq = poseMsgSeq_;
+        rovioOutputMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
+        odometryMsg_.header.seq = poseMsgSeq_;
+        odometryMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
+
+        // Odometry
+        odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);
+        odometryMsg_.pose.pose.position.y = output_.template get<mtOutput::_pos>()(1);
+        odometryMsg_.pose.pose.position.z = output_.template get<mtOutput::_pos>()(2);
+        odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();
+        odometryMsg_.pose.pose.orientation.x = output_.template get<mtOutput::_att>().x();
+        odometryMsg_.pose.pose.orientation.y = output_.template get<mtOutput::_att>().y();
+        odometryMsg_.pose.pose.orientation.z = output_.template get<mtOutput::_att>().z();
+        for(unsigned int i=0;i<6;i++){
+          unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
+          if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
+          for(unsigned int j=0;j<6;j++){
+            unsigned int ind2 = mtOutput::template getId<mtOutput::_pos>()+j;
+            if(j>=3) ind2 = mtOutput::template getId<mtOutput::_att>()+j-3;
+            odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
+          }
+        }
+        odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);
+        odometryMsg_.twist.twist.linear.y = output_.template get<mtOutput::_vel>()(1);
+        odometryMsg_.twist.twist.linear.z = output_.template get<mtOutput::_vel>()(2);
+        odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);
+        odometryMsg_.twist.twist.angular.y = output_.template get<mtOutput::_ror>()(1);
+        odometryMsg_.twist.twist.angular.z = output_.template get<mtOutput::_ror>()(2);
+        for(unsigned int i=0;i<6;i++){
+          unsigned int ind1 = mtOutput::template getId<mtOutput::_vel>()+i;
+          if(i>=3) ind1 = mtOutput::template getId<mtOutput::_ror>()+i-3;
+          for(unsigned int j=0;j<6;j++){
+            unsigned int ind2 = mtOutput::template getId<mtOutput::_vel>()+j;
+            if(j>=3) ind2 = mtOutput::template getId<mtOutput::_ror>()+j-3;
+            odometryMsg_.twist.covariance[j+6*i] = outputCov_(ind1,ind2);
+          }
+        }
+        rovioOutputMsg_.odometry = odometryMsg_;
+        attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.template get<mtOutput::_att>();
+        attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
+        yprOutput_ = attitudeToYprCF_.transformState(attitudeOutput_);
+        yprOutputCov_ = attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_);
+        rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
+        rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
+        rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
+        rovioOutputMsg_.ypr_odometry_sigma.x = yprOutput_.template get<mtYprOutput::_ypr>()(0)+3*yprOutputCov_(0,0);
+        rovioOutputMsg_.ypr_odometry_sigma.y = yprOutput_.template get<mtYprOutput::_ypr>()(1)+3*yprOutputCov_(1,1);
+        rovioOutputMsg_.ypr_odometry_sigma.z = yprOutput_.template get<mtYprOutput::_ypr>()(2)+3*yprOutputCov_(2,2);
+
+        // IMU biases
+        rovioOutputMsg_.acc_bias.x = state.template get<mtState::_acb>()(0);
+        rovioOutputMsg_.acc_bias.y = state.template get<mtState::_acb>()(1);
+        rovioOutputMsg_.acc_bias.z = state.template get<mtState::_acb>()(2);
+        rovioOutputMsg_.acc_bias_sigma.x = cov(mtState::template getId<mtState::_acb>()+0,mtState::template getId<mtState::_acb>()+0);
+        rovioOutputMsg_.acc_bias_sigma.y = cov(mtState::template getId<mtState::_acb>()+1,mtState::template getId<mtState::_acb>()+1);
+        rovioOutputMsg_.acc_bias_sigma.z = cov(mtState::template getId<mtState::_acb>()+2,mtState::template getId<mtState::_acb>()+2);
+        rovioOutputMsg_.gyr_bias.x = state.template get<mtState::_gyb>()(0);
+        rovioOutputMsg_.gyr_bias.y = state.template get<mtState::_gyb>()(1);
+        rovioOutputMsg_.gyr_bias.z = state.template get<mtState::_gyb>()(2);
+        rovioOutputMsg_.gyr_bias_sigma.x = cov(mtState::template getId<mtState::_gyb>()+0,mtState::template getId<mtState::_gyb>()+0);
+        rovioOutputMsg_.gyr_bias_sigma.y = cov(mtState::template getId<mtState::_gyb>()+1,mtState::template getId<mtState::_gyb>()+1);
+        rovioOutputMsg_.gyr_bias_sigma.z = cov(mtState::template getId<mtState::_gyb>()+2,mtState::template getId<mtState::_gyb>()+2);
+
+        // Extrinsics
+        rovioOutputMsg_.extrinsics.pose.position.x = state.template get<mtState::_vep>()(0);
+        rovioOutputMsg_.extrinsics.pose.position.y = state.template get<mtState::_vep>()(1);
+        rovioOutputMsg_.extrinsics.pose.position.z = state.template get<mtState::_vep>()(2);
+        rovioOutputMsg_.extrinsics.pose.orientation.w = state.template get<mtState::_vea>().w();
+        rovioOutputMsg_.extrinsics.pose.orientation.x = state.template get<mtState::_vea>().x();
+        rovioOutputMsg_.extrinsics.pose.orientation.y = state.template get<mtState::_vea>().y();
+        rovioOutputMsg_.extrinsics.pose.orientation.z = state.template get<mtState::_vea>().z();
+        for(unsigned int i=0;i<6;i++){
+          unsigned int ind1 = mtState::template getId<mtState::_vep>()+i;
+          if(i>=3) ind1 = mtState::template getId<mtState::_vea>()+i-3;
+          for(unsigned int j=0;j<6;j++){
+            unsigned int ind2 = mtState::template getId<mtState::_vep>()+j;
+            if(j>=3) ind2 = mtState::template getId<mtState::_vea>()+j-3;
+            rovioOutputMsg_.extrinsics.covariance[j+6*i] = cov(ind1,ind2);
+          }
+        }
+        attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.template get<mtState::_vea>();
+        attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(),mtState::template getId<mtState::_vea>());
+        yprOutput_ = attitudeToYprCF_.transformState(attitudeOutput_);
+        yprOutputCov_ = attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_);
+        rovioOutputMsg_.ypr_extrinsics.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
+        rovioOutputMsg_.ypr_extrinsics.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
+        rovioOutputMsg_.ypr_extrinsics.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
+        rovioOutputMsg_.ypr_extrinsics_sigma.x = yprOutputCov_(0,0);
+        rovioOutputMsg_.ypr_extrinsics_sigma.y = yprOutputCov_(1,1);
+        rovioOutputMsg_.ypr_extrinsics_sigma.z = yprOutputCov_(2,2);
+
+        //Point cloud
+        rovio::FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+        rovioOutputMsg_.points.header.seq = poseMsgSeq_;
+        rovioOutputMsg_.points.header.stamp = ros::Time(mpFilter->safe_.t_);
+        rovioOutputMsg_.points.height = 1;
+        rovioOutputMsg_.points.width = fManager.validSet_.size();
+        for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+
+        }
+
+        pubRovioOutput_.publish(rovioOutputMsg_);
+        pubOdometry_.publish(odometryMsg_);
+        poseMsgSeq_++;
       }
     }
   }
