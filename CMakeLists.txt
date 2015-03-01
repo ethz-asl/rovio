@@ -26,6 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
 	geometry_msgs
 	sensor_msgs
 	std_msgs
+	tf
 )
 
 add_message_files(
@@ -53,6 +54,7 @@ catkin_package(
 	geometry_msgs
 	sensor_msgs
 	std_msgs
+	tf
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})

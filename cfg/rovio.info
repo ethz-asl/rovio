@@ -1,4 +1,4 @@
-cameraCalibrationFile /home/michael/calibrations/p21012_equidist_190215.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
+cameraCalibrationFile /home/michael/calibrations/p22035_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
 Init
 {
     State
@@ -24,8 +24,8 @@ Init
         att_w 1
         vea_x 0;0.0083632
         vea_y 0;-0.00390811
-        vea_z 0;0.712747
-        vea_w 1;0.70136
+        vea_z 0.712747
+        vea_w 0.70136
     }
     Covariance
     {

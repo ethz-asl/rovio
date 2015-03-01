@@ -32,12 +32,14 @@
 #include "rovio_filter.hpp"
 #include <rovio/RovioOutput.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <nav_msgs/Odometry.h>
 #include "CameraOutputCF.hpp"
 #include "YprOutputCF.hpp"
+#include <tf/transform_broadcaster.h>
 
 
 class TestFilter{
@@ -67,6 +69,9 @@ class TestFilter{
   mtOutput output_;
   mtOutput::mtCovMat outputCov_;
   rovio::CameraOutputCF<typename mtFilter::mtPrediction> cameraOutputCF_;
+
+
+  tf::TransformBroadcaster tb_;
 
   typedef rovio::AttitudeOutput mtAttitudeOutput;
   mtAttitudeOutput attitudeOutput_;
@@ -234,7 +239,6 @@ class TestFilter{
         cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
         cv::waitKey(1);
       }
-      if(pubPose_.getNumSubscribers() > 0 || pubRovioOutput_.getNumSubscribers() > 0){
         mtState& state = mpFilter->safe_.state_;
         mtState::mtCovMat& cov = mpFilter->safe_.cov_;
         output_ = cameraOutputCF_.transformState(state);
@@ -243,7 +247,6 @@ class TestFilter{
 
         poseMsg_.header.seq = poseMsgSeq_;
         poseMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
-
         poseMsg_.pose.position.x = output_.template get<mtOutput::_pos>()(0);
         poseMsg_.pose.position.y = output_.template get<mtOutput::_pos>()(1);
         poseMsg_.pose.position.z = output_.template get<mtOutput::_pos>()(2);
@@ -252,6 +255,17 @@ class TestFilter{
         poseMsg_.pose.orientation.y = output_.template get<mtOutput::_att>().y();
         poseMsg_.pose.orientation.z = output_.template get<mtOutput::_att>().z();
         pubPose_.publish(poseMsg_);
+
+        tf::StampedTransform tf_transform;
+        tf_transform.frame_id_ = "world";
+        tf_transform.child_frame_id_ = "imu";
+        tf_transform.stamp_ = ros::Time(mpFilter->safe_.t_);
+        Eigen::Vector3d MrIM = state.template get<mtState::_pos>();
+        rot::RotationQuaternionPD qMI = state.template get<mtState::_att>().inverted();
+        Eigen::Vector3d IrIM = qMI.inverseRotate(MrIM);
+        tf_transform.setOrigin(tf::Vector3(IrIM(0),IrIM(1),IrIM(2)));
+        tf_transform.setRotation(tf::Quaternion(qMI.x(),qMI.y(),qMI.z(),qMI.w()));
+        tb_.sendTransform(tf_transform);
 
 
         rovioOutputMsg_.header.seq = poseMsgSeq_;
@@ -358,7 +372,6 @@ class TestFilter{
         pubRovioOutput_.publish(rovioOutputMsg_);
         pubOdometry_.publish(odometryMsg_);
         poseMsgSeq_++;
-      }
     }
   }
 };
