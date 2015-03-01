@@ -130,6 +130,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double trackingUpperBound_,trackingLowerBound_;
   double minTrackedAndFreeFeatures_;
   double minRelativeSTScore_;
+  double minAbsoluteSTScore_;
   bool doPatchWarping_;
   bool useDirectMethod_;
   ImgUpdate(){
@@ -151,6 +152,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     trackingLowerBound_ = 0.1;
     minTrackedAndFreeFeatures_ = 0.5;
     minRelativeSTScore_ = 0.2;
+    minAbsoluteSTScore_ = 0.2;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -163,6 +165,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     doubleRegister_.registerScalar("trackingLowerBound",trackingLowerBound_);
     doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);
     doubleRegister_.registerScalar("minRelativeSTScore",minRelativeSTScore_);
+    doubleRegister_.registerScalar("minAbsoluteSTScore",minAbsoluteSTScore_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
@@ -348,6 +351,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         }
       }
     }
+    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);
     cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(80,90),cv::Scalar(100,100,100),-1,8,0);
     cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(5,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
     cv::Point2f rollCenter = cv::Point2f(40,40);
@@ -376,7 +380,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     cv::circle(state.template get<mtState::_aux>().img_,rollCenter,2,rollColor1,-1,8,0);
 
     // Extract feature patches
-    double averageScore_ = 0;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
@@ -388,17 +391,14 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
           extractBearingCorner(state,ind);
         }
       }
-      mpFeature->computeMultilevelShiTomasiScore();
-      averageScore_ += std::max(static_cast<double>(mpFeature->s_),0.0);
     }
-    averageScore_ = averageScore_/fManager.validSet_.size();
 
     // Remove bad feature
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
       if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)
-          || fManager.features_[ind].s_ < minRelativeSTScore_*averageScore_){
+          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*fManager.getAverageScore()){
         fManager.removeFeature(ind);
       }
     }
@@ -437,7 +437,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const double t4 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_,
-                                                                           nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false);
+                                                                           nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*fManager.getAverageScore());
       const double t5 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){

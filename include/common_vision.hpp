@@ -359,6 +359,7 @@ class MultilevelPatchFeature{
   }
   void computeMultilevelShiTomasiScore(){
     if(hasValidPatches_){
+      H_.setZero();
       for(unsigned int i=0;i<nLevels_;i++){
         H_ += pow(0.25,i)*patches_[i].getHessian();
       }
@@ -671,6 +672,15 @@ class FeatureManager{
       invalidSet_.insert(ind);
   }
   ~FeatureManager(){}
+  float getAverageScore(){
+    float averageScore = 0;
+    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
+      features_[*it_f].computeMultilevelShiTomasiScore();
+      averageScore += std::max(features_[*it_f].s_,0.0f);
+    }
+    if(validSet_.size()>0) averageScore = averageScore/validSet_.size();
+    return averageScore;
+  }
   void selectCandidates(std::vector<cv::Point2f>& detected_keypoints){ // TODO: add corner motion dependency
     float d2;
     constexpr float t2 = patch_size*patch_size; // TODO: param
@@ -708,19 +718,23 @@ class FeatureManager{
     }
   }
   std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg, const int nDetectionBuckets, const double scoreDetectionExponent,
-                                                     const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax){
+                                                     const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
     std::unordered_set<unsigned int> newSet;
     float maxScore = -1.0;
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
       if(it->s_ > maxScore) maxScore = it->s_;
     }
+    if(maxScore < minScore)
+      return newSet;
 
     // Make buckets and fill based on score
     std::vector<std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>> buckets(nDetectionBuckets,std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>());
     unsigned int newBucketID;
+    float relScore;
     for (auto it_cand = candidates_.begin(); it_cand != candidates_.end(); ++it_cand) {
-      if(it_cand->s_ > 0.0){
-        newBucketID = std::ceil((nDetectionBuckets-1)*(pow(it_cand->s_/maxScore,static_cast<float>(scoreDetectionExponent))));
+      relScore = (it_cand->s_-minScore)/(maxScore-minScore);
+      if(relScore > 0.0){
+        newBucketID = std::ceil((nDetectionBuckets-1)*(pow(relScore,static_cast<float>(scoreDetectionExponent))));
         if(newBucketID>nDetectionBuckets-1) newBucketID = nDetectionBuckets-1;
         buckets[newBucketID].insert(&(*it_cand));
       }

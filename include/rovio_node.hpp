@@ -156,7 +156,7 @@ class TestNode{
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,draw_image_,
-                                                                            nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,true);
+                                                                            nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,true,0.0);
       const double t5 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
     }
