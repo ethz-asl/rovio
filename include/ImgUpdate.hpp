@@ -380,6 +380,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     cv::circle(state.template get<mtState::_aux>().img_,rollCenter,2,rollColor1,-1,8,0);
 
     // Extract feature patches
+    MultilevelPatchFeature<STATE::nLevels_,STATE::patchSize_> testFeature;
+    float averageScore = fManager.getAverageScore();
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
@@ -387,18 +389,24 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
         fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
         if(fManager.features_[ind].currentStatistics_.inFrame_){
-          mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-          extractBearingCorner(state,ind);
+          testFeature.c_ = mpFeature->c_; // TODO: clean
+          testFeature.extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+          testFeature.computeMultilevelShiTomasiScore();
+          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){
+            mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+            extractBearingCorner(state,ind);
+          }
         }
       }
     }
 
     // Remove bad feature
+    averageScore = fManager.getAverageScore();
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
       if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)
-          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*fManager.getAverageScore()){
+          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){
         fManager.removeFeature(ind);
       }
     }
@@ -420,6 +428,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
 
     // Detect new feature if required
+    averageScore = fManager.getAverageScore();
     fManager.candidates_.clear();
     if(fManager.validSet_.size() < startDetectionTh_*mtState::nMax_){
       ROS_DEBUG_STREAM(" Adding keypoints");
@@ -437,7 +446,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const double t4 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_,
-                                                                           nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*fManager.getAverageScore());
+          nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,
+          static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore);
       const double t5 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
