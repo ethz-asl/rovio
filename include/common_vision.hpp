@@ -61,21 +61,25 @@ class TrackingStatistics{
 class DrawPoint{
  public:
   cv::Point2f c_;
-  cv::Size sigma_;
+  double sigma1_;
+  double sigma2_;
   double sigmaAngle_;
   bool hasSigma_;
+  double factor_;
   Eigen::EigenSolver<Eigen::Matrix2d> es_;
   DrawPoint(){
     c_ = cv::Point2f(0,0);
-    sigma_ = cv::Size(2,2);
+    sigma1_ = 1.0;
+    sigma2_ = 1.0;
     hasSigma_ = false;
     sigmaAngle_ = 0.0;
+    factor_ = 2.0;
   }
   void draw(cv::Mat& drawImg,const cv::Scalar& color){
     cv::Size size(2,2);
     cv::ellipse(drawImg,c_,size,0,0,360,color,-1,8,0);
     if(hasSigma_){
-      cv::ellipse(drawImg,c_,sigma_,sigmaAngle_,0,360,color,1,8,0);
+      cv::ellipse(drawImg,c_,cv::Size(std::max(static_cast<int>(factor_*sigma1_+0.5),1),std::max(static_cast<int>(factor_*sigma2_+0.5),1)),sigmaAngle_,0,360,color,1,8,0);
     }
   }
   void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
@@ -87,8 +91,8 @@ class DrawPoint{
   void setSigmaFromCov(const Eigen::Matrix2d& cov){
     es_.compute(cov);
     sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
-    sigma_.width =  std::max(static_cast<int>(es_.eigenvalues()(0).real()+0.5),1);
-    sigma_.height  = std::max(static_cast<int>(es_.eigenvalues()(1).real()+0.5),1);
+    sigma1_ =  sqrt(es_.eigenvalues()(0).real());
+    sigma2_  = sqrt(es_.eigenvalues()(1).real());
     hasSigma_ = true;
   }
 };

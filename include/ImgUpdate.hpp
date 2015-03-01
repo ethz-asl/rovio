@@ -129,6 +129,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double trackingLocalRange_,trackingLocalVisibilityRange_;
   double trackingUpperBound_,trackingLowerBound_;
   double minTrackedAndFreeFeatures_;
+  double minRelativeSTScore_;
   bool doPatchWarping_;
   bool useDirectMethod_;
   ImgUpdate(){
@@ -149,6 +150,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     trackingUpperBound_ = 0.9;
     trackingLowerBound_ = 0.1;
     minTrackedAndFreeFeatures_ = 0.5;
+    minRelativeSTScore_ = 0.2;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -160,6 +162,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     doubleRegister_.registerScalar("trackingUpperBound",trackingUpperBound_);
     doubleRegister_.registerScalar("trackingLowerBound",trackingLowerBound_);
     doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);
+    doubleRegister_.registerScalar("minRelativeSTScore",minRelativeSTScore_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
@@ -294,7 +297,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         mpCamera_->pixelToBearing(fManager.features_[ind].c_,m_meas);
         m_meas.boxMinus(state.template get<mtState::_nor>(ind),vec2);
         if(useDirectMethod_ && (vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) > 5.886){ // TODO: param
-          vec2.setZero();;
+          vec2.setZero();
         }
         state.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
       } else if(useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_){
@@ -329,10 +332,10 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       // Drawing
       if(fManager.features_[ind].currentStatistics_.inFrame_){
         mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
-        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
+//        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
+//        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
+//        mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
+//        mpFeature->log_predictionC3_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
         if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
           mpFeature->log_current_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
           mpFeature->log_current_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0, 255, 0));
@@ -345,9 +348,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         }
       }
     }
-    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(150,80),cv::Scalar(100,100,100),-1,8,0);
-    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(150,0),cv::Point2f(200,40),cv::Scalar(100,100,100),-1,8,0);
-    cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(150,15),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
+    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(80,90),cv::Scalar(100,100,100),-1,8,0);
+    cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(5,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
     cv::Point2f rollCenter = cv::Point2f(40,40);
     cv::Scalar rollColor1(50,50,50);
     cv::Scalar rollColor2(200,200,200);
@@ -373,11 +375,30 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     cv::ellipse(state.template get<mtState::_aux>().img_,rollCenter,cv::Size(10,10),0,0,180,rollColor1,2,8,0);
     cv::circle(state.template get<mtState::_aux>().img_,rollCenter,2,rollColor1,-1,8,0);
 
+    // Extract feature patches
+    double averageScore_ = 0;
+    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
+      const int ind = *it_f;
+      mpFeature = &fManager.features_[ind];
+      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
+        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
+        fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
+        if(fManager.features_[ind].currentStatistics_.inFrame_){
+          mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+          extractBearingCorner(state,ind);
+        }
+      }
+      mpFeature->computeMultilevelShiTomasiScore();
+      averageScore_ += std::max(static_cast<double>(mpFeature->s_),0.0);
+    }
+    averageScore_ = averageScore_/fManager.validSet_.size();
+
     // Remove bad feature
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
-      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
+      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)
+          || fManager.features_[ind].s_ < minRelativeSTScore_*averageScore_){
         fManager.removeFeature(ind);
       }
     }
@@ -395,20 +416,6 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
       if(fManager.features_[ind].currentStatistics_.status_ != TrackingStatistics::TRACKED && !fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*factor,trackingLowerBound_*factor)){ // TODO: improve
         fManager.removeFeature(ind);
-      }
-    }
-
-    // Extract feature patches
-    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-      const int ind = *it_f;
-      mpFeature = &fManager.features_[ind];
-      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
-        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
-        fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-        if(fManager.features_[ind].currentStatistics_.inFrame_){
-          mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-          extractBearingCorner(state,ind);
-        }
       }
     }
 
