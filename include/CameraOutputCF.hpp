@@ -59,7 +59,7 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
   ~CameraOutputCF(){};
   const ImuPrediction* mpImuPrediction_;
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // IrIV = qIM*(MrIM + MrMV)
+    // IrIV = IrIM + qIM*(MrMV)
     // VvV = qVM*(MvM + MwIM x MrMV)
     // qVI = qVM*qIM^T
     // VwIV = qVM*MwIM
@@ -69,7 +69,7 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
       MrMV = input.template get<mtInput::_vep>();
       qVM = input.template get<mtInput::_vea>();
     }
-    output.template get<mtOutput::_pos>() = input.template get<mtInput::_att>().rotate(V3D(input.template get<mtInput::_pos>()+MrMV));
+    output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(MrMV);
     output.template get<mtOutput::_ror>() = qVM.rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
     output.template get<mtOutput::_vel>() =
         qVM.rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*MrMV));
@@ -84,10 +84,9 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
       MrMV = input.template get<mtInput::_vep>();
       qVM = input.template get<mtInput::_vea>();
     }
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) =
-        MPD(input.template get<mtInput::_att>()).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) = M3D::Identity();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_att>()) =
-        gSM(input.template get<mtInput::_att>().rotate(V3D(input.template get<mtInput::_pos>()+MrMV)));
+        gSM(input.template get<mtInput::_att>().rotate(MrMV));
     J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_att>()) =
         -MPD(qVM*input.template get<mtInput::_att>().inverted()).matrix();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -MPD(qVM).matrix();

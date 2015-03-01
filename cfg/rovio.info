@@ -83,7 +83,7 @@ Update0
     trackingLowerBound 0.1
     minTrackedAndFreeFeatures 0.5
     minRelativeSTScore 0.0
-    minAbsoluteSTScore 0.0
+    minAbsoluteSTScore 5.0
 }
 Prediction
 {
