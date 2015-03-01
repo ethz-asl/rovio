@@ -32,7 +32,6 @@
 #include "rovio_filter.hpp"
 #include <rovio/RovioOutput.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
