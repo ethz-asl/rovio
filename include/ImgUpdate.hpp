@@ -262,7 +262,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
     double lastImageTime = 0.0;
-    if(!state.template get<mtState::_aux>().img_.empty() && doDrawTracks_){
+    if(!state.template get<mtState::_aux>().img_.empty()){
       lastImageTime = state.template get<mtState::_aux>().imgTime_;
     }
     if (doDrawTracks_)
@@ -292,7 +292,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     }
     const double t1 = (double) cv::getTickCount();
     int numSeq = startLevel_-endLevel_; // TODO adaptiv search (depending on covariance)
-    fManager.alignFeaturesCom(meas.template get<mtMeas::_aux>().pyr_,state.template get<mtState::_aux>().img_,startLevel_,endLevel_,numSeq,doPatchWarping_);
+    fManager.alignFeaturesCom(meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,numSeq,doPatchWarping_);
     const double t2 = (double) cv::getTickCount();
     ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     NormalVectorElement m_meas;
@@ -451,7 +451,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       fManager.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_,
+      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),
           nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,0);
 //          static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore); //TODO: debug and fix
       const double t5 = (double) cv::getTickCount();

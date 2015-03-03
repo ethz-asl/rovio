@@ -118,7 +118,6 @@ class TestFilter{
     odometryMsg_.header.frame_id = "/world";
     odometryMsg_.child_frame_id = "/camera";
     poseMsgSeq_ = 1;
-    //cv::namedWindow("Tracker");
     isInitialized_ = false;
 
     bool makeTest = true;
@@ -189,7 +188,6 @@ class TestFilter{
   }
   ~TestFilter(){
     delete mpFilter;
-    cv::destroyWindow("Tracker");
   }
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
     predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);

@@ -106,7 +106,7 @@ class TestNode{
       fManager_.features_[ind].currentStatistics_.inFrame_ = true;
     }
     const double t1 = (double) cv::getTickCount();
-    fManager_.alignFeaturesCom(pyr_,draw_image_,3,1,2,false);
+    fManager_.alignFeaturesCom(pyr_,3,1,2,false);
     const double t2 = (double) cv::getTickCount();
     ROS_INFO_STREAM(" Matching " << fManager_.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
     for(auto it_f = fManager_.validSet_.begin();it_f != fManager_.validSet_.end(); ++it_f){
@@ -155,7 +155,7 @@ class TestNode{
       fManager_.computeCandidatesScore(-1);
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-      std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,draw_image_,
+      std::unordered_set<unsigned int> newSet = fManager_.addBestCandidates(max_feature_count_,
                                                                             nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,true,0.0);
       const double t5 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << fManager_.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");

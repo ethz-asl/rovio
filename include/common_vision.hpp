@@ -717,7 +717,7 @@ class FeatureManager{
       }
     }
   }
-  std::unordered_set<unsigned int> addBestCandidates(const int maxN,cv::Mat& drawImg, const int nDetectionBuckets, const double scoreDetectionExponent,
+  std::unordered_set<unsigned int> addBestCandidates(const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                      const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
     std::unordered_set<unsigned int> newSet;
     float maxScore = -1.0;
@@ -802,7 +802,7 @@ class FeatureManager{
     }
     return newSet;
   }
-  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level, const int num_seq, const bool doWarping){ // TODO: clean
+  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){ // TODO: clean
     cv::Point2f c_new;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
@@ -822,7 +822,7 @@ class FeatureManager{
       }
     }
   }
-  void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,cv::Mat& drawImg,const int start_level,const int end_level, const bool doWarping){
+  void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const bool doWarping){
     cv::Point2f c_new;
     MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
     for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
