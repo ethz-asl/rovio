@@ -230,13 +230,25 @@ class TestFilter{
   }
   void updateAndPublish(const double& updateTime){
     if(isInitialized_){
+      const double t1 = (double) cv::getTickCount();
+      int c1 = std::get<0>(mpFilter->updateTimelineTuple_).measMap_.size();
+      static double timing_T = 0;
+      static int timing_C = 0;
       mpFilter->updateSafe(updateTime);
+      const double t2 = (double) cv::getTickCount();
+      int c2 = std::get<0>(mpFilter->updateTimelineTuple_).measMap_.size();
+      timing_T += (t2-t1)/cv::getTickFrequency()*1000;
+      timing_C += c1-c2;
+      bool plotTiming = false;
+      if(plotTiming){
+        ROS_INFO_STREAM(" == Filter Update: " << (t2-t1)/cv::getTickFrequency()*1000 << " ms for processing " << c1-c2 << " images, average: " << timing_T/timing_C);
+      }
 //      std::cout << "Filter calibration: " << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_acb>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
-      if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty()){
+      if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty() && std::get<0>(mpFilter->mUpdates_).doDrawTracks_ ){
         cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
         cv::waitKey(1);
       }
