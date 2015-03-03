@@ -32,6 +32,7 @@
 #include "rovio_filter.hpp"
 #include <rovio/RovioOutput.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
@@ -49,6 +50,7 @@ class TestFilter{
   ros::Publisher pubPose_;
   ros::Publisher pubRovioOutput_;
   ros::Publisher pubOdometry_;
+  ros::Publisher pubTransform_;
   static constexpr unsigned int nMax_ = 50;
   static constexpr int nLevels_ = 4;
   static constexpr int patchSize_ = 8;
@@ -61,6 +63,7 @@ class TestFilter{
   mtFilter* mpFilter;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
+  geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
   rovio::RovioOutput rovioOutputMsg_;
   int poseMsgSeq_;
@@ -87,6 +90,7 @@ class TestFilter{
     subImu_ = nh_.subscribe("/imu0", 1000, &TestFilter::imuCallback,this);
     subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &TestFilter::imgCallback,this);
     pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("/rovio/pose", 1);
+    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/rovio/transform", 1);
     pubRovioOutput_ = nh_.advertise<rovio::RovioOutput>("/rovio/output", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("/rovio/odometry", 1);
     std::string rootdir = ros::package::getPath("rovio");
@@ -259,13 +263,21 @@ class TestFilter{
         tf_transform.frame_id_ = "world";
         tf_transform.child_frame_id_ = "imu";
         tf_transform.stamp_ = ros::Time(mpFilter->safe_.t_);
-        Eigen::Vector3d MrIM = state.template get<mtState::_pos>();
+        Eigen::Vector3d IrIM = state.template get<mtState::_pos>();
         rot::RotationQuaternionPD qMI = state.template get<mtState::_att>().inverted();
-        Eigen::Vector3d IrIM = qMI.inverseRotate(MrIM);
         tf_transform.setOrigin(tf::Vector3(IrIM(0),IrIM(1),IrIM(2)));
         tf_transform.setRotation(tf::Quaternion(qMI.x(),qMI.y(),qMI.z(),qMI.w()));
         tb_.sendTransform(tf_transform);
 
+        transformMsg_.header = poseMsg_.header;
+        transformMsg_.transform.translation.x = IrIM(0);
+        transformMsg_.transform.translation.y = IrIM(1);
+        transformMsg_.transform.translation.z = IrIM(2);
+        transformMsg_.transform.rotation.x = qMI.x();
+        transformMsg_.transform.rotation.y = qMI.y();
+        transformMsg_.transform.rotation.z = qMI.z();
+        transformMsg_.transform.rotation.w = qMI.w();
+        pubTransform_.publish(transformMsg_);
 
         rovioOutputMsg_.header.seq = poseMsgSeq_;
         rovioOutputMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
