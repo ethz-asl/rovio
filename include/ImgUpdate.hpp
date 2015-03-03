@@ -322,7 +322,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
 
       // Status Handling
-      if((useDirectMethod_ && fManager.features_[ind].currentStatistics_.inFrame_)
+      if((useDirectMethod_ && mpFeature->currentStatistics_.inFrame_)
           || (!useDirectMethod_ && mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND)){
         if(!mpOutlierDetection->isOutlier(ind)){
           mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
@@ -333,7 +333,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
 
       // Drawing
-      if(fManager.features_[ind].currentStatistics_.inFrame_){
+      if(mpFeature->currentStatistics_.inFrame_){
         mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
 //        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
 //        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
@@ -386,15 +386,16 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const int ind = *it_f;
       mpFeature = &fManager.features_[ind];
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
-        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_);
-        fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-        if(fManager.features_[ind].currentStatistics_.inFrame_){
+        mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),mpFeature->c_);
+        mpFeature->currentStatistics_.inFrame_ = mpFeature->isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
+        if(mpFeature->currentStatistics_.inFrame_){
           testFeature.c_ = mpFeature->c_; // TODO: clean
           testFeature.extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
           testFeature.computeMultilevelShiTomasiScore();
-          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){
+          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){ // TODO: debug and fix
             mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
             extractBearingCorner(state,ind);
+//            mpFeature->testFeature.computeMultilevelShiTomasiScore();
           }
         }
       }
@@ -405,8 +406,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
       ++it_f;
-      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)
-          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){
+      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
+//          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){ //TODO: debug and fix
         fManager.removeFeature(ind);
       }
     }
@@ -446,8 +447,8 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       const double t4 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),state.template get<mtState::_aux>().img_,
-          nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,
-          static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore);
+          nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,0);
+//          static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore); //TODO: debug and fix
       const double t5 = (double) cv::getTickCount();
       ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){

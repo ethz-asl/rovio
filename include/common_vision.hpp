@@ -724,8 +724,9 @@ class FeatureManager{
     for(auto it = candidates_.begin(); it != candidates_.end(); ++it){;
       if(it->s_ > maxScore) maxScore = it->s_;
     }
-    if(maxScore < minScore)
+    if(maxScore <= minScore){
       return newSet;
+    }
 
     // Make buckets and fill based on score
     std::vector<std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>> buckets(nDetectionBuckets,std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>());
