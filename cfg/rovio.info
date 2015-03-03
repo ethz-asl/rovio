@@ -63,7 +63,7 @@ Update0
     MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
-        nor 1 ; rad (~1/f ~ 1/400^2 = 1/160000)
+        nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
     alpha 0.001
     beta 2
@@ -91,9 +91,9 @@ Prediction
     depthType 1
     PredictionNoise
     {
-        pos_0 1e-8
-        pos_1 1e-8
-        pos_2 1e-8
+        pos_0 1e-4
+        pos_1 1e-4
+        pos_2 1e-4
         vel_0 4e-5 ;4e-6
         vel_1 4e-5
         vel_2 4e-5
@@ -103,15 +103,15 @@ Prediction
         gyb_0 3.8e-7
         gyb_1 3.8e-7
         gyb_2 3.8e-7
-        vep_0 1e-10
-        vep_1 1e-10
-        vep_2 1e-10
+        vep_0 1e-8
+        vep_1 1e-8
+        vep_2 1e-8
         att_0 7.6e-6 ;7.6e-7
         att_1 7.6e-6
         att_2 7.6e-6
-        vea_0 1e-10
-        vea_1 1e-10
-        vea_2 1e-10
+        vea_0 1e-8
+        vea_1 1e-8
+        vea_2 1e-8
         dep 0.000001 ; m/sqrt(dt)
         nor 0.0001 ; rad/sqrt(dt)
     }
