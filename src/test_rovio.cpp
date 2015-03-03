@@ -118,7 +118,7 @@ class TestFilter{
     odometryMsg_.header.frame_id = "/world";
     odometryMsg_.child_frame_id = "/camera";
     poseMsgSeq_ = 1;
-    cv::namedWindow("Tracker");
+    //cv::namedWindow("Tracker");
     isInitialized_ = false;
 
     bool makeTest = true;
