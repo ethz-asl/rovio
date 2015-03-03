@@ -133,6 +133,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   double minAbsoluteSTScore_;
   bool doPatchWarping_;
   bool useDirectMethod_;
+  bool doDrawTracks_;
   ImgUpdate(){
     mpCamera_ = nullptr;
     initCovFeature_.setIdentity();
@@ -146,6 +147,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
     doPatchWarping_ = true;
     useDirectMethod_ = true;
+    doDrawTracks_ = true;
     trackingLocalRange_ = 20;
     trackingLocalVisibilityRange_ = 200;
     trackingUpperBound_ = 0.9;
@@ -171,6 +173,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
+    boolRegister_.registerScalar("doDrawTracks",doDrawTracks_);
     int ind;
     for(int i=0;i<STATE::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -259,10 +262,11 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
   }
   void preProcess(mtState& state, mtCovMat& cov, const mtMeas& meas){
     double lastImageTime = 0.0;
-    if(!state.template get<mtState::_aux>().img_.empty()){
+    if(!state.template get<mtState::_aux>().img_.empty() && doDrawTracks_){
       lastImageTime = state.template get<mtState::_aux>().imgTime_;
     }
-    cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
+    if (doDrawTracks_)
+      cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], state.template get<mtState::_aux>().img_, CV_GRAY2RGB);
     state.template get<mtState::_aux>().imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
     FeatureManager<STATE::nLevels_,STATE::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
     state.template get<mtState::_aux>().imageCounter_++;
@@ -333,7 +337,7 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
       }
 
       // Drawing
-      if(mpFeature->currentStatistics_.inFrame_){
+      if(mpFeature->currentStatistics_.inFrame_ && doDrawTracks_){
         mpFeature->log_prediction_.draw(state.template get<mtState::_aux>().img_,cv::Scalar(0,255,255));
 //        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
 //        mpFeature->log_predictionC0_.drawLine(state.template get<mtState::_aux>().img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
@@ -351,34 +355,35 @@ class ImgUpdate: public Update<ImgInnovation<STATE>,STATE,ImgUpdateMeas<STATE>,I
         }
       }
     }
-    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);
-    cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(80,90),cv::Scalar(100,100,100),-1,8,0);
-    cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(5,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
-    cv::Point2f rollCenter = cv::Point2f(40,40);
-    cv::Scalar rollColor1(50,50,50);
-    cv::Scalar rollColor2(200,200,200);
-    cv::Scalar rollColor3(120,120,120);
-    cv::circle(state.template get<mtState::_aux>().img_,rollCenter,32,rollColor1,-1,8,0);
-    cv::circle(state.template get<mtState::_aux>().img_,rollCenter,30,rollColor2,-1,8,0);
-    Eigen::Vector3d Vg = (state.template get<mtState::_vea>()*state.template get<mtState::_att>().inverted()).rotate(Eigen::Vector3d(0,0,-1));
-    double roll = atan2(Vg(1),Vg(0))-0.5*M_PI;
-    double pitch = acos(Vg.dot(Eigen::Vector3d(0,0,1)))-0.5*M_PI;
-    double pixelFor10Pitch = 5.0;
-    double pitchOffsetAngle = -asin(pitch/M_PI*180.0/10.0*pixelFor10Pitch/30.0);
-    cv::Point2f rollVector1 = 30*cv::Point2f(cos(roll),sin(roll));
-    cv::Point2f rollVector2 = cv::Point2f(25,0);
-    cv::Point2f rollVector3 = cv::Point2f(10,0);
-    std::vector<cv::Point> pts;
-    cv::ellipse2Poly(rollCenter,cv::Size(30,30),0,(roll-pitchOffsetAngle)/M_PI*180,(roll+pitchOffsetAngle)/M_PI*180+180,1,pts);
-    cv::Point *points;
-    points = &pts[0];
-    int nbtab = pts.size();
-    cv::fillPoly(state.template get<mtState::_aux>().img_,(const cv::Point**)&points,&nbtab,1,rollColor3);
-    cv::line(state.template get<mtState::_aux>().img_,rollCenter+rollVector2,rollCenter+rollVector3,rollColor1, 2);
-    cv::line(state.template get<mtState::_aux>().img_,rollCenter-rollVector2,rollCenter-rollVector3,rollColor1, 2);
-    cv::ellipse(state.template get<mtState::_aux>().img_,rollCenter,cv::Size(10,10),0,0,180,rollColor1,2,8,0);
-    cv::circle(state.template get<mtState::_aux>().img_,rollCenter,2,rollColor1,-1,8,0);
-
+    if (doDrawTracks_){
+      cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);
+      cv::rectangle(state.template get<mtState::_aux>().img_,cv::Point2f(0,0),cv::Point2f(80,90),cv::Scalar(100,100,100),-1,8,0);
+      cv::putText(state.template get<mtState::_aux>().img_,std::to_string(state.template get<mtState::_aux>().imageCounter_),cv::Point2f(5,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,0,0));
+      cv::Point2f rollCenter = cv::Point2f(40,40);
+      cv::Scalar rollColor1(50,50,50);
+      cv::Scalar rollColor2(200,200,200);
+      cv::Scalar rollColor3(120,120,120);
+      cv::circle(state.template get<mtState::_aux>().img_,rollCenter,32,rollColor1,-1,8,0);
+      cv::circle(state.template get<mtState::_aux>().img_,rollCenter,30,rollColor2,-1,8,0);
+      Eigen::Vector3d Vg = (state.template get<mtState::_vea>()*state.template get<mtState::_att>().inverted()).rotate(Eigen::Vector3d(0,0,-1));
+      double roll = atan2(Vg(1),Vg(0))-0.5*M_PI;
+      double pitch = acos(Vg.dot(Eigen::Vector3d(0,0,1)))-0.5*M_PI;
+      double pixelFor10Pitch = 5.0;
+      double pitchOffsetAngle = -asin(pitch/M_PI*180.0/10.0*pixelFor10Pitch/30.0);
+      cv::Point2f rollVector1 = 30*cv::Point2f(cos(roll),sin(roll));
+      cv::Point2f rollVector2 = cv::Point2f(25,0);
+      cv::Point2f rollVector3 = cv::Point2f(10,0);
+      std::vector<cv::Point> pts;
+      cv::ellipse2Poly(rollCenter,cv::Size(30,30),0,(roll-pitchOffsetAngle)/M_PI*180,(roll+pitchOffsetAngle)/M_PI*180+180,1,pts);
+      cv::Point *points;
+      points = &pts[0];
+      int nbtab = pts.size();
+      cv::fillPoly(state.template get<mtState::_aux>().img_,(const cv::Point**)&points,&nbtab,1,rollColor3);
+      cv::line(state.template get<mtState::_aux>().img_,rollCenter+rollVector2,rollCenter+rollVector3,rollColor1, 2);
+      cv::line(state.template get<mtState::_aux>().img_,rollCenter-rollVector2,rollCenter-rollVector3,rollColor1, 2);
+      cv::ellipse(state.template get<mtState::_aux>().img_,rollCenter,cv::Size(10,10),0,0,180,rollColor1,2,8,0);
+      cv::circle(state.template get<mtState::_aux>().img_,rollCenter,2,rollColor1,-1,8,0);
+    }
     // Extract feature patches
     MultilevelPatchFeature<STATE::nLevels_,STATE::patchSize_> testFeature;
     float averageScore = fManager.getAverageScore();
