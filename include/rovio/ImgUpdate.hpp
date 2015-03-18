@@ -31,12 +31,12 @@
 
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
-#include "Update.hpp"
-#include "State.hpp"
-#include "FilterState.hpp"
+#include "lightweight_filtering/Update.hpp"
+#include "lightweight_filtering/State.hpp"
+#include "rovio/FilterState.hpp"
 #include <cv_bridge/cv_bridge.h>
-#include "Camera.hpp"
-#include "PixelOutputCF.hpp"
+#include "rovio/Camera.hpp"
+#include "rovio/PixelOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 

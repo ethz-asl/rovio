@@ -29,16 +29,16 @@
 #define EIGEN_STACK_ALLOCATION_LIMIT 1000000
 #include <ros/ros.h>
 #include <ros/package.h>
-#include "rovio_filter.hpp"
-#include <rovio/RovioOutput.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <nav_msgs/Odometry.h>
-#include "CameraOutputCF.hpp"
-#include "YprOutputCF.hpp"
+#include "rovio/rovio_filter.hpp"
+#include <rovio/RovioOutput.h>
+#include "rovio/CameraOutputCF.hpp"
+#include "rovio/YprOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
 
 

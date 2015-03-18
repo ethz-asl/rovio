@@ -31,7 +31,7 @@
 
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
-#include "State.hpp"
+#include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
 

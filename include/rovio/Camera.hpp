@@ -31,7 +31,7 @@
 
 #include <Eigen/Dense>
 #include <opencv2/features2d/features2d.hpp>
-#include "State.hpp"
+#include "lightweight_filtering/State.hpp"
 #include "yaml-cpp/yaml.h"
 
 

@@ -29,9 +29,9 @@
 #ifndef PIXELOUTPUTCF_HPP_
 #define PIXELOUTPUTCF_HPP_
 
-#include "FilterState.hpp"
-#include "CoordinateTransform.hpp"
-#include "Camera.hpp"
+#include "rovio/FilterState.hpp"
+#include "lightweight_filtering/CoordinateTransform.hpp"
+#include "rovio/Camera.hpp"
 
 namespace rovio {
 

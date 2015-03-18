@@ -26,8 +26,8 @@
 *
 */
 
-#include "rovio_node.hpp"
-#include "Camera.hpp"
+#include "rovio/rovio_node.hpp"
+#include "rovio/Camera.hpp"
 
 int main(int argc, char** argv) {
   rovio::Camera camera_;

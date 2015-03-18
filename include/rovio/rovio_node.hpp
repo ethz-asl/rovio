@@ -34,8 +34,8 @@
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
-#include "common_vision.hpp"
-#include "Camera.hpp"
+#include "rovio/common_vision.hpp"
+#include "rovio/Camera.hpp"
 
 namespace rovio{
 
