@@ -26,8 +26,8 @@
 *
 */
 
-#ifndef ROVIO_NODE_HPP_
-#define ROVIO_NODE_HPP_
+#ifndef ROVIO_ROVIO_NODE_HPP_
+#define ROVIO_ROVIO_NODE_HPP_
 
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
@@ -173,4 +173,4 @@ class TestNode{
 }
 
 
-#endif /* ROVIO_NODE_HPP_ */
+#endif /* ROVIO_ROVIO_NODE_HPP_ */

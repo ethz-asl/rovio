@@ -54,12 +54,13 @@ class TestFilter{
   static constexpr unsigned int nMax_ = 50;
   static constexpr int nLevels_ = 4;
   static constexpr int patchSize_ = 8;
-  typedef rovio::FilterState<nMax_,nLevels_,patchSize_> mtState;
+  typedef rovio::FilterState<nMax_,nLevels_,patchSize_> mtFilterState;
+  typedef typename mtFilterState::mtState mtState;
   typedef rovio::PredictionMeas mtPredictionMeas;
   mtPredictionMeas predictionMeas_;
   typedef rovio::ImgUpdateMeas<mtState> mtImgMeas;
   mtImgMeas imgUpdateMeas_;
-  typedef rovio::Filter<mtState> mtFilter;
+  typedef rovio::Filter<mtFilterState> mtFilter;
   mtFilter* mpFilter;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
@@ -83,7 +84,7 @@ class TestFilter{
   mtYprOutput::mtCovMat yprOutputCov_;
   rovio::AttitudeToYprCF attitudeToYprCF_;
 
-  TestFilter(ros::NodeHandle& nh): nh_(nh), mpFilter(new rovio::Filter<mtState>()), cameraOutputCF_(mpFilter->mPrediction_){
+  TestFilter(ros::NodeHandle& nh): nh_(nh), mpFilter(new rovio::Filter<mtFilterState>()), cameraOutputCF_(mpFilter->mPrediction_){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
@@ -140,15 +141,7 @@ class TestFilter{
       mpFilter->mPrediction_.MrMV_ = vec.v_;
       Eigen::Vector2d vec2;
       LWF::NormalVectorElement m_meas;
-      for(unsigned int i=0;i<nMax_;i++){
-        int ind = testState.template get<mtState::_aux>().fManager_.addFeature(feature);
-        testState.template get<mtState::_aux>().fManager_.features_[ind].c_ = cv::Point2f((i*39829)%250,(i*49922)%250);
-        std::get<0>(mpFilter->mUpdates_).mpCamera_->pixelToBearing(testState.template get<mtState::_aux>().fManager_.features_[ind].c_,m_meas);
-        m_meas.boxMinus(testState.template get<mtState::_nor>(ind),vec2);
-        testState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
-      }
-      testState.template get<mtState::_aux>().fManager_.features_[1].currentStatistics_.status_ = rovio::TrackingStatistics::NOTFOUND;
-      testState.template get<mtState::_aux>().fManager_.removeFeature(0);
+      testState.template get<mtState::_aux>().useInUpdate_[0] = false;
       predictionMeas_.setRandom(s);
       imgUpdateMeas_.setRandom(s);
 
@@ -234,7 +227,7 @@ class TestFilter{
       int c1 = std::get<0>(mpFilter->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
-      mpFilter->updateSafe(updateTime);
+      mpFilter->updateSafe(&updateTime);
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -248,12 +241,13 @@ class TestFilter{
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
-      if(!mpFilter->safe_.state_.template get<mtState::_aux>().img_.empty() && std::get<0>(mpFilter->mUpdates_).doDrawTracks_ ){
-        cv::imshow("Tracker", mpFilter->safe_.state_.template get<mtState::_aux>().img_);
+      if(!mpFilter->safe_.img_.empty() && std::get<0>(mpFilter->mUpdates_).doDrawTracks_ ){
+        cv::imshow("Tracker", mpFilter->safe_.img_);
         cv::waitKey(1);
       }
+        mtFilterState& filterState = mpFilter->safe_;
         mtState& state = mpFilter->safe_.state_;
-        mtState::mtCovMat& cov = mpFilter->safe_.cov_;
+        mtFilterState::mtFilterCovMat& cov = mpFilter->safe_.cov_;
         output_ = cameraOutputCF_.transformState(state);
         outputCov_ = cameraOutputCF_.transformCovMat(state,cov);
 
@@ -381,7 +375,7 @@ class TestFilter{
         rovioOutputMsg_.ypr_extrinsics_sigma.z = yprOutputCov_(2,2);
 
         //Point cloud
-        rovio::FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nMax_>& fManager = state.template get<mtState::_aux>().fManager_;
+        rovio::FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
         rovioOutputMsg_.points.header.seq = poseMsgSeq_;
         rovioOutputMsg_.points.header.stamp = ros::Time(mpFilter->safe_.t_);
         rovioOutputMsg_.points.height = 1;

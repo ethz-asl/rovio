@@ -26,15 +26,15 @@
 *
 */
 
-#ifndef CAMERAOUTPUT_HPP_
-#define CAMERAOUTPUT_HPP_
+#ifndef ROVIO_CAMERAOUTPUT_HPP_
+#define ROVIO_CAMERAOUTPUT_HPP_
 
-#include "rovio/FilterState.hpp"
+#include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
 
-class StandardOutput: public State<TH_multiple_elements<VectorElement<3>,3>,QuaternionElement>{
+class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,3>,LWF::QuaternionElement>{
  public:
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _vel = _pos+1;
@@ -46,9 +46,9 @@ class StandardOutput: public State<TH_multiple_elements<VectorElement<3>,3>,Quat
 };
 
 template<typename ImuPrediction>
-class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,StandardOutput>{
+class CameraOutputCF:public LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput>{
  public:
-  typedef CoordinateTransform<typename ImuPrediction::mtState,StandardOutput> Base;
+  typedef LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
@@ -75,8 +75,7 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
         qVM.rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*MrMV));
     output.template get<mtOutput::_att>() = qVM*input.template get<mtInput::_att>().inverted();
   }
-  mtJacInput jacInput(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    mtJacInput J;
+  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     V3D MrMV = mpImuPrediction_->MrMV_;
     QPD qVM = mpImuPrediction_->qVM_;
@@ -105,7 +104,6 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
       J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_vea>()) =
           M3D::Identity();
     }
-    return J;
   }
   void postProcess(mtOutputCovMat& cov,const mtInput& input){
     cov.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtOutput::template getId<mtOutput::_ror>()) += input.template get<mtInput::_aux>().wMeasCov_;
@@ -115,4 +113,4 @@ class CameraOutputCF:public CoordinateTransform<typename ImuPrediction::mtState,
 }
 
 
-#endif /* CAMERAOUTPUT_HPP_ */
+#endif /* ROVIO_CAMERAOUTPUT_HPP_ */

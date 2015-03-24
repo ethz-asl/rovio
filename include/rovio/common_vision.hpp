@@ -26,8 +26,8 @@
 *
 */
 
-#ifndef COMMON_VISION_HPP_
-#define COMMON_VISION_HPP_
+#ifndef ROVIO_COMMON_VISION_HPP_
+#define ROVIO_COMMON_VISION_HPP_
 
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
@@ -870,4 +870,4 @@ void DetectFastCorners(const ImagePyramid<n_levels>& pyr, std::vector<cv::Point2
 }
 
 
-#endif /* COMMON_VISION_HPP_ */
+#endif /* ROVIO_COMMON_VISION_HPP_ */

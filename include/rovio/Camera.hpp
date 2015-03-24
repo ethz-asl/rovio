@@ -26,8 +26,8 @@
 *
 */
 
-#ifndef CAMERA_HPP_
-#define CAMERA_HPP_
+#ifndef ROVIO_CAMERA_HPP_
+#define ROVIO_CAMERA_HPP_
 
 #include <Eigen/Dense>
 #include <opencv2/features2d/features2d.hpp>
@@ -358,4 +358,4 @@ class Camera{
 }
 
 
-#endif /* CAMERA_HPP_ */
+#endif /* ROVIO_CAMERA_HPP_ */

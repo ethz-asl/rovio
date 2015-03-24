@@ -26,15 +26,15 @@
 *
 */
 
-#ifndef YPROUTPUT_HPP_
-#define YPROUTPUT_HPP_
+#ifndef ROVIO_YPROUTPUT_HPP_
+#define ROVIO_YPROUTPUT_HPP_
 
-#include "rovio/FilterState.hpp"
+#include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
 
-class AttitudeOutput: public State<QuaternionElement>{
+class AttitudeOutput: public LWF::State<LWF::QuaternionElement>{
  public:
   static constexpr unsigned int _att = 0;
   AttitudeOutput(){
@@ -42,7 +42,7 @@ class AttitudeOutput: public State<QuaternionElement>{
   ~AttitudeOutput(){};
 };
 
-class YprOutput: public State<VectorElement<3>>{
+class YprOutput: public LWF::State<LWF::VectorElement<3>>{
  public:
   static constexpr unsigned int _ypr = 0;
   YprOutput(){
@@ -50,9 +50,9 @@ class YprOutput: public State<VectorElement<3>>{
   ~YprOutput(){};
 };
 
-class AttitudeToYprCF:public CoordinateTransform<AttitudeOutput,YprOutput>{
+class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput>{
  public:
-  typedef CoordinateTransform<AttitudeOutput,YprOutput> Base;
+  typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
@@ -64,8 +64,7 @@ class AttitudeToYprCF:public CoordinateTransform<AttitudeOutput,YprOutput>{
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     output.template get<mtOutput::_ypr>() = rot::EulerAnglesYprPD(input.template get<mtInput::_att>()).vector();
   }
-  mtJacInput jacInput(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    mtJacInput J;
+  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
 
     rot::EulerAnglesYprPD ypr(input.template get<mtInput::_att>());
@@ -86,12 +85,10 @@ class AttitudeToYprCF:public CoordinateTransform<AttitudeOutput,YprOutput>{
     J(2,0) = 1.0;
     J(2,1) = t3*t5*t6;
     J(2,2) = t3*t4*t6;
-
-    return J;
   }
 };
 
 }
 
 
-#endif /* YPROUTPUT_HPP_ */
+#endif /* ROVIO_YPROUTPUT_HPP_ */

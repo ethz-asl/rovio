@@ -26,14 +26,14 @@
 *
 */
 
-#ifndef ROVIO_FILTER_HPP_
-#define ROVIO_FILTER_HPP_
+#ifndef ROVIO_ROVIO_FILTER_HPP_
+#define ROVIO_ROVIO_FILTER_HPP_
 
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
 #include "lightweight_filtering/FilterBase.hpp"
 #include "lightweight_filtering/State.hpp"
-#include "rovio/FilterState.hpp"
+#include "rovio/FilterStates.hpp"
 #include "rovio/ImgUpdate.hpp"
 #include "rovio/ImuPrediction.hpp"
 #include "rovio/Camera.hpp"
@@ -44,10 +44,10 @@ namespace rovio {
 
 using namespace LWF;
 
-template<typename STATE>
-class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
+template<typename FILTERSTATE>
+class Filter:public FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
  public:
-  typedef FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>> Base;
+  typedef FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
@@ -64,12 +64,11 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
   rovio::Camera camera_;
   std::string cameraCalibrationFile_;
   Filter(){
-    mPrediction_.setCamera(&camera_);
     std::get<0>(mUpdates_).setCamera(&camera_);
     cameraCalibrationFile_ = "calib.yaml";
     stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
     int ind;
-    for(int i=0;i<STATE::nMax_;i++){
+    for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtState::template getId<mtState::_nor>(i);
       doubleRegister_.removeScalarByVar(init_.cov_(ind,ind));
       doubleRegister_.removeScalarByVar(init_.cov_(ind+1,ind+1));
@@ -80,10 +79,10 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().z());
-      std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(init_.outlierDetectionTuple_).getMahalTh(i));
-      std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(init_.outlierDetectionTuple_).getMahalTh(i));
+      std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
+      std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
     }
-    std::get<0>(init_.outlierDetectionTuple_).setEnabledAll(true);
+    std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     reset(0.0);
   }
   void refreshProperties(){
@@ -95,7 +94,7 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
 //    reset(t);
 //  }
   void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
-    init_.state_.initWithAccelerometer(fMeasInit);
+    init_.initWithAccelerometer(fMeasInit);
     reset(t);
   }
 //  void resetToKeyframe(double t = 0.0) {
@@ -114,4 +113,4 @@ class Filter:public FilterBase<ImuPrediction<STATE>,ImgUpdate<STATE>>{
 }
 
 
-#endif /* ROVIO_FILTER_HPP_ */
+#endif /* ROVIO_ROVIO_FILTER_HPP_ */

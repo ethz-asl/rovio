@@ -26,16 +26,16 @@
 *
 */
 
-#ifndef PIXELOUTPUTCF_HPP_
-#define PIXELOUTPUTCF_HPP_
+#ifndef ROVIO_PIXELOUTPUTCF_HPP_
+#define ROVIO_PIXELOUTPUTCF_HPP_
 
-#include "rovio/FilterState.hpp"
+#include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 #include "rovio/Camera.hpp"
 
 namespace rovio {
 
-class PixelOutput: public State<VectorElement<2>>{
+class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
  public:
   static constexpr unsigned int _pix = 0;
   PixelOutput(){
@@ -43,9 +43,9 @@ class PixelOutput: public State<VectorElement<2>>{
   ~PixelOutput(){};
 };
 template<typename STATE>
-class PixelOutputCF:public CoordinateTransform<STATE,PixelOutput>{
+class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput>{
  public:
-  typedef CoordinateTransform<STATE,PixelOutput> Base;
+  typedef LWF::CoordinateTransform<STATE,PixelOutput> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
@@ -71,18 +71,16 @@ class PixelOutputCF:public CoordinateTransform<STATE,PixelOutput>{
     mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
-  mtJacInput jacInput(const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    mtJacInput J;
+  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     cv::Point2f c;
     Eigen::Matrix<double,2,2> J_temp;
     mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c,J_temp);
     J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>(ind_)) = J_temp;
-    return J;
   }
 };
 
 }
 
 
-#endif /* PIXELOUTPUTCF_HPP_ */
+#endif /* ROVIO_PIXELOUTPUTCF_HPP_ */
