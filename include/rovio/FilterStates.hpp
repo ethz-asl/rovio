@@ -157,9 +157,9 @@ class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEl
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>
-class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,false>{
+class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,true>{
  public:
-  typedef LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,false> Base;
+  typedef LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,true> Base;
   typedef typename Base::mtState mtState;
   using Base::state_;
   using Base::cov_;
