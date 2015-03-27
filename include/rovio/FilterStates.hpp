@@ -52,8 +52,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       A_red_[i].setIdentity();
       b_red_[i].setZero();
       bearingMeas_[i].setIdentity();
-      corners_[i][0].setIdentity();
-      corners_[i][1].setIdentity();
+      bearingCorners_[i][0].setZero();
+      bearingCorners_[i][1].setZero();
     }
   };
   ~StateAuxiliary(){};
@@ -64,7 +64,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   Eigen::Matrix2d A_red_[nMax];
   Eigen::Vector2d b_red_[nMax];
   LWF::NormalVectorElement bearingMeas_[nMax];
-  LWF::NormalVectorElement corners_[nMax][2];
+  Eigen::Vector2d bearingCorners_[nMax][2];
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>
@@ -166,10 +166,11 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,Predict
   using Base::usePredictionMerge_;
   FeatureManager<nLevels,patchSize,nMax> fManager_;
   cv::Mat img_; // Mainly used for drawing
+  cv::Mat patchDrawing_; // Mainly used for drawing
   double imgTime_;
   int imageCounter_;
   FilterState(){
-    usePredictionMerge_ = true; // TODO
+    usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
   }

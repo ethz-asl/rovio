@@ -83,7 +83,10 @@ class DrawPoint{
     }
   }
   void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
-    cv::line(drawImg,c_,p.c_,color, thickness);
+    drawLine(drawImg,p.c_,color,thickness);
+  }
+  void drawLine(cv::Mat& drawImg,const cv::Point2f& c,const cv::Scalar& color, int thickness = 2){
+    cv::line(drawImg,c_,c,color, thickness);
   }
   void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
     cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);

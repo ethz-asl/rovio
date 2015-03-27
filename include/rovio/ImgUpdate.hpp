@@ -239,20 +239,22 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     FeatureManager<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
     filterState.imageCounter_++;
 
+    filterState.patchDrawing_ = cv::Mat::zeros(mtState::nMax_*pow(2,mtState::nLevels_-1),mtState::nMax_*pow(2,mtState::nLevels_-1),CV_8UC1); // TODO
+
     cv::Point2f c_temp;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
       fManager.features_[ind].increaseStatistics(lastImageTime);
-      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),c_temp);
+      fManager.features_[ind].currentStatistics_.inFrame_ = mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_)
+          & fManager.features_[ind].isMultilevelPatchInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
+      if(fManager.features_[ind].currentStatistics_.inFrame_){
+        pixelOutputCF_.setIndex(ind);
+        pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+        fManager.features_[ind].log_prediction_.c_ = fManager.features_[ind].c_;
+        fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
 
-      pixelOutputCF_.setIndex(ind);
-      pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
-      fManager.features_[ind].log_prediction_.c_ = c_temp;
-      fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
-
-      fManager.features_[ind].c_ = c_temp;
-      fManager.features_[ind].currentStatistics_.inFrame_ = fManager.features_[ind].isMultilevelPatchInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-      extractPixelCorner(filterState,ind); // For ALL features!
+        extractPixelCorner(filterState,ind); // For ALL features!, TODO: problem with feature which are not visible, do for all
+      }
       fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
       fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
       fManager.features_[ind].log_predictionC2_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] + 4*fManager.features_[ind].corners_[1];
@@ -296,7 +298,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             state.template get<mtState::_aux>().useInUpdate_[ind] = true;
           } else {
             state.template get<mtState::_aux>().useInUpdate_[ind] = false;
-            fManager.features_[ind].currentStatistics_.inFrame_ = false;
+//            fManager.features_[ind].currentStatistics_.inFrame_ = false; // TODO
           }
         } else {
           state.template get<mtState::_aux>().useInUpdate_[ind] = false;
@@ -320,6 +322,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     FeatureManager<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
     MultilevelPatchFeature<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_>* mpFeature;
+    cv::Point2f c_temp;
 
     int countTracked = 0;
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
@@ -334,7 +337,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       // Status Handling
       if((useDirectMethod_ && mpFeature->currentStatistics_.inFrame_)
           || (!useDirectMethod_ && mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND)){
-        if(!outlierDetection.isOutlier(ind)){
+        if(state.template get<mtState::_aux>().useInUpdate_[ind] && !outlierDetection.isOutlier(ind)){
           mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
           countTracked++;
         } else {
@@ -344,19 +347,20 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
 
       // Drawing
       if(mpFeature->currentStatistics_.inFrame_ && doDrawTracks_){
-        mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,255,255));
-        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,255,255),1);
-        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,255,255),1);
+        mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
+        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
+        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
         if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
           mpFeature->log_current_.drawLine(filterState.img_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
           mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 255, 0));
-          mpFeature->log_current_.drawText(filterState.img_,std::to_string(ind),cv::Scalar(0,255,0));
+          mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
         } else if(mpFeature->currentStatistics_.status_ == TrackingStatistics::OUTLIER){
           mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 0, 255));
           mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::OUTLIER,trackingLocalRange_)),cv::Scalar(0,0,255));
         } else {
+          mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0,255,255));
           mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::NOTFOUND,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
         }
       }
@@ -398,13 +402,14 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       mpFeature = &fManager.features_[ind];
       if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){ // TODO correct others as well
         mpFeature->currentStatistics_.inFrame_ = mpFeature->isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-        if(mpFeature->currentStatistics_.inFrame_){
-////          testFeature.c_ = mpFeature->c_; // TODO: clean
-////          testFeature.extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-////          testFeature.computeMultilevelShiTomasiScore();
-////          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){ // TODO: debug and fix
+        if(mpFeature->currentStatistics_.inFrame_){ // TODO: clean
+          testFeature.c_ = mpFeature->c_; // TODO: clean
+          testFeature.extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
+          testFeature.computeMultilevelShiTomasiScore();
+          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){ // TODO: debug and fix
             mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-//          }
+            extractBearingCorner(filterState,ind); // TODO For ALL features!
+          }
         }
       }
     }
@@ -418,9 +423,6 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
 //          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){ //TODO: debug and fix
         fManager.removeFeature(ind);
       }
-//      if(fManager.features_[ind].getLocalQuality(10) < 0.5 || fManager.features_[ind].getLocalVisibilityQuality(10) < 0.5){
-//        fManager.removeFeature(ind);
-//      }
     }
 
     // Check if enough free features
@@ -468,12 +470,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         V3D vec3;
         mpCamera_->pixelToBearing(fManager.features_[ind].c_,vec3);
         filterState.initializeFeatureState(ind,vec3,initDepth_,initCovFeature_);
+        extractBearingCorner(filterState,ind); // TODO: fix in general
       }
-    }
-
-    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-      const int ind = *it_f;
-      extractBearingCorner(filterState,ind); // For ALL features!
     }
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
       const int ind = *it_f;
@@ -483,17 +481,21 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   bool extractBearingCorner(mtFilterState& filterState, const int& ind) const{ // TODO: think about not in frame
     bool success = true;
     cv::Point2f pixelCorner;
+    LWF::NormalVectorElement tempNormal;
     for(unsigned int i=0;i<2;i++){
       pixelCorner = filterState.fManager_.features_[ind].c_+filterState.fManager_.features_[ind].corners_[i];
-      success = success & mpCamera_->pixelToBearing(pixelCorner,filterState.state_.template get<mtState::_aux>().corners_[ind][i]);
+      success = success & mpCamera_->pixelToBearing(pixelCorner,tempNormal);
+      tempNormal.boxMinus(filterState.state_.template get<mtState::_nor>(ind),filterState.state_.template get<mtState::_aux>().bearingCorners_[ind][i]);
     }
     return success;
   }
   bool extractPixelCorner(mtFilterState& filterState, const int& ind) const{ // TODO: think about not in frame
     bool success = true;
     cv::Point2f pixelCorner;
+    LWF::NormalVectorElement tempNormal;
     for(unsigned int i=0;i<2;i++){
-      success = success & mpCamera_->bearingToPixel(filterState.state_.template get<mtState::_aux>().corners_[ind][i],pixelCorner);
+      filterState.state_.template get<mtState::_nor>(ind).boxPlus(filterState.state_.template get<mtState::_aux>().bearingCorners_[ind][i],tempNormal);
+      success = success & mpCamera_->bearingToPixel(tempNormal,pixelCorner);
       filterState.fManager_.features_[ind].corners_[i] = pixelCorner - filterState.fManager_.features_[ind].c_;
     }
     return success;

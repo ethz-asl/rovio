@@ -161,7 +161,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     const V3D imuRor = output.template get<mtState::_aux>().MwIMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
     const V3D dOmega = dt*imuRor;
     QPD dQ = dQ.exponentialMap(-dOmega);
-    QPD qVM = qVM_;
+    QPD qVM = qVM_; // TODO: put in state
     V3D MrMV = MrMV_;
     if(doVECalibration_){
       qVM = state.template get<mtState::_vea>();
@@ -181,24 +181,26 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     output.template get<mtState::_vep>() = state.template get<mtState::_vep>()+noise.template get<mtNoise::_vep>()*sqrt(dt);
     dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>()*sqrt(dt));
     output.template get<mtState::_vea>() = dQ*state.template get<mtState::_vea>();
-    const LWF::NormalVectorElement* mpNormal;
+    LWF::NormalVectorElement tempNormal;
+    LWF::NormalVectorElement oldBearing;
     for(unsigned int i=0;i<mtState::nMax_;i++){
-      mpNormal = &state.template get<mtState::_nor>(i);
+      oldBearing = state.template get<mtState::_nor>(i);
       depthMap_.map(state.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt*p_d
-          *mpNormal->getVec().transpose()*camVel + noise.template get<mtNoise::_dep>(i)*sqrt(dt);
-      V3D dm = dt*(gSM(mpNormal->getVec())*camVel/d
-          + (M3D::Identity()-mpNormal->getVec()*mpNormal->getVec().transpose())*camRor)
-          + mpNormal->getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
+          *oldBearing.getVec().transpose()*camVel + noise.template get<mtNoise::_dep>(i)*sqrt(dt);
+      V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d
+          + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor)
+          + oldBearing.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
-      output.template get<mtState::_nor>(i) = mpNormal->rotated(qm);
+      output.template get<mtState::_nor>(i) = oldBearing.rotated(qm);
       // WARP corners
       for(unsigned int j=0;j<2;j++){
-        mpNormal = &state.template get<mtState::_aux>().corners_[i][j];
-        dm = dt*(gSM(mpNormal->getVec())*camVel/d
-            + (M3D::Identity()-mpNormal->getVec()*mpNormal->getVec().transpose())*camRor);
+        oldBearing.boxPlus(state.template get<mtState::_aux>().bearingCorners_[i][j],tempNormal);
+        dm = dt*(gSM(tempNormal.getVec())*camVel/d
+            + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
         qm = qm.exponentialMap(dm);
-        output.template get<mtState::_aux>().corners_[i][j] = mpNormal->rotated(qm);
+        tempNormal = tempNormal.rotated(qm);
+        tempNormal.boxMinus(output.template get<mtState::_nor>(i),output.template get<mtState::_aux>().bearingCorners_[i][j]);
       }
     }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
