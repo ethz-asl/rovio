@@ -46,13 +46,11 @@ class Camera{
     EQUIDIST
   } type_;
   Matrix3d K_;
-  int h_,w_; // TODO
   double k1_,k2_,k3_,k4_,k5_,k6_;
   double p1_,p2_,s1_,s2_,s3_,s4_;
   Camera(){
     k1_ = 0.0; k2_ = 0.0; k3_ = 0.0; k4_ = 0.0; k5_ = 0.0; k6_ = 0.0;
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
-    h_ = 480; w_ = 752;
     K_.setIdentity();
     type_ = RADTAN;
   };
@@ -219,9 +217,6 @@ class Camera{
     // Shift origin and scale
     c.x = static_cast<float>(K_(0, 0)*distorted(0) + K_(0, 2));
     c.y = static_cast<float>(K_(1, 1)*distorted(1) + K_(1, 2));
-    if(c.x < 0 || c.y < 0 || c.x >= w_ || c.y >= h_){
-      return false;
-    }
     return true;
   }
   bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c, Eigen::Matrix<double,2,3>& J) const{
@@ -248,9 +243,6 @@ class Camera{
 
     J = J3*J2*J1;
 
-    if(c.x < 0 || c.y < 0 || c.x >= w_ || c.y >= h_){
-      return false;
-    }
     return true;
   }
   bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c) const{
@@ -289,8 +281,10 @@ class Camera{
         break;
       }
     }
-    y = ybar;
-    vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
+    if(success){
+      y = ybar;
+      vec = Eigen::Vector3d(y(0),y(1),1.0).normalized();
+    }
     return success;
   }
   bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n) const{

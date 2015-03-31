@@ -64,3 +64,14 @@ target_link_libraries(rovioNode ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenM
 
 add_executable(test_rovio src/test_rovio.cpp)
 target_link_libraries(test_rovio ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/")
+	message(STATUS "Building GTests!")
+	option(BUILD_GTEST "build gtest" ON)
+	#add_subdirectory(gtest gtest)
+	enable_testing()
+	include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
+	add_executable(testVision src/testVision.cpp)
+	target_link_libraries(testVision gtest_main gtest pthread ${catkin_LIBRARIES})
+	add_test(testVision testVision)
+endif()

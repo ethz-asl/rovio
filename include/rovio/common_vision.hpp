@@ -36,6 +36,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <unordered_set>
 #include <Eigen/Eigenvalues>
+#include "rovio/common_vision2.hpp"
 
 using namespace Eigen;
 
@@ -58,67 +59,67 @@ class TrackingStatistics{
   } status_;
 };
 
-class DrawPoint{
- public:
-  cv::Point2f c_;
-  double sigma1_;
-  double sigma2_;
-  double sigmaAngle_;
-  bool hasSigma_;
-  double factor_;
-  Eigen::EigenSolver<Eigen::Matrix2d> es_;
-  DrawPoint(){
-    c_ = cv::Point2f(0,0);
-    sigma1_ = 1.0;
-    sigma2_ = 1.0;
-    hasSigma_ = false;
-    sigmaAngle_ = 0.0;
-    factor_ = 2.0;
-  }
-  void draw(cv::Mat& drawImg,const cv::Scalar& color){
-    cv::Size size(2,2);
-    cv::ellipse(drawImg,c_,size,0,0,360,color,-1,8,0);
-    if(hasSigma_){
-      cv::ellipse(drawImg,c_,cv::Size(std::max(static_cast<int>(factor_*sigma1_+0.5),1),std::max(static_cast<int>(factor_*sigma2_+0.5),1)),sigmaAngle_,0,360,color,1,8,0);
-    }
-  }
-  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
-    drawLine(drawImg,p.c_,color,thickness);
-  }
-  void drawLine(cv::Mat& drawImg,const cv::Point2f& c,const cv::Scalar& color, int thickness = 2){
-    cv::line(drawImg,c_,c,color, thickness);
-  }
-  void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
-    cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
-  }
-  void setSigmaFromCov(const Eigen::Matrix2d& cov){
-    es_.compute(cov);
-    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
-    sigma1_ =  sqrt(es_.eigenvalues()(0).real());
-    sigma2_  = sqrt(es_.eigenvalues()(1).real());
-    hasSigma_ = true;
-  }
-};
-
-template<int n_levels>
-class ImagePyramid{
- public:
-  ImagePyramid(){};
-  ~ImagePyramid(){};
-  cv::Mat imgs_[n_levels];
-  void computeFromImage(const cv::Mat& img){
-    img.copyTo(imgs_[0]);
-    for(int i=1; i<n_levels; ++i){
-      cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
-    }
-  }
-  ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {
-    for(unsigned int i=0;i<n_levels;i++){
-      rhs.imgs_[i].copyTo(imgs_[i]);
-    }
-    return *this;
-  }
-};
+//class DrawPoint{
+// public:
+//  cv::Point2f c_;
+//  double sigma1_;
+//  double sigma2_;
+//  double sigmaAngle_;
+//  bool hasSigma_;
+//  double factor_;
+//  Eigen::EigenSolver<Eigen::Matrix2d> es_;
+//  DrawPoint(){
+//    c_ = cv::Point2f(0,0);
+//    sigma1_ = 1.0;
+//    sigma2_ = 1.0;
+//    hasSigma_ = false;
+//    sigmaAngle_ = 0.0;
+//    factor_ = 2.0;
+//  }
+//  void draw(cv::Mat& drawImg,const cv::Scalar& color){
+//    cv::Size size(2,2);
+//    cv::ellipse(drawImg,c_,size,0,0,360,color,-1,8,0);
+//    if(hasSigma_){
+//      cv::ellipse(drawImg,c_,cv::Size(std::max(static_cast<int>(factor_*sigma1_+0.5),1),std::max(static_cast<int>(factor_*sigma2_+0.5),1)),sigmaAngle_,0,360,color,1,8,0);
+//    }
+//  }
+//  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
+//    drawLine(drawImg,p.c_,color,thickness);
+//  }
+//  void drawLine(cv::Mat& drawImg,const cv::Point2f& c,const cv::Scalar& color, int thickness = 2){
+//    cv::line(drawImg,c_,c,color, thickness);
+//  }
+//  void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
+//    cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
+//  }
+//  void setSigmaFromCov(const Eigen::Matrix2d& cov){
+//    es_.compute(cov);
+//    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
+//    sigma1_ =  sqrt(es_.eigenvalues()(0).real());
+//    sigma2_  = sqrt(es_.eigenvalues()(1).real());
+//    hasSigma_ = true;
+//  }
+//};
+//
+//template<int n_levels>
+//class ImagePyramid{
+// public:
+//  ImagePyramid(){};
+//  ~ImagePyramid(){};
+//  cv::Mat imgs_[n_levels];
+//  void computeFromImage(const cv::Mat& img){
+//    img.copyTo(imgs_[0]);
+//    for(int i=1; i<n_levels; ++i){
+//      cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
+//    }
+//  }
+//  ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {
+//    for(unsigned int i=0;i<n_levels;i++){
+//      rhs.imgs_[i].copyTo(imgs_[i]);
+//    }
+//    return *this;
+//  }
+//};
 
 template<int size>
 class PatchNew {

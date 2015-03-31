@@ -414,7 +414,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
     }
 
-    // Remove bad feature // TODO: cleanup
+    // Remove bad feature // TODO: cleanup, try to keep simple
     averageScore = fManager.getAverageScore();
     for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
       const int ind = *it_f;
