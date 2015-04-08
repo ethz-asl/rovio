@@ -41,6 +41,27 @@
 
 namespace rovio{
 
+enum MatchingStatus{
+  NOTMATCHED,
+  NOTFOUND,
+  FOUND
+};
+enum TrackingStatus{
+  NOTTRACKED,
+  FAILED,
+  TRACKED
+};
+struct Status{
+  bool inFrame_;
+  MatchingStatus matchingStatus_;
+  TrackingStatus trackingStatus_;
+  Status(){
+    inFrame_ = false;
+    matchingStatus_ = NOTMATCHED;
+    trackingStatus_ = NOTTRACKED;
+  }
+};
+
 class DrawPoint{
  public:
   cv::Point2f c_;
@@ -83,21 +104,44 @@ class DrawPoint{
   }
 };
 
+void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
+  imgOut.create(imgIn.rows/2,imgIn.cols/2,imgIn.type());
+  const int refStepIn = imgIn.step.p[0];
+  const int refStepOut = imgOut.step.p[0];
+  uint8_t* imgPtrInTop;
+  uint8_t* imgPtrInBot;
+  uint8_t* imgPtrOut;
+  for(int y=0; y<imgOut.rows; ++y){
+    imgPtrInTop =  imgIn.data + 2*y*refStepIn;
+    imgPtrInBot =  imgIn.data + (2*y+1)*refStepIn;
+    imgPtrOut = imgOut.data + y*refStepOut;
+    for(int x=0; x<imgOut.cols; ++x, ++imgPtrOut, imgPtrInTop += 2, imgPtrInBot += 2)
+    {
+      *imgPtrOut = (imgPtrInTop[0]+imgPtrInTop[1]+imgPtrInBot[0]+imgPtrInBot[1])/4;
+    }
+  }
+}
+
 template<int n_levels>
 class ImagePyramid{
  public:
   ImagePyramid(){};
   ~ImagePyramid(){};
   cv::Mat imgs_[n_levels];
+  cv::Point2f centers_[n_levels];
   void computeFromImage(const cv::Mat& img){
     img.copyTo(imgs_[0]);
+    centers_[0] = cv::Point2f(0,0);
     for(int i=1; i<n_levels; ++i){
-      cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
+      halfSample(imgs_[i-1],imgs_[i]); // TODO: check speed
+      centers_[i].x = centers_[i-1].x-pow(0.5,2-i)*(float)(imgs_[i-1].rows%2);
+      centers_[i].y = centers_[i-1].y-pow(0.5,2-i)*(float)(imgs_[i-1].cols%2);
     }
   }
   ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {
     for(unsigned int i=0;i<n_levels;i++){
       rhs.imgs_[i].copyTo(imgs_[i]);
+      centers_[i] = rhs.centers_[i];
     }
     return *this;
   }
@@ -127,8 +171,8 @@ template<int size>
 class Patch2 {
  public:
   static constexpr int size_ = size;
-  uint8_t patch_[size_*size_] __attribute__ ((aligned (16)));
-  uint8_t patchWithBorder_[(size_+2)*(size_+2)] __attribute__ ((aligned (16)));
+  float patch_[size_*size_] __attribute__ ((aligned (16)));
+  float patchWithBorder_[(size_+2)*(size_+2)] __attribute__ ((aligned (16)));
   float dx_[size_*size_] __attribute__ ((aligned (16)));
   float dy_[size_*size_] __attribute__ ((aligned (16)));
   Eigen::Matrix3f H_;
@@ -145,7 +189,7 @@ class Patch2 {
     const int refStep = size_+2;
     float* it_dx = dx_;
     float* it_dy = dy_;
-    uint8_t* it;
+    float* it;
     Eigen::Vector3f J;
     for(int y=0; y<size_; ++y){
       it = patchWithBorder_ + (y+1)*refStep + 1;
@@ -166,8 +210,8 @@ class Patch2 {
     validGradientParameters = true;
   }
   void extractPatchFromPatchWithBorder(){
-    uint8_t* it_patch = patch_;
-    uint8_t* it_patchWithBorder;
+    float* it_patch = patch_;
+    float* it_patchWithBorder;
     for(int y=1; y<size_+1; ++y, it_patch += size_){
       it_patchWithBorder = patchWithBorder_ + y*(size_+2) + 1;
       for(int x=0; x<size_; ++x)
@@ -182,6 +226,21 @@ class Patch2 {
     if(!validGradientParameters) computeGradientParameters();
     return H_;
   }
+  void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,const bool withBorder = false){
+    const int refStep = drawImg.step.p[0];
+    uint8_t* img_ptr;
+    float* it_patch;
+    if(withBorder){
+      it_patch = patchWithBorder_;
+    } else {
+      it_patch = patch_;
+    }
+    for(int y=0; y<size_+2*(int)withBorder; ++y, it_patch += size_+2*(int)withBorder){
+      img_ptr = (uint8_t*) drawImg.data + (c.y+y)*refStep + c.x;
+      for(int x=0; x<size_+2*(int)withBorder; ++x)
+        img_ptr[x] = (uint8_t)(it_patch[x]);
+    }
+  }
 };
 
 template<int size>
@@ -195,37 +254,101 @@ bool isPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv::Point
 }
 
 template<int size>
-void extractPatchWithBorderFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c){
-  assert(isPatchInFrame(patch,img,c,true));
-  const int halfpatch_size = Patch2<size>::size_/2+1;
+bool isWarpedPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
+  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  for(int x = 0;x<2;x++){
+    for(int y = 0;y<2;y++){
+      const float dx = halfpatch_size*(2*x-1);
+      const float dy = halfpatch_size*(2*y-1);
+      const float wdx = aff(0,0)*dx + aff(0,1)*dy;
+      const float wdy = aff(1,0)*dx + aff(1,1)*dy;
+      const float c_x = c.x + wdx;
+      const float c_y = c.y + wdy;
+      if(c_x < 0 || c_y < 0 || c_x > img.cols || c_y > img.rows){
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+template<int size>
+void extractPatchFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c, const bool withBorder = true){
+  assert(isPatchInFrame(patch,img,c,withBorder));
+  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
   const int refStep = img.step.p[0];
-  const float u = c.x;
-  const float v = c.y;
-  const int u_r = floor(u);
-  const int v_r = floor(v);
+  const int u_r = floor(c.x);
+  const int v_r = floor(c.y);
 
   // compute interpolation weights
-  const float subpix_x = u-u_r;
-  const float subpix_y = v-v_r;
+  const float subpix_x = c.x-u_r;
+  const float subpix_y = c.y-v_r;
   const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
   const float wTR = subpix_x * (1.0-subpix_y);
   const float wBL = (1.0-subpix_x)*subpix_y;
   const float wBR = subpix_x * subpix_y;
 
   // Extract Patch
-  uint8_t* patch_ptr = patch.patchWithBorder_;
+  float* patch_ptr;
+  if(withBorder){
+    patch_ptr = patch.patchWithBorder_;
+  } else {
+    patch_ptr = patch.patch_;
+  }
   uint8_t* img_ptr;
-  float intensity;
-  for(int y=0; y<(Patch2<size>::size_+2); ++y){
+  for(int y=0; y<2*halfpatch_size; ++y){
     img_ptr = (uint8_t*) img.data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
-    for(int x=0; x<(Patch2<size>::size_+2); ++x, ++img_ptr, ++patch_ptr)
+    for(int x=0; x<2*halfpatch_size; ++x, ++img_ptr, ++patch_ptr)
     {
-      intensity = wTL*img_ptr[0];
-      if(subpix_x > 0) intensity += wTR*img_ptr[1];
-      if(subpix_y > 0) intensity += wBL*img_ptr[refStep];
-      if(subpix_x > 0 && subpix_y > 0) intensity += wBR*img_ptr[refStep+1];
-      *patch_ptr = intensity;
+      *patch_ptr = wTL*img_ptr[0];
+      if(subpix_x > 0) *patch_ptr += wTR*img_ptr[1];
+      if(subpix_y > 0) *patch_ptr += wBL*img_ptr[refStep];
+      if(subpix_x > 0 && subpix_y > 0) *patch_ptr += wBR*img_ptr[refStep+1];
     }
+  }
+  if(withBorder){
+    patch.extractPatchFromPatchWithBorder();
+  }
+}
+
+template<int size>
+void extractWarpedPatchFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
+  assert(isWarpedPatchInFrame(patch,img,c,aff,withBorder));
+  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  const int refStep = img.step.p[0];
+  uint8_t* img_ptr;
+  float* patch_ptr;
+  if(withBorder){
+    patch_ptr = patch.patchWithBorder_;
+  } else {
+    patch_ptr = patch.patch_;
+  }
+  for(int y=0; y<2*halfpatch_size; ++y){
+    for(int x=0; x<2*halfpatch_size; ++x, ++patch_ptr){
+      const float dx = x - halfpatch_size + 0.5;
+      const float dy = y - halfpatch_size + 0.5;
+      const float wdx = aff(0,0)*dx + aff(0,1)*dy;
+      const float wdy = aff(1,0)*dx + aff(1,1)*dy;
+      const float u_pixel = c.x+wdx - 0.5;
+      const float v_pixel = c.y+wdy - 0.5;
+      const int u_r = floor(u_pixel);
+      const int v_r = floor(v_pixel);
+      const float subpix_x = u_pixel-u_r;
+      const float subpix_y = v_pixel-v_r;
+      const float wTL = (1.0-subpix_x) * (1.0-subpix_y);
+      const float wTR = subpix_x * (1.0-subpix_y);
+      const float wBL = (1.0-subpix_x) * subpix_y;
+      const float wBR = subpix_x * subpix_y;
+      img_ptr = (uint8_t*) img.data + v_r*refStep + u_r;
+      *patch_ptr = wTL*img_ptr[0];
+      if(subpix_x > 0) *patch_ptr += wTR*img_ptr[1];
+      if(subpix_y > 0) *patch_ptr += wBL*img_ptr[refStep];
+      if(subpix_x > 0 && subpix_y > 0) *patch_ptr += wBR*img_ptr[refStep+1];
+
+    }
+  }
+  if(withBorder){
+    patch.extractPatchFromPatchWithBorder();
   }
 }
 
@@ -266,26 +389,7 @@ class MultilevelPatchFeature2{
   DrawPoint log_meas_;
   DrawPoint log_current_;
 
-  enum MatchingStatus{
-    NotMatched,
-    NotFound,
-    Found
-  };
-  enum TrackingStatus{
-    NotTracked,
-    Failed,
-    Tracked
-  };
-  struct Status{
-    bool inFrame_;
-    MatchingStatus matchingStatus_;
-    TrackingStatus trackingStatus_;
-    Status(){
-      inFrame_ = false;
-      matchingStatus_ = NotMatched;
-      trackingStatus_ = NotTracked;
-    }
-  } status_;
+  Status status_;
   std::map<MatchingStatus,int> cumulativeMatchingStatus_;
   std::map<TrackingStatus,int> cumulativeTrackingStatus_;
   int inFrameCount_;
@@ -320,7 +424,7 @@ class MultilevelPatchFeature2{
       isValidPatch_[i] = false;
     }
   }
-  const cv::Point2f& get_c_(){
+  const cv::Point2f& get_c(){
     if(!valid_c_){
       if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
         valid_c_ = true;
@@ -330,7 +434,7 @@ class MultilevelPatchFeature2{
     }
     return c_;
   }
-  const LWF::NormalVectorElement& get_nor_(){
+  const LWF::NormalVectorElement& get_nor(){
     if(!valid_nor_){
       if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
         valid_nor_ = true;
@@ -340,27 +444,27 @@ class MultilevelPatchFeature2{
     }
     return nor_;
   }
-  void set_c_(const cv::Point2f& c){
+  void set_c(const cv::Point2f& c){
     c_ = c;
     valid_c_ = true;
     valid_nor_ = false;
   }
-  void set_nor_(const LWF::NormalVectorElement& nor){
+  void set_nor(const LWF::NormalVectorElement& nor){
     nor_ = nor;
     valid_nor_ = true;
     valid_c_ = false;
   }
-  const PixelCorners& get_pixelCorners_(){
+  const PixelCorners& get_pixelCorners(){
     if(!valid_pixelCorners_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
       if(valid_bearingCorners_){
         for(unsigned int i=0;i<2;i++){
-          get_nor_().boxPlus(bearingCorners_[i],tempNormal);
+          get_nor().boxPlus(bearingCorners_[i],tempNormal);
           if(!mpCamera_->bearingToPixel(tempNormal,tempPixel)){
             std::cout << "ERROR: Problem during bearing corner to pixel mapping!" << std::endl;
           }
-          pixelCorners_[i] = tempPixel - get_c_();
+          pixelCorners_[i] = tempPixel - get_c();
         }
         valid_pixelCorners_ = true;
       } else if(valid_affineTransform_) {
@@ -375,27 +479,27 @@ class MultilevelPatchFeature2{
     }
     return pixelCorners_;
   }
-  const BearingCorners& get_bearingCorners_(){
+  const BearingCorners& get_bearingCorners(){
     if(!valid_bearingCorners_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
-      cv::Point2f* mpPixelCorners = get_pixelCorners_();
+      get_pixelCorners();
       for(unsigned int i=0;i<2;i++){
-        tempPixel = get_c_()+pixelCorners_[i];
+        tempPixel = get_c()+pixelCorners_[i];
         if(!mpCamera_->pixelToBearing(tempPixel,tempNormal)){
           std::cout << "ERROR: Problem during pixel corner to bearing mapping!" << std::endl;
         }
-        tempNormal.boxMinus(get_nor_(),bearingCorners_[i]);
+        tempNormal.boxMinus(get_nor(),bearingCorners_[i]);
       }
       valid_bearingCorners_ = true;
     }
     return bearingCorners_;
   }
-  const Eigen::Matrix2f& get_affineTransform_(){
+  const Eigen::Matrix2f& get_affineTransform(){
     if(!valid_affineTransform_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
-      cv::Point2f* mpPixelCorners = get_pixelCorners_();
+      get_pixelCorners();
       for(unsigned int i=0;i<2;i++){
         affineTransform_(0,i) = pixelCorners_[i].x/warpDistance_;
         affineTransform_(1,i) = pixelCorners_[i].y/warpDistance_;
@@ -467,16 +571,20 @@ class MultilevelPatchFeature2{
     int countTracked = 0;
     int countInFrame = 0;
     if(status_.inFrame_){
-      if(status_.trackingStatus_ == Tracked) countTracked++;
+      if(status_.trackingStatus_ == TRACKED) countTracked++;
       countInFrame++;
     }
     for(auto it = statistics_.rbegin();countInFrame<localRange && it != statistics_.rend();++it){
       if(it->second.inFrame_){
-        if(it->second.trackingStatus_ == Tracked) countTracked++;
+        if(it->second.trackingStatus_ == TRACKED) countTracked++;
         countInFrame++;
       }
     }
-    return static_cast<double>(countTracked)/static_cast<double>(countInFrame);
+    if(countInFrame == 0){
+      return 0;
+    } else {
+      return static_cast<double>(countTracked)/static_cast<double>(countInFrame);
+    }
   }
   double getLocalVisibilityQuality(const int localRange = 200){
     int countTot = 0;
@@ -490,10 +598,10 @@ class MultilevelPatchFeature2{
     return static_cast<double>(countInFrame)/static_cast<double>(countTot);
   }
   double getGlobalQuality(const int frameCountRef = 100){
-    const double trackingRatio = static_cast<double>(countTrackingStatistics(Tracked))/static_cast<double>(countTot());
+    const double trackingRatio = static_cast<double>(countTrackingStatistics(TRACKED))/static_cast<double>(countTot());
     return trackingRatio*std::min(static_cast<double>(countTot())/frameCountRef,1.0);
   }
-  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.9, const double lower = 0.1){
+  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.8, const double lower = 0.1){
     const double globalQuality = getGlobalQuality();
     const double localQuality = getLocalQuality(localRange);
     const double localVisibilityQuality = getLocalVisibilityQuality(localVisibilityRange);
@@ -526,7 +634,7 @@ class MultilevelPatchFeature2{
     }
   }
   void getSpecificLevelScore(const int l){
-    if(patches_[l].hasValidPatch_){
+    if(isValidPatch_[l]){
       s_ = patches_[l].getScore();
     } else {
       s_ = -1;
@@ -535,30 +643,61 @@ class MultilevelPatchFeature2{
 };
 
 template<int n_levels,int patch_size>
-bool isMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
-  const cv::Point2f c = mlp.c_*pow(0.5,l);
-  return isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,true);
+bool isMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1,const bool withBorder = false){
+  const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,l);
+  return isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,withBorder);
 }
 
 template<int n_levels,int patch_size>
-void extractMultilevelPatchFromImage(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
-  for(unsigned int i=0;i<l;i++){
-    const cv::Point2f c = mlp.c_*pow(0.5,i);
+bool isWarpedMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = false){
+  const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,l);
+  return isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,mlp.get_affineTransform(),withBorder);
+}
+
+template<int n_levels,int patch_size>
+void extractMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
+  for(unsigned int i=0;i<=l;i++){
+    const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
     mlp.isValidPatch_[i] = isPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,true);
     if(mlp.isValidPatch_[i]){
-      extractPatchWithBorderFromImage(mlp.patches_[i],pyr.imgs_[i],c);
+      extractPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c);
     }
   }
   mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
 }
 
 template<int n_levels,int patch_size>
-bool getLinearAlignEquations(const MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2,
+void extractWarpedMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
+  for(unsigned int i=0;i<=l;i++){
+    const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
+    mlp.isValidPatch_[i] = isWarpedPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),true);
+    if(mlp.isValidPatch_[i]){
+      extractWarpedPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform());
+    }
+  }
+}
+
+template<int n_levels>
+cv::Point2f levelTranformCoordinates(const cv::Point2f c,const ImagePyramid<n_levels>& pyr,const int l1, const int l2){
+  assert(l1<n_levels && l2<n_levels);
+  return (pyr.centers_[l1]-pyr.centers_[l2])*pow(0.5,l2)+c*pow(0.5,l2-l1);
+}
+
+template<int n_levels,int patch_size>
+bool getLinearAlignEquations(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2,
                              const bool doWarping, Eigen::MatrixXf& A, Eigen::MatrixXf& b){
+  Eigen::Matrix2f aff;
+  if(doWarping){
+    aff = mlp.get_affineTransform(); // TODO: catch if too distorted
+  } else {
+    aff.setIdentity();
+  }
   int numLevel = 0;
   for(int l = l1; l <= l2; l++){
-    const cv::Point2f c_level = mlp.c_*pow(0.5,l);
-    if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    if(mlp.isValidPatch_[l] &&
+        (doWarping || isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,false)) &&
+        (!doWarping || isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,aff,false))){
       numLevel++;
       mlp.patches_[l].computeGradientParameters();
     }
@@ -568,8 +707,7 @@ bool getLinearAlignEquations(const MultilevelPatchFeature2<n_levels,patch_size>&
   }
   A.resize(numLevel*patch_size*patch_size,2);
   b.resize(numLevel*patch_size*patch_size,1);
-  Eigen::Matrix2d aff = mlp.get_affineTransform_(); // TODO: catch if too distorted, or if warping not required, pass matrix here (as member of feature)
-  Eigen::Matrix2d affInv = aff.inverse();
+  Eigen::Matrix2f affInv = aff.inverse();
   const int halfpatch_size = patch_size/2;
   float mean_diff = 0;
   float mean_diff_dx = 0;
@@ -578,92 +716,42 @@ bool getLinearAlignEquations(const MultilevelPatchFeature2<n_levels,patch_size>&
 
   int count = 0;
   for(int l = l1; l <= l2; l++, count++){
-    const cv::Point2f c_level = mlp.c_*pow(0.5,l);
-    if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){ // TODO: adapt to wapring
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    if(mlp.isValidPatch_[l] &&
+        (doWarping || isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,false)) &&
+        (!doWarping || isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,aff,false))){
       const int refStep = pyr.imgs_[l].step.p[0];
-      const float u_level = c_level.x;
-      const float v_level = c_level.y;
 
-      uint8_t* it_patch = mlp.patches_[l].patch_;
+      float* it_patch = mlp.patches_[l].patch_;
       float* it_dx = mlp.patches_[l].dx_;
       float* it_dy = mlp.patches_[l].dy_;
       if(!doWarping){
-        const int u_r = floor(u_level);
-        const int v_r = floor(v_level);
-        // compute interpolation weights
-        const float subpix_x = u_level-u_r;
-        const float subpix_y = v_level-v_r;
-        const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
-        const float wTR = subpix_x * (1.0-subpix_y);
-        const float wBL = (1.0-subpix_x)*subpix_y;
-        const float wBR = subpix_x * subpix_y;
-
-        uint8_t* it_img;        // loop through search_patch, interpolate
-        for(int y=0; y<patch_size; ++y){
-          it_img = (uint8_t*) pyr.imgs_[l].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
-          for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
-            const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
-            const float res = intensity - *it_patch;
-            const float Jx = -pow(0.5,l)*(*it_dx);
-            const float Jy = -pow(0.5,l)*(*it_dy);
-            mean_diff += res;
-            mean_diff_dx += Jx;
-            mean_diff_dy += Jy;
-            b((count-l1)*patch_size*patch_size+y*patch_size+x,0) = res;
-            A((count-l1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
-            A((count-l1)*patch_size*patch_size+y*patch_size+x,1) = Jy;
-          }
-        }
-//        extractPatchWithBorderFromImage(extractedPatch,pyr.imgs_[l],c_level); // TODO: change to patch with warp extraction
-//        uint8_t* it_patch_extracted = extractedPatch.patch_;
-//        for(int y=0; y<patch_size; ++y){
-//          for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
-//            const float res = *it_patch_extracted - *it_patch;
-//            const float Jx = -pow(0.5,l)*(*it_dx);
-//            const float Jy = -pow(0.5,l)*(*it_dy);
-//            mean_diff += res;
-//            mean_diff_dx += Jx;
-//            mean_diff_dy += Jy;
-//            b((count-l1)*patch_size*patch_size+y*patch_size+x,0) = res;
-//            A((count-l1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
-//            A((count-l1)*patch_size*patch_size+y*patch_size+x,1) = Jy;
-//          }
-//        }
+        extractPatchFromImage(extractedPatch,pyr.imgs_[l],c_level,false);
       } else {
-      for(int y=0; y<patch_size; ++y){ // TODO: renaming
-        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
-          const float dx = x - halfpatch_size;
-          const float dy = y - halfpatch_size;
-          const float wdx = aff(0,0)*dx + aff(0,1)*dy;
-          const float wdy = aff(1,0)*dx + aff(1,1)*dy;
-          const float u_pixel = u_level+wdx;
-          const float v_pixel = v_level+wdy;
-          const int u_pixel_r = floor(u_pixel);
-          const int v_pixel_r = floor(v_pixel);
-          if(u_pixel_r < 0 || v_pixel_r < 0 || u_pixel_r >= pyr.imgs_[l].cols-1 || v_pixel_r >= pyr.imgs_[l].rows-1){ // TODO: check limits
-            return false;
-          }
-          const float pixel_subpix_x = u_pixel-u_pixel_r;
-          const float pixel_subpix_y = v_pixel-v_pixel_r;
-          const float pixel_wTL = (1.0-pixel_subpix_x) * (1.0-pixel_subpix_y);
-          const float pixel_wTR = pixel_subpix_x * (1.0-pixel_subpix_y);
-          const float pixel_wBL = (1.0-pixel_subpix_x) * pixel_subpix_y;
-          const float pixel_wBR = pixel_subpix_x * pixel_subpix_y;
-          const uint8_t* pixel_data = (uint8_t*) pyr.imgs_[l].data + v_pixel_r*refStep + u_pixel_r;
-          const float pixel_intensity = pixel_wTL*pixel_data[0] + pixel_wTR*pixel_data[1] + pixel_wBL*pixel_data[refStep] + pixel_wBR*pixel_data[refStep+1];
-          const float res = pixel_intensity - *it_patch;
+        extractWarpedPatchFromImage(extractedPatch,pyr.imgs_[l],c_level,aff,false);
+      }
+      float* it_patch_extracted = extractedPatch.patch_;
+      for(int y=0; y<patch_size; ++y){
+        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
+          const float res = *it_patch_extracted - *it_patch;
           const float Jx = -pow(0.5,l)*(*it_dx);
           const float Jy = -pow(0.5,l)*(*it_dy);
-          const float Jx_warp = Jx*affInv(0,0)+Jy*affInv(1,0);
-          const float Jy_warp = Jx*affInv(0,1)+Jy*affInv(1,1);
           mean_diff += res;
-          mean_diff_dx += Jx_warp;
-          mean_diff_dy += Jy_warp;
-          b((count-l1)*patch_size*patch_size+y*patch_size+x,0) = res;
-          A((count-l1)*patch_size*patch_size+y*patch_size+x,0) = Jx_warp;
-          A((count-l1)*patch_size*patch_size+y*patch_size+x,1) = Jy_warp;
+          b(count*patch_size*patch_size+y*patch_size+x,0) = res;
+          if(!doWarping){
+            mean_diff_dx += Jx;
+            mean_diff_dy += Jy;
+            A(count*patch_size*patch_size+y*patch_size+x,0) = Jx;
+            A(count*patch_size*patch_size+y*patch_size+x,1) = Jy;
+          } else {
+            const float Jx_warp = Jx*affInv(0,0)+Jy*affInv(1,0);
+            const float Jy_warp = Jx*affInv(0,1)+Jy*affInv(1,1);
+            mean_diff_dx += Jx_warp;
+            mean_diff_dy += Jy_warp;
+            A(count*patch_size*patch_size+y*patch_size+x,0) = Jx_warp;
+            A(count*patch_size*patch_size+y*patch_size+x,1) = Jy_warp;
+          }
         }
-      }
       }
     }
   }
@@ -681,8 +769,8 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature2<n_levels,patch_size>
   bool success = getLinearAlignEquations(mlp,pyr,l1,l2,doWarping,mlp.A_,mlp.b_);
   if(success){
     mlp.mColPivHouseholderQR_.compute(mlp.A_);
-    b_red = (mlp.mColPivHouseholderQR_.householderQ().inverse()*mlp.b_).block<2,1>(0,0);
-    A_red = mlp.mColPivHouseholderQR_.matrixR().block<2,2>(0,0);
+    b_red = (mlp.mColPivHouseholderQR_.householderQ().inverse()*mlp.b_).template block<2,1>(0,0);
+    A_red = mlp.mColPivHouseholderQR_.matrixR().template block<2,2>(0,0);
     A_red(1,0) = 0.0;
     A_red = A_red*mlp.mColPivHouseholderQR_.colsPermutation();
   }
@@ -702,10 +790,11 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature2<n_levels,patch_size>
 }
 
 template<int n_levels,int patch_size>
-bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2, const bool doWarping){
+bool align2D_old(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,
+                 const int l1, const int l2, const bool doWarping, const int maxIter = 10, const double minPixUpd = 0.03){
   int numLevel = 0;
-  for(int l = l1; l <= l2; l++){ // TODO: correct level handling everywhere
-    const cv::Point2f c_level = mlp.c_*pow(0.5,l);
+  for(int l = l1; l <= l2; l++){
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
     if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
       numLevel++;
       mlp.patches_[l].computeGradientParameters();
@@ -715,110 +804,118 @@ bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyram
     return false;
   }
   Eigen::Matrix3f aff = Eigen::Matrix3f::Identity();
-  aff.block<2,2>(0,0) = mlp.get_affineTransform_(); // TODO: catch if too distorted, or if warping not required, pass matrix here (as member of feature)
+  if(doWarping){
+    aff.block<2,2>(0,0) = mlp.get_affineTransform();
+  }
   Eigen::Matrix3f affInv = aff.inverse();
   const int halfpatch_size = patch_size/2;
   bool converged=false;
   Eigen::Matrix3f H; H.setZero();
   for(int l = l1; l <= l2; l++){
-    mlp.patches_[l].computeGradientParameters();
-    H(0,0) += pow(0.25,l)*mlp.patches_[l].H_(0,0);
-    H(0,1) += pow(0.25,l)*mlp.patches_[l].H_(0,1);
-    H(1,0) += pow(0.25,l)*mlp.patches_[l].H_(1,0);
-    H(1,1) += pow(0.25,l)*mlp.patches_[l].H_(1,1);
-    H(2,0) += pow(0.5,l)*mlp.patches_[l].H_(2,0);
-    H(2,1) += pow(0.5,l)*mlp.patches_[l].H_(2,1);
-    H(0,2) += pow(0.5,l)*mlp.patches_[l].H_(0,2);
-    H(1,2) += pow(0.5,l)*mlp.patches_[l].H_(1,2);
-    H(2,2) += mlp.patches_[l].H_(2,2);
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
+      mlp.patches_[l].computeGradientParameters();
+      H(0,0) += pow(0.25,l)*mlp.patches_[l].H_(0,0);
+      H(0,1) += pow(0.25,l)*mlp.patches_[l].H_(0,1);
+      H(1,0) += pow(0.25,l)*mlp.patches_[l].H_(1,0);
+      H(1,1) += pow(0.25,l)*mlp.patches_[l].H_(1,1);
+      H(2,0) += pow(0.5,l)*mlp.patches_[l].H_(2,0);
+      H(2,1) += pow(0.5,l)*mlp.patches_[l].H_(2,1);
+      H(0,2) += pow(0.5,l)*mlp.patches_[l].H_(0,2);
+      H(1,2) += pow(0.5,l)*mlp.patches_[l].H_(1,2);
+      H(2,2) += mlp.patches_[l].H_(2,2);
+    }
   }
   Eigen::Matrix3f Hinv = H.inverse();
   float mean_diff = 0;
-  const int max_iter = 10;
 
-  // Compute pixel location in new image:
-  float u = mlp.c_.x;
-  float v = mlp.c_.y;
 
   // termination condition
-  const float min_update_squared = 0.03*0.03; // TODO: param
+  const float min_update_squared = minPixUpd*minPixUpd;
+  cv::Point2f c_temp = mlp.c_;
   Eigen::Vector3f update; update.setZero();
-  for(int iter = 0; iter<max_iter; ++iter){
-    if(isnan(u) || isnan(v)){ // TODO check
+  for(int iter = 0; iter<maxIter; ++iter){
+    if(isnan(c_temp.x) || isnan(c_temp.y)){
+      assert(false);
       return false;
     }
     Eigen::Vector3f Jres; Jres.setZero();
+    int count = 0;
     for(int l = l1; l <= l2; l++){
-      const int refStep = pyr.imgs_[l].step.p[0];
-      const float u_level = u*pow(0.5,l);
-      const float v_level = v*pow(0.5,l);
+      const cv::Point2f c_level = levelTranformCoordinates(c_temp,pyr,0,l);
+      if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
+        const int refStep = pyr.imgs_[l].step.p[0];
 
-      uint8_t* it_patch = mlp.patches_[l].patch_;
-      float* it_dx = mlp.patches_[l].dx_;
-      float* it_dy = mlp.patches_[l].dy_;
-      if(!doWarping){
-        const int u_r = floor(u_level);
-        const int v_r = floor(v_level);
-        if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[l].cols-halfpatch_size || v_r >= pyr.imgs_[l].rows-halfpatch_size){ // TODO: check limits
-          return false;
-        }
-        // compute interpolation weights
-        const float subpix_x = u_level-u_r;
-        const float subpix_y = v_level-v_r;
-        const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
-        const float wTR = subpix_x * (1.0-subpix_y);
-        const float wBL = (1.0-subpix_x)*subpix_y;
-        const float wBR = subpix_x * subpix_y;
-
-        uint8_t* it_img;        // loop through search_patch, interpolate
-        for(int y=0; y<patch_size; ++y){
-          it_img = (uint8_t*) pyr.imgs_[l].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
-          for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
-            const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
-            const float res = intensity - *it_patch + mean_diff;
-            Jres[0] -= pow(0.5,l)*res*(*it_dx);
-            Jres[1] -= pow(0.5,l)*res*(*it_dy);
-            Jres[2] -= res;
+        float* it_patch = mlp.patches_[l].patch_;
+        float* it_dx = mlp.patches_[l].dx_;
+        float* it_dy = mlp.patches_[l].dy_;
+        if(!doWarping){
+          const int u_r = floor(c_level.x);
+          const int v_r = floor(c_level.y);
+          if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[l].cols-halfpatch_size || v_r >= pyr.imgs_[l].rows-halfpatch_size){ // TODO: check limits
+            return false;
           }
-        }
-      } else {
-        for(int y=0; y<patch_size; ++y){ // TODO: renaming
-          for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
-            const float dx = x - halfpatch_size;
-            const float dy = y - halfpatch_size;
-            const float wdx = aff(0,0)*dx + aff(0,1)*dy;
-            const float wdy = aff(1,0)*dx + aff(1,1)*dy;
-            const float u_pixel = u_level+wdx;
-            const float v_pixel = v_level+wdy;
-            const int u_pixel_r = floor(u_pixel);
-            const int v_pixel_r = floor(v_pixel);
-            if(u_pixel_r < 0 || v_pixel_r < 0 || u_pixel_r >= pyr.imgs_[l].cols-1 || v_pixel_r >= pyr.imgs_[l].rows-1){ // TODO: check limits
-              return false;
+          // compute interpolation weights
+          const float subpix_x = c_level.x-u_r;
+          const float subpix_y = c_level.y-v_r;
+          const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
+          const float wTR = subpix_x * (1.0-subpix_y);
+          const float wBL = (1.0-subpix_x)*subpix_y;
+          const float wBR = subpix_x * subpix_y;
+
+          uint8_t* it_img;        // loop through search_patch, interpolate
+          for(int y=0; y<patch_size; ++y){
+            it_img = (uint8_t*) pyr.imgs_[l].data + (v_r+y-halfpatch_size)*refStep + u_r-halfpatch_size;
+            for(int x=0; x<patch_size; ++x, ++it_img, ++it_patch, ++it_dx, ++it_dy){
+              const float intensity = wTL*it_img[0] + wTR*it_img[1] + wBL*it_img[refStep] + wBR*it_img[refStep+1];
+              const float res = intensity - *it_patch + mean_diff;
+              Jres[0] -= pow(0.5,l)*res*(*it_dx);
+              Jres[1] -= pow(0.5,l)*res*(*it_dy);
+              Jres[2] -= res;
             }
-            const float pixel_subpix_x = u_pixel-u_pixel_r;
-            const float pixel_subpix_y = v_pixel-v_pixel_r;
-            const float pixel_wTL = (1.0-pixel_subpix_x) * (1.0-pixel_subpix_y);
-            const float pixel_wTR = pixel_subpix_x * (1.0-pixel_subpix_y);
-            const float pixel_wBL = (1.0-pixel_subpix_x) * pixel_subpix_y;
-            const float pixel_wBR = pixel_subpix_x * pixel_subpix_y;
-            const uint8_t* pixel_data = (uint8_t*) pyr.imgs_[l].data + v_pixel_r*refStep + u_pixel_r;
-            const float pixel_intensity = pixel_wTL*pixel_data[0] + pixel_wTR*pixel_data[1] + pixel_wBL*pixel_data[refStep] + pixel_wBR*pixel_data[refStep+1];
-            const float res = pixel_intensity - *it_patch + mean_diff;
-            Jres[0] -= pow(0.5,l)*res*(*it_dx);
-            Jres[1] -= pow(0.5,l)*res*(*it_dy);
-            Jres[2] -= res;
+          }
+        } else {
+          for(int y=0; y<patch_size; ++y){ // TODO: renaming
+            for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
+              const float dx = x - halfpatch_size + 0.5;
+              const float dy = y - halfpatch_size + 0.5;
+              const float wdx = aff(0,0)*dx + aff(0,1)*dy;
+              const float wdy = aff(1,0)*dx + aff(1,1)*dy;
+              const float u_pixel = c_level.x + wdx - 0.5;
+              const float v_pixel = c_level.y + wdy - 0.5;
+              const int u_pixel_r = floor(u_pixel);
+              const int v_pixel_r = floor(v_pixel);
+              if(u_pixel_r < 0 || v_pixel_r < 0 || u_pixel_r >= pyr.imgs_[l].cols-1 || v_pixel_r >= pyr.imgs_[l].rows-1){ // TODO: check limits
+                return false;
+              }
+              const float pixel_subpix_x = u_pixel-u_pixel_r;
+              const float pixel_subpix_y = v_pixel-v_pixel_r;
+              const float pixel_wTL = (1.0-pixel_subpix_x) * (1.0-pixel_subpix_y);
+              const float pixel_wTR = pixel_subpix_x * (1.0-pixel_subpix_y);
+              const float pixel_wBL = (1.0-pixel_subpix_x) * pixel_subpix_y;
+              const float pixel_wBR = pixel_subpix_x * pixel_subpix_y;
+              const uint8_t* pixel_data = (uint8_t*) pyr.imgs_[l].data + v_pixel_r*refStep + u_pixel_r;
+              const float pixel_intensity = pixel_wTL*pixel_data[0] + pixel_wTR*pixel_data[1] + pixel_wBL*pixel_data[refStep] + pixel_wBR*pixel_data[refStep+1];
+              const float res = pixel_intensity - *it_patch + mean_diff;
+              Jres[0] -= pow(0.5,l)*res*(*it_dx);
+              Jres[1] -= pow(0.5,l)*res*(*it_dy);
+              Jres[2] -= res;
+            }
           }
         }
+        count++;
       }
     }
-
+    if(count==0){
+      return false;
+    }
     if(!doWarping){
       update = Hinv * Jres;
     } else {
       update = aff * Hinv * Jres;
     }
-    u += update[0];
-    v += update[1];
+    c_temp.x += update[0];
+    c_temp.y += update[1];
     mean_diff += update[2];
 
     if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
@@ -827,10 +924,43 @@ bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyram
     }
   }
 
-  mlp.c_.x = u;
-  mlp.c_.y = v;
+  mlp.c_ = c_temp;
   return converged;
 }
+
+template<int n_levels,int patch_size>
+bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,
+             const int l1, const int l2, const bool doWarping, const int maxIter = 10, const double minPixUpd = 0.03){
+  // termination condition
+  const float min_update_squared = minPixUpd*minPixUpd;
+  cv::Point2f c_backup = mlp.c_;
+  Eigen::Vector2f update; update.setZero();
+  bool converged = false;
+  for(int iter = 0; iter<maxIter; ++iter){
+    if(isnan(mlp.c_.x) || isnan(mlp.c_.y)){
+      assert(false);
+      mlp.c_ = c_backup;
+      return false;
+    }
+    if(!getLinearAlignEquations(mlp,pyr,l1,l2,doWarping,mlp.A_,mlp.b_)){
+      mlp.c_ = c_backup;
+      return false;
+    }
+    update = mlp.A_.jacobiSvd(ComputeThinU | ComputeThinV).solve(mlp.b_);
+    mlp.c_.x += update[0];
+    mlp.c_.y += update[1];
+
+    if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
+      converged=true;
+      break;
+    }
+  }
+  if(converged == false){
+    mlp.c_ = c_backup;
+  }
+  return converged;
+}
+
 template<int n_levels,int patch_size>
 bool align2DSingleLevel(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l, const bool doWarping){
   return align2D(mlp,pyr,l,l,doWarping);
@@ -1030,7 +1160,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
 //  feature_detector_fast.detect(pyr.imgs_[l], keypoints);
 //  detected_keypoints.reserve(keypoints.size());
 //  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
-//    detected_keypoints.emplace_back(it->pt.x*pow(2.0,l), it->pt.y*pow(2.0,l));
+//    detected_keypoints.emplace_back(it->pt.x*pow(2.0,l), it->pt.y*pow(2.0,l)); // TODO adapt coordinates
 //  }
 //}
 

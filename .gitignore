@@ -4,6 +4,7 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 install_manifest.txt
+gtest
 
 # Compiled Object files
 *.slo
