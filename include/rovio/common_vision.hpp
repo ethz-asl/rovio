@@ -859,17 +859,17 @@ class FeatureManager{
     }
   }
 };
-
-template <int n_levels>
-void DetectFastCorners(const ImagePyramid<n_levels>& pyr, std::vector<cv::Point2f>& detected_keypoints,int level) {
-  std::vector<cv::KeyPoint> keypoints;
-  cv::FastFeatureDetector feature_detector_fast(10, true); // TODO param
-  feature_detector_fast.detect(pyr.imgs_[level], keypoints);
-  detected_keypoints.reserve(keypoints.size());
-  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
-    detected_keypoints.emplace_back(it->pt.x*pow(2.0,level), it->pt.y*pow(2.0,level));
-  }
-}
+//
+//template <int n_levels>
+//void DetectFastCorners(const ImagePyramid<n_levels>& pyr, std::vector<cv::Point2f>& detected_keypoints,int level) {
+//  std::vector<cv::KeyPoint> keypoints;
+//  cv::FastFeatureDetector feature_detector_fast(10, true); // TODO param
+//  feature_detector_fast.detect(pyr.imgs_[level], keypoints);
+//  detected_keypoints.reserve(keypoints.size());
+//  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
+//    detected_keypoints.emplace_back(it->pt.x*pow(2.0,level), it->pt.y*pow(2.0,level));
+//  }
+//}
 
 }
 

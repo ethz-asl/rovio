@@ -133,7 +133,8 @@ class ImagePyramid{
     img.copyTo(imgs_[0]);
     centers_[0] = cv::Point2f(0,0);
     for(int i=1; i<n_levels; ++i){
-      halfSample(imgs_[i-1],imgs_[i]); // TODO: check speed
+//      halfSample(imgs_[i-1],imgs_[i]); // TODO: check speed
+      cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
       centers_[i].x = centers_[i-1].x-pow(0.5,2-i)*(float)(imgs_[i-1].rows%2);
       centers_[i].y = centers_[i-1].y-pow(0.5,2-i)*(float)(imgs_[i-1].cols%2);
     }
@@ -170,30 +171,29 @@ struct BearingCorners{
 template<int size>
 class Patch2 {
  public:
-  static constexpr int size_ = size;
-  float patch_[size_*size_] __attribute__ ((aligned (16)));
-  float patchWithBorder_[(size_+2)*(size_+2)] __attribute__ ((aligned (16)));
-  float dx_[size_*size_] __attribute__ ((aligned (16)));
-  float dy_[size_*size_] __attribute__ ((aligned (16)));
+  float patch_[size*size] __attribute__ ((aligned (16)));
+  float patchWithBorder_[(size+2)*(size+2)] __attribute__ ((aligned (16)));
+  float dx_[size*size] __attribute__ ((aligned (16)));
+  float dy_[size*size] __attribute__ ((aligned (16)));
   Eigen::Matrix3f H_;
   float s_;
-  bool validGradientParameters;
+  bool validGradientParameters_;
   Patch2(){
-    static_assert(size_%2==0,"Patch size must be a multiple of 2");
-    validGradientParameters = false;
+    static_assert(size%2==0,"Patch size must be a multiple of 2");
+    validGradientParameters_ = false;
     s_ = 0.0;
   }
   ~Patch2(){}
   void computeGradientParameters(){
     H_.setZero();
-    const int refStep = size_+2;
+    const int refStep = size+2;
     float* it_dx = dx_;
     float* it_dy = dy_;
     float* it;
     Eigen::Vector3f J;
-    for(int y=0; y<size_; ++y){
+    for(int y=0; y<size; ++y){
       it = patchWithBorder_ + (y+1)*refStep + 1;
-      for(int x=0; x<size_; ++x, ++it, ++it_dx, ++it_dy){
+      for(int x=0; x<size; ++x, ++it, ++it_dx, ++it_dy){
         J[0] = 0.5 * (it[1] - it[-1]);
         J[1] = 0.5 * (it[refStep] - it[-refStep]);
         J[2] = 1;
@@ -202,31 +202,31 @@ class Patch2 {
         H_ += J*J.transpose();
       }
     }
-    const float dXX = H_(0,0)/(size_*size_);
-    const float dYY = H_(1,1)/(size_*size_);
-    const float dXY = H_(0,1)/(size_*size_);
+    const float dXX = H_(0,0)/(size*size);
+    const float dYY = H_(1,1)/(size*size);
+    const float dXY = H_(0,1)/(size*size);
     // Find and return smaller eigenvalue:
     s_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
-    validGradientParameters = true;
+    validGradientParameters_ = true;
   }
   void extractPatchFromPatchWithBorder(){
     float* it_patch = patch_;
     float* it_patchWithBorder;
-    for(int y=1; y<size_+1; ++y, it_patch += size_){
-      it_patchWithBorder = patchWithBorder_ + y*(size_+2) + 1;
-      for(int x=0; x<size_; ++x)
+    for(int y=1; y<size+1; ++y, it_patch += size){
+      it_patchWithBorder = patchWithBorder_ + y*(size+2) + 1;
+      for(int x=0; x<size; ++x)
         it_patch[x] = it_patchWithBorder[x];
     }
   }
   float getScore(){
-    if(!validGradientParameters) computeGradientParameters();
+    if(!validGradientParameters_) computeGradientParameters();
     return s_;
   }
   Eigen::Matrix3f getHessian(){
-    if(!validGradientParameters) computeGradientParameters();
+    if(!validGradientParameters_) computeGradientParameters();
     return H_;
   }
-  void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,const bool withBorder = false){
+  void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false){
     const int refStep = drawImg.step.p[0];
     uint8_t* img_ptr;
     float* it_patch;
@@ -235,17 +235,21 @@ class Patch2 {
     } else {
       it_patch = patch_;
     }
-    for(int y=0; y<size_+2*(int)withBorder; ++y, it_patch += size_+2*(int)withBorder){
-      img_ptr = (uint8_t*) drawImg.data + (c.y+y)*refStep + c.x;
-      for(int x=0; x<size_+2*(int)withBorder; ++x)
-        img_ptr[x] = (uint8_t)(it_patch[x]);
+    for(int y=0; y<size+2*(int)withBorder; ++y, it_patch += size+2*(int)withBorder){
+      img_ptr = (uint8_t*) drawImg.data + (c.y+y*stretch)*refStep + c.x;
+      for(int x=0; x<size+2*(int)withBorder; ++x)
+        for(int i=0;i<stretch;++i){
+          for(int j=0;j<stretch;++j){
+            img_ptr[x*stretch+i*refStep+j] = (uint8_t)(it_patch[x]);
+          }
+        }
     }
   }
 };
 
 template<int size>
 bool isPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c,const bool withBorder = false){
-  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  const int halfpatch_size = size/2+(int)withBorder;
   if(c.x < halfpatch_size || c.y < halfpatch_size || c.x > img.cols-halfpatch_size || c.y > img.rows-halfpatch_size){
     return false;
   } else {
@@ -255,7 +259,7 @@ bool isPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv::Point
 
 template<int size>
 bool isWarpedPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
-  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  const int halfpatch_size = size/2+(int)withBorder;
   for(int x = 0;x<2;x++){
     for(int y = 0;y<2;y++){
       const float dx = halfpatch_size*(2*x-1);
@@ -275,7 +279,7 @@ bool isWarpedPatchInFrame(const Patch2<size>& patch,const cv::Mat& img,const cv:
 template<int size>
 void extractPatchFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c, const bool withBorder = true){
   assert(isPatchInFrame(patch,img,c,withBorder));
-  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  const int halfpatch_size = size/2+(int)withBorder;
   const int refStep = img.step.p[0];
   const int u_r = floor(c.x);
   const int v_r = floor(c.y);
@@ -314,7 +318,7 @@ void extractPatchFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Poin
 template<int size>
 void extractWarpedPatchFromImage(Patch2<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
   assert(isWarpedPatchInFrame(patch,img,c,aff,withBorder));
-  const int halfpatch_size = Patch2<size>::size_/2+(int)withBorder;
+  const int halfpatch_size = size/2+(int)withBorder;
   const int refStep = img.step.p[0];
   uint8_t* img_ptr;
   float* patch_ptr;
@@ -395,6 +399,10 @@ class MultilevelPatchFeature2{
   int inFrameCount_;
   std::map<double,Status> statistics_;
 
+  MultilevelPatchFeature2(){
+    mpCamera_ == nullptr;
+    reset();
+  }
   MultilevelPatchFeature2(const Camera* mpCamera): mpCamera_(mpCamera){
     reset();
   }
@@ -615,10 +623,10 @@ class MultilevelPatchFeature2{
      * How strong we need place for new features
      */
   }
-  void computeMultilevelShiTomasiScore(){
+  void computeMultilevelShiTomasiScore(const int l1 = 0, const int l2 = nLevels_-1){
     H_.setZero();
     int count = 0;
-    for(unsigned int i=0;i<nLevels_;i++){
+    for(int i=l1;i<=l2;i++){
       if(isValidPatch_[i]){
         H_ += pow(0.25,i)*patches_[i].getHessian();
         count++;
@@ -640,6 +648,14 @@ class MultilevelPatchFeature2{
       s_ = -1;
     }
   }
+  void drawMultilevelPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false){
+    for(int l=nLevels_-1;l>=0;l--){
+      if(isValidPatch_[l]){
+        cv::Point2i corner = cv::Point2i((patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)),(patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)));
+        patches_[l].drawPatch(drawImg,c+corner,stretch*pow(2,l),withBorder);
+      }
+    }
+  }
 };
 
 template<int n_levels,int patch_size>
@@ -655,24 +671,24 @@ bool isWarpedMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch
 }
 
 template<int n_levels,int patch_size>
-void extractMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
+void extractMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = true){
   for(unsigned int i=0;i<=l;i++){
     const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
-    mlp.isValidPatch_[i] = isPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,true);
+    mlp.isValidPatch_[i] = isPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
     if(mlp.isValidPatch_[i]){
-      extractPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c);
+      extractPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
     }
   }
   mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
 }
 
 template<int n_levels,int patch_size>
-void extractWarpedMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1){
+void extractWarpedMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = true){
   for(unsigned int i=0;i<=l;i++){
     const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
-    mlp.isValidPatch_[i] = isWarpedPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),true);
+    mlp.isValidPatch_[i] = isWarpedPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
     if(mlp.isValidPatch_[i]){
-      extractWarpedPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform());
+      extractWarpedPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
     }
   }
 }
@@ -965,6 +981,20 @@ template<int n_levels,int patch_size>
 bool align2DSingleLevel(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l, const bool doWarping){
   return align2D(mlp,pyr,l,l,doWarping);
 }
+template<int n_levels,int patch_size>
+void align2DComposed(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){
+  cv::Point2f c_backup = mlp.c_;
+  mlp.status_.matchingStatus_ = FOUND;
+  for(int l = end_level+num_seq;l>=end_level;--l){
+    if(!align2D(mlp,pyr,l,start_level,doWarping)){
+      mlp.status_.matchingStatus_ = NOTFOUND;
+      break;
+    }
+  }
+  if(mlp.status_.matchingStatus_ == NOTFOUND){
+    mlp.c_ = c_backup;
+  }
+}
 
 template<int n_levels,int patch_size,int nMax>
 class MultilevelPatchSet{
@@ -972,14 +1002,18 @@ class MultilevelPatchSet{
   MultilevelPatchFeature2<n_levels,patch_size> features_[nMax];
   bool isValid_[nMax];
   int maxIdx_;
-  MultilevelPatchSet(){
+  MultilevelPatchSet(const Camera* mpCamera = nullptr){
+    reset(mpCamera);
+  }
+  ~MultilevelPatchSet(){}
+  void reset(const Camera* mpCamera = nullptr){
     maxIdx_ = 0;
     for(unsigned int i=0;i<nMax;i++){
+      features_[i].setCamera(mpCamera);
       isValid_[i] = false;
     }
   }
-  ~MultilevelPatchSet(){}
-  bool getFreeIndex(int ind) const{
+  bool getFreeIndex(int& ind) const{
     for(unsigned int i=0;i<nMax;i++){
       if(isValid_[i] == false){
         ind = i;
@@ -996,10 +1030,11 @@ class MultilevelPatchSet{
     return count;
   }
   int addFeature(const MultilevelPatchFeature2<n_levels,patch_size>& feature){
-    unsigned int newInd = -1;
+    int newInd = -1;
     if(getFreeIndex(newInd)){
       features_[newInd] = feature;
       features_[newInd].idx_ = maxIdx_++;
+      isValid_[newInd] = true;
     } else {
       std::cout << "Feature Manager: maximal number of feature reached" << std::endl;
     }
@@ -1020,21 +1055,28 @@ class MultilevelPatchSet{
 };
 
 template<int n_levels,int patch_size,int nMax>
-std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const ImagePyramid<n_levels>& pyr,
-                                                   const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
+std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const ImagePyramid<n_levels>& pyr, const double initTime,
+                                                   const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                    const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
   std::unordered_set<unsigned int> newSet;
   std::list<MultilevelPatchFeature2<n_levels,patch_size>> candidatesWithPatch;
   float maxScore = -1.0;
   for(auto it = candidates.begin(); it != candidates.end(); ++it){
-    candidatesWithPatch.emplace_back(0,*it);
-    extractMultilevelPatchFromImage(*candidatesWithPatch.rbegin(),pyr);
-    candidatesWithPatch.rbegin()->computeMultilevelShiTomasiScore();
-    if(candidatesWithPatch.rbegin()->s_ > maxScore) maxScore = candidatesWithPatch.rbegin()->s_;
+    candidatesWithPatch.emplace_back();
+    candidatesWithPatch.rbegin()->reset(-1,initTime);
+    candidatesWithPatch.rbegin()->c_ = *it;
+    if(isMultilevelPatchInFrame(*candidatesWithPatch.rbegin(),pyr,n_levels-1,true)){
+      extractMultilevelPatchFromImage(*candidatesWithPatch.rbegin(),pyr,n_levels-1,true);
+      candidatesWithPatch.rbegin()->computeMultilevelShiTomasiScore(l1,l2);
+      if(candidatesWithPatch.rbegin()->s_ > maxScore) maxScore = candidatesWithPatch.rbegin()->s_;
+    } else {
+      candidatesWithPatch.rbegin()->s_ = -1;
+    }
   }
   if(maxScore <= minScore){
     return newSet;
   }
+
 
   // Make buckets and fill based on score
   std::vector<std::unordered_set<MultilevelPatchFeature2<n_levels,patch_size>*>> buckets(nDetectionBuckets,std::unordered_set<MultilevelPatchFeature2<n_levels,patch_size>*>());
@@ -1112,63 +1154,35 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   }
   return newSet;
 }
-//  void alignFeaturesCom(const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){ // TODO: clean
-//    cv::Point2f c_new;
-//    MultilevelPatchFeature2<n_levels,patch_size>* mpFeature;
-//    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
-//      mpFeature = &features_[*it_f];
-//      if(mpFeature->currentStatistics_.inFrame_){
-//        c_new = mpFeature->c_;
-//        mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
-//        for(int l = end_level+num_seq;l>=end_level;--l){
-//          if(!mpFeature->align2D(pyr,c_new,l,start_level,doWarping)){
-//            mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
-//            break;
-//          }
-//        }
-//        if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
-//          mpFeature->c_ = c_new;
-//        }
-//      }
-//    }
-//  }
-//  void alignFeaturesSingle(const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const bool doWarping){
-//    cv::Point2f c_new;
-//    MultilevelPatchFeature2<n_levels,patch_size>* mpFeature;
-//    for(auto it_f = validSet_.begin(); it_f != validSet_.end();++it_f){
-//      mpFeature = &features_[*it_f];
-//      if(mpFeature->currentStatistics_.inFrame_){
-//        c_new = mpFeature->c_;
-//        mpFeature->currentStatistics_.status_ = TrackingStatistics::FOUND;
-//        for(int l = start_level;l>=end_level;--l){
-//          if(!mpFeature->align2DSingleLevel(pyr,c_new,l,doWarping) && l==end_level){
-//            mpFeature->currentStatistics_.status_ = TrackingStatistics::NOTFOUND;
-//            break;
-//          }
-//        }
-//        if(mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND){
-//          mpFeature->c_ = c_new;
-//        }
-//      }
-//    }
-//  }
 
-//template <int n_levels>
-//void DetectFastCorners(const ImagePyramid<n_levels>& pyr, std::vector<cv::Point2f>& detected_keypoints,int l) {
-//  std::vector<cv::KeyPoint> keypoints;
-//  cv::FastFeatureDetector feature_detector_fast(10, true); // TODO param
-//  feature_detector_fast.detect(pyr.imgs_[l], keypoints);
-//  detected_keypoints.reserve(keypoints.size());
-//  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
-//    detected_keypoints.emplace_back(it->pt.x*pow(2.0,l), it->pt.y*pow(2.0,l)); // TODO adapt coordinates
-//  }
-//}
+template <int n_levels> // TODO: delete
+void DetectFastCorners(const ImagePyramid<n_levels>& pyr, std::vector<cv::Point2f>& detected_keypoints,int l) {
+  std::vector<cv::KeyPoint> keypoints;
+  cv::FastFeatureDetector feature_detector_fast(10, true); // TODO param
+  feature_detector_fast.detect(pyr.imgs_[l], keypoints);
+  detected_keypoints.reserve(keypoints.size());
+  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
+    detected_keypoints.emplace_back(it->pt.x*pow(2.0,l), it->pt.y*pow(2.0,l)); // TODO adapt coordinates
+  }
+}
+
+template <int n_levels>
+void detectFastCorners(const ImagePyramid<n_levels>& pyr, std::list<cv::Point2f>& candidates,int l,int detectionThreshold) {
+  std::vector<cv::KeyPoint> keypoints;
+  cv::FastFeatureDetector feature_detector_fast(detectionThreshold, true);
+  feature_detector_fast.detect(pyr.imgs_[l], keypoints);
+  cv::Point2f level_c;
+  for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
+    level_c = cv::Point2f(it->pt.x, it->pt.y);
+    candidates.push_back(levelTranformCoordinates(level_c,pyr,l,0));
+  }
+}
 
 template<int n_levels,int patch_size,int nMax>
 void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates){ // TODO: add corner motion dependency
   constexpr float t2 = patch_size*patch_size; // TODO: param
   bool prune;
-  MultilevelPatchFeature2<n_levels,patch_size>* mpFeature;
+  const MultilevelPatchFeature2<n_levels,patch_size>* mpFeature;
   for (auto it = candidates.begin(); it != candidates.end();) {
     prune = false;
     for(unsigned int i=0;i<nMax;i++){
@@ -1181,7 +1195,7 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
       }
     }
     if(prune){
-      candidates.erase(it);
+      it = candidates.erase(it);
     } else {
       it++;
     }

@@ -42,9 +42,8 @@ class PatchTesting : public virtual ::testing::Test {
 // Test constructors
 TEST_F(PatchTesting, constructors) {
   Patch2<(this->patchSize_)> p;
-  ASSERT_EQ(p.validGradientParameters,false);
+  ASSERT_EQ(p.validGradientParameters_,false);
   ASSERT_EQ(p.s_,0.0);
-  ASSERT_EQ((int)(p.size_),(int)(this->patchSize_));
 }
 
 // Test isPatchInFrame
