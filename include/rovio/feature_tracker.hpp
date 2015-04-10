@@ -88,7 +88,7 @@ class FeatureTrackerNode{
     double current_time = img->header.stamp.toSec();
 
     // Pyramid
-    pyr_.computeFromImage(img_);
+    pyr_.computeFromImage(img_,true);
 
     // Drawing
     cvtColor(img_, draw_image_, CV_GRAY2RGB);

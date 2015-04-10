@@ -129,14 +129,19 @@ class ImagePyramid{
   ~ImagePyramid(){};
   cv::Mat imgs_[n_levels];
   cv::Point2f centers_[n_levels];
-  void computeFromImage(const cv::Mat& img){
+  void computeFromImage(const cv::Mat& img, const bool useCv = false){
     img.copyTo(imgs_[0]);
     centers_[0] = cv::Point2f(0,0);
     for(int i=1; i<n_levels; ++i){
-//      halfSample(imgs_[i-1],imgs_[i]); // TODO: check speed
-      cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
-      centers_[i].x = centers_[i-1].x-pow(0.5,2-i)*(float)(imgs_[i-1].rows%2);
-      centers_[i].y = centers_[i-1].y-pow(0.5,2-i)*(float)(imgs_[i-1].cols%2);
+      if(!useCv){
+        halfSample(imgs_[i-1],imgs_[i]); // TODO: check speed
+        centers_[i].x = centers_[i-1].x-pow(0.5,2-i)*(float)(imgs_[i-1].rows%2);
+        centers_[i].y = centers_[i-1].y-pow(0.5,2-i)*(float)(imgs_[i-1].cols%2);
+      } else {
+        cv::pyrDown(imgs_[i-1],imgs_[i],cv::Size(imgs_[i-1].cols/2, imgs_[i-1].rows/2));
+        centers_[i].x = centers_[i-1].x-pow(0.5,2-i)*(float)((imgs_[i-1].rows%2)+1);
+        centers_[i].y = centers_[i-1].y-pow(0.5,2-i)*(float)((imgs_[i-1].cols%2)+1);
+      }
     }
   }
   ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {

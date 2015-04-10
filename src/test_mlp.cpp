@@ -276,8 +276,9 @@ TEST_F(MLPTesting, isMultilevelPatchInFrame) {
   }
 }
 
-// Test extractMultilevelPatchFromImage (tests halpSampling as well)
+// Test extractMultilevelPatchFromImage (tests computeFromImage as well)
 TEST_F(MLPTesting, extractMultilevelPatchFromImage) {
+  pyr1_.computeFromImage(img1_,false);
   mlp_.c_ = cv::Point2f(imgSize_/2,imgSize_/2);
   extractMultilevelPatchFromImage(mlp_,pyr1_);
   for(unsigned int l=0;l<nLevels_;l++){
@@ -287,7 +288,24 @@ TEST_F(MLPTesting, extractMultilevelPatchFromImage) {
       for(int j=0;j<patchSize_+2;j++, ++patch_ptr){
         const cv::Point2f c(i*pow(2,l)+imgSize_/2-(patchSize_/2+1.0-0.5)*pow(2,l)-0.5,
                             j*pow(2,l)+imgSize_/2-(patchSize_/2+1.0-0.5)*pow(2,l)-0.5);
-        ASSERT_EQ(*patch_ptr,(float)(uint8_t)(c.x*dy_+c.y*dx_));
+        ASSERT_EQ(*patch_ptr,(float)(uint8_t)(c.x*dy_+c.y*dx_)); // down-sampling of image rounds to float, thus the casting
+      }
+    }
+  }
+  ASSERT_EQ(mlp_.get_affineTransform(),Eigen::Matrix2f::Identity());
+
+  pyr1_.computeFromImage(img1_,true);
+  mlp_.c_ = cv::Point2f(imgSize_/2,imgSize_/2);
+  extractMultilevelPatchFromImage(mlp_,pyr1_);
+  for(unsigned int l=0;l<nLevels_;l++){
+    std::cout << l << std::endl;
+    ASSERT_EQ(mlp_.isValidPatch_[l],true);
+    float* patch_ptr = mlp_.patches_[l].patch_; // Border effect, thus only valid for inner patch
+    for(int i=0;i<patchSize_;i++){
+      for(int j=0;j<patchSize_;j++, ++patch_ptr){
+        const cv::Point2f c(i*pow(2,l)+imgSize_/2-(patchSize_/2-0.5)*pow(2,l)-0.5,
+                            j*pow(2,l)+imgSize_/2-(patchSize_/2-0.5)*pow(2,l)-0.5);
+        ASSERT_EQ(*patch_ptr,(float)(c.x*dy_+c.y*dx_)); // down-sampling hits integer thus no casting required
       }
     }
   }
