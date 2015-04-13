@@ -1,6 +1,6 @@
-#include "rovio/common_vision2.hpp"
 #include "gtest/gtest.h"
 #include <assert.h>
+#include "../include/rovio/common_vision.hpp"
 
 using namespace rovio;
 
@@ -13,7 +13,7 @@ class PatchTesting : public virtual ::testing::Test {
   static const int dy_ = 3;
   cv::Mat img1_;
   cv::Mat img2_;
-  Patch2<patchSize_> p_;
+  Patch<patchSize_> p_;
   cv::Point2f c_;
   PatchTesting(){
     img1_ = cv::Mat::zeros(imgSize_,imgSize_,CV_8UC1);
@@ -41,7 +41,7 @@ class PatchTesting : public virtual ::testing::Test {
 
 // Test constructors
 TEST_F(PatchTesting, constructors) {
-  Patch2<(this->patchSize_)> p;
+  Patch<(this->patchSize_)> p;
   ASSERT_EQ(p.validGradientParameters_,false);
   ASSERT_EQ(p.s_,0.0);
 }

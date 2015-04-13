@@ -164,7 +164,6 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,Predict
   using Base::state_;
   using Base::cov_;
   using Base::usePredictionMerge_;
-  FeatureManager<nLevels,patchSize,nMax> fManager_;
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
   cv::Mat img_; // Mainly used for drawing
   cv::Mat patchDrawing_; // Mainly used for drawing

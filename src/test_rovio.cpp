@@ -123,12 +123,11 @@ class TestFilter{
 
     bool makeTest = true;
     if(makeTest){
+      // TODO: clean
       mtState testState;
       unsigned int s = 2;
       testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
       rovio::MultilevelPatchFeature<nLevels_,patchSize_> feature;
-      feature.increaseStatistics(0.0);
-      feature.currentStatistics_.status_ = rovio::TrackingStatistics::FOUND;
       LWF::QuaternionElement q;
       LWF::VectorElement<3> vec;
       LWF::QuaternionElement q_temp;
@@ -375,14 +374,9 @@ class TestFilter{
         rovioOutputMsg_.ypr_extrinsics_sigma.z = yprOutputCov_(2,2);
 
         //Point cloud
-        rovio::FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
         rovioOutputMsg_.points.header.seq = poseMsgSeq_;
         rovioOutputMsg_.points.header.stamp = ros::Time(mpFilter->safe_.t_);
         rovioOutputMsg_.points.height = 1;
-        rovioOutputMsg_.points.width = fManager.validSet_.size();
-        for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-
-        }
 
         pubRovioOutput_.publish(rovioOutputMsg_);
         pubOdometry_.publish(odometryMsg_);

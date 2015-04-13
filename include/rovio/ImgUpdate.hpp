@@ -232,33 +232,22 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
   }
   void preProcess(mtFilterState& filterState, const mtMeas& meas, const int s = 0){
-    // TODO: cleanup
+    assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
-    double lastImageTime = 0.0;
-    if(!filterState.img_.empty()){ // TODO: fix
-      lastImageTime = filterState.imgTime_;
-    }
     cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], filterState.img_, CV_GRAY2RGB);
-    filterState.imgTime_ = meas.template get<mtMeas::_aux>().imgTime_;
-//    FeatureManager<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
+    filterState.imgTime_ = filterState.t_;
     filterState.imageCounter_++;
-
     filterState.patchDrawing_ = cv::Mat::zeros(mtState::nMax_*pow(2,mtState::nLevels_-1),mtState::nMax_*pow(2,mtState::nLevels_-1),CV_8UC1); // TODO
 
-
-
-
-    assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
-    double current_time = filterState.t_;
-    MultilevelPatchFeature2<mtState::nLevels_,mtState::patchSize_>* mpFeature;
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     Eigen::Vector2d vec2;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
         mpFeature = &filterState.mlps_.features_[i];
         // Data handling stuff
         mpFeature->set_nor(state.template get<mtState::_nor>(i));
-        mpFeature->increaseStatistics(current_time);
+        mpFeature->increaseStatistics(filterState.t_);
 
         // Check if prediction in frame
         mpFeature->status_.inFrame_ = isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,false,doPatchWarping_);
@@ -274,7 +263,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           mpFeature->log_predictionC2_.c_ = mpFeature->get_c() - 4*pixelCorners[0] + 4*pixelCorners[1];
           mpFeature->log_predictionC3_.c_ = mpFeature->get_c() + 4*pixelCorners[0] + 4*pixelCorners[1];
 
-          // Search patch
+          // Search patch // TODO: do adaptive
           align2DComposed(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           if(mpFeature->status_.matchingStatus_ == FOUND) mpFeature->log_meas_.c_ = mpFeature->get_c();
 
@@ -310,82 +299,6 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         state.template get<mtState::_aux>().useInUpdate_[i] = false;
       }
     }
-
-
-//    cv::Point2f c_temp;
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      fManager.features_[ind].increaseStatistics(lastImageTime);
-//      fManager.features_[ind].currentStatistics_.inFrame_ = mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].c_)
-//          & fManager.features_[ind].isMultilevelPatchInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-//      if(fManager.features_[ind].currentStatistics_.inFrame_){
-//        pixelOutputCF_.setIndex(ind);
-//        pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
-//        fManager.features_[ind].log_prediction_.c_ = fManager.features_[ind].c_;
-//        fManager.features_[ind].log_prediction_.setSigmaFromCov(pixelOutputCov_);
-//
-//        extractPixelCorner(filterState,ind); // For ALL features!, TODO: problem with feature which are not visible, do for all
-//      }
-//      fManager.features_[ind].log_predictionC0_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
-//      fManager.features_[ind].log_predictionC1_.c_ = fManager.features_[ind].c_ + 4*fManager.features_[ind].corners_[0] - 4*fManager.features_[ind].corners_[1];
-//      fManager.features_[ind].log_predictionC2_.c_ = fManager.features_[ind].c_ - 4*fManager.features_[ind].corners_[0] + 4*fManager.features_[ind].corners_[1];
-//      fManager.features_[ind].log_predictionC3_.c_ = fManager.features_[ind].c_ + 4*fManager.features_[ind].corners_[0] + 4*fManager.features_[ind].corners_[1];
-//    }
-//    const double t1 = (double) cv::getTickCount();
-//    int numSeq = startLevel_-endLevel_; // TODO adaptiv search (depending on covariance)
-//    fManager.alignFeaturesCom(meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,numSeq,doPatchWarping_);
-//    const double t2 = (double) cv::getTickCount();
-//    ROS_DEBUG_STREAM(" Matching " << fManager.validSet_.size() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
-//    LWF::NormalVectorElement m_meas;
-//    bool usePreMatching = false;
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
-//        fManager.features_[ind].log_meas_.c_ = fManager.features_[ind].c_;
-//        mpCamera_->pixelToBearing(fManager.features_[ind].c_,m_meas);
-//      }
-//      if(useDirectMethod_){
-//        if(fManager.features_[ind].currentStatistics_.inFrame_){
-//          usePreMatching = false;
-//          if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
-//            m_meas.boxMinus(state.template get<mtState::_nor>(ind),vec2);
-//            if((vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ind),mtState::template getId<mtState::_nor>(ind)).inverse()*vec2)(0,0) <= 5.886){ // TODO: param
-//              usePreMatching = true;
-//            }
-//          }
-//          if(usePreMatching){
-//            filterState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0) = vec2;
-//            c_temp = fManager.features_[ind].c_;
-//          } else {
-//            filterState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ind),0).setZero();
-//            mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),c_temp);
-//          }
-//          if(fManager.features_[ind].getLinearAlignEquationsReduced(
-//              meas.template get<mtMeas::_aux>().pyr_,
-//              c_temp,endLevel_,startLevel_,doPatchWarping_,
-//              state.template get<mtState::_aux>().A_red_[ind],
-//              state.template get<mtState::_aux>().b_red_[ind])){
-//            state.template get<mtState::_aux>().useInUpdate_[ind] = true;
-//          } else {
-//            state.template get<mtState::_aux>().useInUpdate_[ind] = false;
-////            fManager.features_[ind].currentStatistics_.inFrame_ = false; // TODO
-//          }
-//        } else {
-//          state.template get<mtState::_aux>().useInUpdate_[ind] = false;
-//        }
-//      } else {
-//        if(fManager.features_[ind].currentStatistics_.status_ == TrackingStatistics::FOUND){
-//          state.template get<mtState::_aux>().useInUpdate_[ind] = true;
-//          state.template get<mtState::_aux>().bearingMeas_[ind] = m_meas;
-//        } else {
-//          state.template get<mtState::_aux>().useInUpdate_[ind] = false;
-//        }
-//      }
-//    }
-//    for(auto it_f = fManager.invalidSet_.begin();it_f != fManager.invalidSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      state.template get<mtState::_aux>().useInUpdate_[ind] = false;
-//    }
   };
   void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, const int s = 0){
     // Temps
@@ -393,8 +306,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     float averageScore;
     int countTracked;
-    MultilevelPatchFeature2<mtState::nLevels_,mtState::patchSize_>* mpFeature2; // TODO: rename
-    MultilevelPatchFeature2<mtState::nLevels_,mtState::patchSize_> testFeature2; // TODO: rename
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature2; // TODO: rename
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature2; // TODO: rename
     int requiredFreeFeature;
     double removalFactor;
     int featureIndex;
@@ -492,21 +405,21 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     averageScore = filterState.mlps_.getAverageScore();
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
       std::list<cv::Point2f> candidates;
-      ROS_INFO_STREAM(" Adding keypoints");
+      ROS_DEBUG_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
         detectFastCorners(meas.template get<mtMeas::_aux>().pyr_,candidates,l,detectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
       pruneCandidates(filterState.mlps_,candidates);
       const double t3 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_,filterState.t_,
                                                                   endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
-      ROS_INFO_STREAM(" == Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
+      ROS_DEBUG_STREAM(" == Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it = newSet.begin();it != newSet.end();++it){
         filterState.mlps_.features_[*it].setCamera(mpCamera_);
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
@@ -516,163 +429,15 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         state.template get<mtState::_aux>().bearingCorners_[*it] = filterState.mlps_.features_[*it].get_bearingCorners();
       }
     }
-//
-//    // Delete
-//    FeatureManager<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_,mtState::nMax_>& fManager = filterState.fManager_;
-//    MultilevelPatchFeature<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_>* mpFeature;
-//    cv::Point2f c_temp;
-//
-//    countTracked = 0;
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      mpFeature = &fManager.features_[ind];
-//      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),mpFeature->c_); // Actualize Pixel coordinate
-//      mpFeature->log_current_.c_ = mpFeature->c_;
-//      pixelOutputCF_.setIndex(ind);
-//      pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
-//      mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
-//
-//      // Status Handling
-//      if((useDirectMethod_ && mpFeature->currentStatistics_.inFrame_)
-//          || (!useDirectMethod_ && mpFeature->currentStatistics_.status_ == TrackingStatistics::FOUND)){
-//        if(state.template get<mtState::_aux>().useInUpdate_[ind] && !outlierDetection.isOutlier(ind)){
-//          mpFeature->currentStatistics_.status_ = TrackingStatistics::TRACKED;
-//          countTracked++;
-//        } else {
-//          mpFeature->currentStatistics_.status_ = TrackingStatistics::OUTLIER;
-//        }
-//      }
-//
-//      // Drawing
-//      if(mpFeature->currentStatistics_.inFrame_ && doDrawTracks_){
-//        mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
-//        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
-//        mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
-//        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
-//        mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
-//        if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){
-//          mpFeature->log_current_.drawLine(filterState.img_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
-//          mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 255, 0));
-//          mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
-//        } else if(mpFeature->currentStatistics_.status_ == TrackingStatistics::OUTLIER){
-//          mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 0, 255));
-//          mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::OUTLIER,trackingLocalRange_)),cv::Scalar(0,0,255));
-//        } else {
-//          mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0,255,255));
-//          mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countStatistics(TrackingStatistics::NOTFOUND,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
-//        }
-//      }
-//    }
-//    // Extract feature patches // TODO: cleanup
-//    MultilevelPatchFeature<FILTERSTATE::mtState::nLevels_,FILTERSTATE::mtState::patchSize_> testFeature;
-//    averageScore = fManager.getAverageScore();
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      mpFeature = &fManager.features_[ind];
-//      if(mpFeature->currentStatistics_.status_ == TrackingStatistics::TRACKED){ // TODO correct others as well
-//        mpFeature->currentStatistics_.inFrame_ = mpFeature->isMultilevelPatchWithBorderInFrame(meas.template get<mtMeas::_aux>().pyr_,3);
-//        if(mpFeature->currentStatistics_.inFrame_){ // TODO: clean
-//          testFeature.c_ = mpFeature->c_; // TODO: clean
-//          testFeature.extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-//          testFeature.computeMultilevelShiTomasiScore();
-//          if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){ // TODO: debug and fix
-//            mpFeature->extractPatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-//            extractBearingCorner(filterState,ind); // TODO For ALL features!
-//          }
-//        }
-//      }
-//    }
-//
-//    // Remove bad feature // TODO: cleanup, try to keep simple
-//    averageScore = fManager.getAverageScore();
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end();){
-//      const int ind = *it_f;
-//      ++it_f;
-//      if(!fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
-////          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){ //TODO: debug and fix
-//        fManager.removeFeature(ind);
-//      }
-//    }
-//
-//    // Check if enough free features
-//    requiredFreeFeature = mtState::nMax_*minTrackedAndFreeFeatures_-countTracked;
-//    removalFactor = 1;
-//    auto it_f = fManager.validSet_.begin();
-//    while(static_cast<int>(fManager.invalidSet_.size()) < requiredFreeFeature){
-//      removalFactor = removalFactor*1.1;
-//      const int ind = *it_f;
-//      ++it_f;
-//      if(it_f == fManager.validSet_.end()){
-//        it_f = fManager.validSet_.begin();
-//      }
-//      if(fManager.features_[ind].currentStatistics_.status_ != TrackingStatistics::TRACKED && !fManager.features_[ind].isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*removalFactor,trackingLowerBound_*removalFactor)){ // TODO: improve
-//        fManager.removeFeature(ind);
-//        filterState.removeFeature(ind);
-//      }
-//    }
-//
-//    // Detect new feature if required
-//    averageScore = fManager.getAverageScore();
-//    fManager.candidates_.clear();
-//    if(fManager.validSet_.size() < startDetectionTh_*mtState::nMax_){
-//      ROS_DEBUG_STREAM(" Adding keypoints");
-//      const double t1 = (double) cv::getTickCount();
-//      const int detect_level = 1;
-//      std::vector<cv::Point2f> detected_keypoints;
-//      DetectFastCorners(meas.template get<mtMeas::_aux>().pyr_,detected_keypoints,detect_level);
-//      const double t2 = (double) cv::getTickCount();
-//      ROS_DEBUG_STREAM(" == Detected " << detected_keypoints.size() << " on level " << detect_level << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
-//      fManager.selectCandidates(detected_keypoints);
-//      const double t3 = (double) cv::getTickCount();
-//      ROS_DEBUG_STREAM(" == Selected " << fManager.candidates_.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
-//      fManager.extractCandidatePatchesFromImage(meas.template get<mtMeas::_aux>().pyr_);
-//      fManager.computeCandidatesScore(-1);
-//      const double t4 = (double) cv::getTickCount();
-//      ROS_DEBUG_STREAM(" == Extracting patches and computing scores of candidates (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
-//      std::unordered_set<unsigned int> newSet = fManager.addBestCandidates(mtState::nMax_-fManager.validSet_.size(),
-//          nDetectionBuckets_, scoreDetectionExponent_, penaltyDistance_, zeroDistancePenalty_,false,0);
-////          static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore); //TODO: debug and fix
-//      const double t5 = (double) cv::getTickCount();
-//      ROS_DEBUG_STREAM(" == Got " << fManager.validSet_.size() << " after adding (" << (t5-t4)/cv::getTickFrequency()*1000 << " ms)");
-//      for(auto it_f = newSet.begin();it_f != newSet.end(); ++it_f){
-//        const int ind = *it_f;
-//        V3D vec3;
-//        mpCamera_->pixelToBearing(fManager.features_[ind].c_,vec3);
-//        filterState.initializeFeatureState(ind,vec3,initDepth_,initCovFeature_);
-//        extractBearingCorner(filterState,ind); // TODO: fix in general
-//      }
-//    }
-//    for(auto it_f = fManager.validSet_.begin();it_f != fManager.validSet_.end(); ++it_f){
-//      const int ind = *it_f;
-//      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ind),fManager.features_[ind].log_previous_.c_);
-//    }
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].status_.inFrame_){
+        filterState.mlps_.features_[i].log_previous_.c_ = filterState.mlps_.features_[i].get_c();
+      }
+    }
     if (doDrawVirtualHorizon_){
       drawVirtualHorizon(filterState);
     }
-    // TODO: log previous
   };
-//  bool extractBearingCorner(mtFilterState& filterState, const int& ind) const{ // TODO: delete
-//    bool success = true;
-//    cv::Point2f pixelCorner;
-//    LWF::NormalVectorElement tempNormal;
-//    for(unsigned int i=0;i<2;i++){
-//      pixelCorner = filterState.fManager_.features_[ind].c_+filterState.fManager_.features_[ind].corners_[i];
-//      success = success & mpCamera_->pixelToBearing(pixelCorner,tempNormal);
-//      tempNormal.boxMinus(filterState.state_.template get<mtState::_nor>(ind),filterState.state_.template get<mtState::_aux>().bearingCorners_[ind][i]);
-//    }
-//    return success;
-//  }
-//  bool extractPixelCorner(mtFilterState& filterState, const int& ind) const{ // TODO: delete
-//    bool success = true;
-//    cv::Point2f pixelCorner;
-//    LWF::NormalVectorElement tempNormal;
-//    for(unsigned int i=0;i<2;i++){
-//      filterState.state_.template get<mtState::_nor>(ind).boxPlus(filterState.state_.template get<mtState::_aux>().bearingCorners_[ind][i],tempNormal);
-//      success = success & mpCamera_->bearingToPixel(tempNormal,pixelCorner);
-//      filterState.fManager_.features_[ind].corners_[i] = pixelCorner - filterState.fManager_.features_[ind].c_;
-//    }
-//    return success;
-//  }
   void drawVirtualHorizon(mtFilterState& filterState){
     typename mtFilterState::mtState& state = filterState.state_;
     cv::rectangle(filterState.img_,cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);

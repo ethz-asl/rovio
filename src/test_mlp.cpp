@@ -1,7 +1,7 @@
-#include "rovio/common_vision2.hpp"
 #include "rovio/Camera.hpp"
 #include "gtest/gtest.h"
 #include <assert.h>
+#include "../include/rovio/common_vision.hpp"
 
 using namespace rovio;
 
@@ -18,8 +18,8 @@ class MLPTesting : public virtual ::testing::Test {
   ImagePyramid<nLevels_> pyr2_;
   cv::Mat img1_;
   cv::Mat img2_;
-  Patch2<patchSize_> p_;
-  MultilevelPatchFeature2<nLevels_,patchSize_> mlp_;
+  Patch<patchSize_> p_;
+  MultilevelPatchFeature<nLevels_,patchSize_> mlp_;
   cv::Point2f c_;
   LWF::NormalVectorElement nor_;
   PixelCorners pixelCorners_;
@@ -67,7 +67,7 @@ class MLPTesting : public virtual ::testing::Test {
 
 // Test constructors/reset
 TEST_F(MLPTesting, constructors) {
-  MultilevelPatchFeature2<nLevels_,patchSize_> mlp(&camera_);
+  MultilevelPatchFeature<nLevels_,patchSize_> mlp(&camera_);
   ASSERT_EQ(mlp.idx_,-1);
   ASSERT_EQ(mlp.initTime_,0.0);
   ASSERT_EQ(mlp.currentTime_,0.0);

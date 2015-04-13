@@ -34,7 +34,8 @@
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
-#include "rovio/common_vision2.hpp"
+
+#include "common_vision.hpp"
 
 namespace rovio{
 
@@ -139,7 +140,7 @@ class FeatureTrackerNode{
         }
       }
     }
-    MultilevelPatchFeature2<nLevels_,patchSize_> mlp;
+    MultilevelPatchFeature<nLevels_,patchSize_> mlp;
     for(unsigned int i=0;i<numPatchesPlot;i++){
       if(mlps_.isValid_[i]){
         mlps_.features_[i].drawMultilevelPatch(draw_patches_,cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
