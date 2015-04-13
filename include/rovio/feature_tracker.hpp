@@ -58,6 +58,7 @@ class FeatureTrackerNode{
   static constexpr int l1 = 1;
   static constexpr int l2 = 3;
   static constexpr int detectionThreshold = 10;
+  static constexpr bool drawNotFound_ = false;
 
   FeatureTrackerNode(ros::NodeHandle& nh): nh_(nh){
     static_assert(l2>=l1, "l2 must be larger than l1");
@@ -99,11 +100,11 @@ class FeatureTrackerNode{
     cv::Point2f dc;
     for(unsigned int i=0;i<nMax_;i++){
       if(mlps_.isValid_[i]){
-        dc = 0.75*(mlps_.features_[i].c_ - mlps_.features_[i].log_previous_.c_);
-        mlps_.features_[i].log_previous_.c_ = mlps_.features_[i].c_;
-        mlps_.features_[i].c_ = mlps_.features_[i].c_ + dc;
+        dc = 0.75*(mlps_.features_[i].get_c() - mlps_.features_[i].log_previous_.c_);
+        mlps_.features_[i].log_previous_.c_ = mlps_.features_[i].get_c();
+        mlps_.features_[i].set_c(mlps_.features_[i].get_c() + dc);
         if(!isMultilevelPatchInFrame(mlps_.features_[i],pyr_,nLevels_-1,false)){
-          mlps_.features_[i].c_ = mlps_.features_[i].log_previous_.c_;
+          mlps_.features_[i].set_c(mlps_.features_[i].log_previous_.c_);
         }
         mlps_.features_[i].increaseStatistics(current_time);
         mlps_.features_[i].status_.inFrame_ = true;
@@ -115,7 +116,7 @@ class FeatureTrackerNode{
     cv::Point2f c_new;
     for(unsigned int i=0;i<nMax_;i++){
       if(mlps_.isValid_[i]){
-        mlps_.features_[i].log_prediction_.c_ = mlps_.features_[i].c_;
+        mlps_.features_[i].log_prediction_.c_ = mlps_.features_[i].get_c();
         align2DComposed(mlps_.features_[i],pyr_,l2,l1,l2-l1,false);
       }
     }
@@ -125,14 +126,16 @@ class FeatureTrackerNode{
       if(mlps_.isValid_[i]){
         if(mlps_.features_[i].status_.matchingStatus_ == FOUND){
           mlps_.features_[i].status_.trackingStatus_ = TRACKED;
-          mlps_.features_[i].log_meas_.c_ = mlps_.features_[i].c_;
+          mlps_.features_[i].log_meas_.c_ = mlps_.features_[i].get_c();
           mlps_.features_[i].log_meas_.draw(draw_image_,cv::Scalar(0,255,255));
           mlps_.features_[i].log_meas_.drawLine(draw_image_,mlps_.features_[i].log_prediction_,cv::Scalar(0,255,255));
           mlps_.features_[i].log_meas_.drawText(draw_image_,std::to_string(mlps_.features_[i].idx_),cv::Scalar(0,255,255));
         } else {
           mlps_.features_[i].status_.trackingStatus_ = FAILED;
-          mlps_.features_[i].log_prediction_.draw(draw_image_,cv::Scalar(0,0,255));
-          mlps_.features_[i].log_prediction_.drawText(draw_image_,std::to_string(mlps_.features_[i].idx_),cv::Scalar(0,0,255));
+          if(drawNotFound_){
+            mlps_.features_[i].log_prediction_.draw(draw_image_,cv::Scalar(0,0,255));
+            mlps_.features_[i].log_prediction_.drawText(draw_image_,std::to_string(mlps_.features_[i].idx_),cv::Scalar(0,0,255));
+          }
         }
       }
     }
@@ -140,11 +143,11 @@ class FeatureTrackerNode{
     for(unsigned int i=0;i<numPatchesPlot;i++){
       if(mlps_.isValid_[i]){
         mlps_.features_[i].drawMultilevelPatch(draw_patches_,cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
-        mlp.c_ = mlps_.features_[i].log_prediction_.c_;
+        mlp.set_c(mlps_.features_[i].log_prediction_.c_);
         extractMultilevelPatchFromImage(mlp,pyr_,nLevels_-1,false);
         mlp.drawMultilevelPatch(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+6,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
         if(mlps_.features_[i].status_.matchingStatus_ == FOUND){
-          mlp.c_ = mlps_.features_[i].c_;
+          mlp.set_c(mlps_.features_[i].get_c());
           extractMultilevelPatchFromImage(mlp,pyr_,nLevels_-1,false);
           mlp.drawMultilevelPatch(draw_patches_,cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+10,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
           cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
@@ -197,7 +200,7 @@ class FeatureTrackerNode{
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it = newSet.begin();it != newSet.end();++it){
-        mlps_.features_[*it].log_previous_.c_ = mlps_.features_[*it].c_;
+        mlps_.features_[*it].log_previous_.c_ = mlps_.features_[*it].get_c();
         mlps_.features_[*it].status_.inFrame_ = true;
         mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         mlps_.features_[*it].status_.trackingStatus_ = TRACKED;

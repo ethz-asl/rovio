@@ -64,7 +64,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   Eigen::Matrix2d A_red_[nMax];
   Eigen::Vector2d b_red_[nMax];
   LWF::NormalVectorElement bearingMeas_[nMax];
-  Eigen::Vector2d bearingCorners_[nMax][2];
+  BearingCorners bearingCorners_[nMax];
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>
@@ -165,6 +165,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,Predict
   using Base::cov_;
   using Base::usePredictionMerge_;
   FeatureManager<nLevels,patchSize,nMax> fManager_;
+  MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
   cv::Mat img_; // Mainly used for drawing
   cv::Mat patchDrawing_; // Mainly used for drawing
   double imgTime_;

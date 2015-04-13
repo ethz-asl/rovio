@@ -467,6 +467,9 @@ class MultilevelPatchFeature2{
     valid_nor_ = true;
     valid_c_ = false;
   }
+  bool isInFront(){
+    return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
+  }
   const PixelCorners& get_pixelCorners(){
     if(!valid_pixelCorners_){
       cv::Point2f tempPixel;
@@ -664,38 +667,33 @@ class MultilevelPatchFeature2{
 };
 
 template<int n_levels,int patch_size>
-bool isMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1,const bool withBorder = false){
-  const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,l);
-  return isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,withBorder);
+bool isMultilevelPatchInFrame(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1,const bool withBorder = false, const bool doWarping = false){
+  if(!mlp.isInFront()) return false;
+  const cv::Point2f c = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
+  if(!doWarping){
+    return isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,withBorder);
+  } else {
+    return isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,mlp.get_affineTransform(),withBorder);
+  }
 }
 
 template<int n_levels,int patch_size>
-bool isWarpedMultilevelPatchInFrame(const MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = false){
-  const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,l);
-  return isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c,mlp.get_affineTransform(),withBorder);
-}
-
-template<int n_levels,int patch_size>
-void extractMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = true){
+void extractMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = true, const bool doWarping = false){
   for(unsigned int i=0;i<=l;i++){
-    const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
-    mlp.isValidPatch_[i] = isPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
-    if(mlp.isValidPatch_[i]){
-      extractPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
+    const cv::Point2f c = levelTranformCoordinates(mlp.get_c(),pyr,0,i);
+    if(!doWarping){
+      mlp.isValidPatch_[i] = isPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
+      if(mlp.isValidPatch_[i]){
+        extractPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,withBorder);
+      }
+    } else {
+      mlp.isValidPatch_[i] = isWarpedPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
+      if(mlp.isValidPatch_[i]){
+        extractWarpedPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
+      }
     }
   }
-  mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
-}
-
-template<int n_levels,int patch_size>
-void extractWarpedMultilevelPatchFromImage(MultilevelPatchFeature2<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1, const bool withBorder = true){
-  for(unsigned int i=0;i<=l;i++){
-    const cv::Point2f c = levelTranformCoordinates(mlp.c_,pyr,0,i);
-    mlp.isValidPatch_[i] = isWarpedPatchInFrame(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
-    if(mlp.isValidPatch_[i]){
-      extractWarpedPatchFromImage(mlp.patches_[i],pyr.imgs_[i],c,mlp.get_affineTransform(),withBorder);
-    }
-  }
+  if(!doWarping) mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
 }
 
 template<int n_levels>
@@ -715,7 +713,7 @@ bool getLinearAlignEquations(MultilevelPatchFeature2<n_levels,patch_size>& mlp, 
   }
   int numLevel = 0;
   for(int l = l1; l <= l2; l++){
-    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
     if(mlp.isValidPatch_[l] &&
         (doWarping || isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,false)) &&
         (!doWarping || isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,aff,false))){
@@ -737,7 +735,7 @@ bool getLinearAlignEquations(MultilevelPatchFeature2<n_levels,patch_size>& mlp, 
 
   int count = 0;
   for(int l = l1; l <= l2; l++, count++){
-    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
     if(mlp.isValidPatch_[l] &&
         (doWarping || isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,false)) &&
         (!doWarping || isWarpedPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level,aff,false))){
@@ -815,7 +813,7 @@ bool align2D_old(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImageP
                  const int l1, const int l2, const bool doWarping, const int maxIter = 10, const double minPixUpd = 0.03){
   int numLevel = 0;
   for(int l = l1; l <= l2; l++){
-    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
     if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
       numLevel++;
       mlp.patches_[l].computeGradientParameters();
@@ -833,7 +831,7 @@ bool align2D_old(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImageP
   bool converged=false;
   Eigen::Matrix3f H; H.setZero();
   for(int l = l1; l <= l2; l++){
-    const cv::Point2f c_level = levelTranformCoordinates(mlp.c_,pyr,0,l);
+    const cv::Point2f c_level = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
     if(mlp.isValidPatch_[l] && isPatchInFrame(mlp.patches_[l],pyr.imgs_[l],c_level)){
       mlp.patches_[l].computeGradientParameters();
       H(0,0) += pow(0.25,l)*mlp.patches_[l].H_(0,0);
@@ -853,7 +851,7 @@ bool align2D_old(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImageP
 
   // termination condition
   const float min_update_squared = minPixUpd*minPixUpd;
-  cv::Point2f c_temp = mlp.c_;
+  cv::Point2f c_temp = mlp.get_c();
   Eigen::Vector3f update; update.setZero();
   for(int iter = 0; iter<maxIter; ++iter){
     if(isnan(c_temp.x) || isnan(c_temp.y)){
@@ -945,7 +943,7 @@ bool align2D_old(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImageP
     }
   }
 
-  mlp.c_ = c_temp;
+  mlp.set_c(c_temp);
   return converged;
 }
 
@@ -954,22 +952,22 @@ bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyram
              const int l1, const int l2, const bool doWarping, const int maxIter = 10, const double minPixUpd = 0.03){
   // termination condition
   const float min_update_squared = minPixUpd*minPixUpd;
-  cv::Point2f c_backup = mlp.c_;
+  cv::Point2f c_backup = mlp.get_c();
   Eigen::Vector2f update; update.setZero();
   bool converged = false;
   for(int iter = 0; iter<maxIter; ++iter){
-    if(isnan(mlp.c_.x) || isnan(mlp.c_.y)){
+    if(isnan(mlp.get_c().x) || isnan(mlp.get_c().y)){
       assert(false);
-      mlp.c_ = c_backup;
+      mlp.set_c(c_backup);
       return false;
     }
     if(!getLinearAlignEquations(mlp,pyr,l1,l2,doWarping,mlp.A_,mlp.b_)){
-      mlp.c_ = c_backup;
+      mlp.set_c(c_backup);
       return false;
     }
     update = mlp.A_.jacobiSvd(ComputeThinU | ComputeThinV).solve(mlp.b_);
-    mlp.c_.x += update[0];
-    mlp.c_.y += update[1];
+    const cv::Point2f c_new(mlp.get_c().x + update[0],mlp.get_c().y + update[1]);
+    mlp.set_c(c_new);
 
     if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
       converged=true;
@@ -977,7 +975,7 @@ bool align2D(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyram
     }
   }
   if(converged == false){
-    mlp.c_ = c_backup;
+    mlp.set_c(c_backup);
   }
   return converged;
 }
@@ -988,7 +986,7 @@ bool align2DSingleLevel(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const
 }
 template<int n_levels,int patch_size>
 void align2DComposed(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){
-  cv::Point2f c_backup = mlp.c_;
+  cv::Point2f c_backup = mlp.get_c();
   mlp.status_.matchingStatus_ = FOUND;
   for(int l = end_level+num_seq;l>=end_level;--l){
     if(!align2D(mlp,pyr,l,start_level,doWarping)){
@@ -997,7 +995,7 @@ void align2DComposed(MultilevelPatchFeature2<n_levels,patch_size>& mlp, const Im
     }
   }
   if(mlp.status_.matchingStatus_ == NOTFOUND){
-    mlp.c_ = c_backup;
+    mlp.set_c(c_backup);
   }
 }
 
@@ -1069,7 +1067,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   for(auto it = candidates.begin(); it != candidates.end(); ++it){
     candidatesWithPatch.emplace_back();
     candidatesWithPatch.rbegin()->reset(-1,initTime);
-    candidatesWithPatch.rbegin()->c_ = *it;
+    candidatesWithPatch.rbegin()->set_c(*it);
     if(isMultilevelPatchInFrame(*candidatesWithPatch.rbegin(),pyr,n_levels-1,true)){
       extractMultilevelPatchFromImage(*candidatesWithPatch.rbegin(),pyr,n_levels-1,true);
       candidatesWithPatch.rbegin()->computeMultilevelShiTomasiScore(l1,l2);
