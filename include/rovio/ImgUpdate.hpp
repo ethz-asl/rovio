@@ -253,7 +253,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         mpFeature->status_.inFrame_ = isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,false,doPatchWarping_);
         if(mpFeature->status_.inFrame_){
           pixelOutputCF_.setIndex(i);
-          pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+          pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature->log_prediction_.c_ = mpFeature->get_c();
           mpFeature->log_prediction_.setSigmaFromCov(pixelOutputCov_);
           mpFeature->set_bearingCorners(state.template get<mtState::_aux>().bearingCorners_[i]);
@@ -321,7 +321,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           mpFeature2->set_nor(state.template get<mtState::_nor>(i));
           mpFeature2->log_current_.c_ = mpFeature2->get_c();
           pixelOutputCF_.setIndex(i);
-          pixelOutputCov_ = pixelOutputCF_.transformCovMat(state,cov);
+          pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature2->log_current_.setSigmaFromCov(pixelOutputCov_);
           if(state.template get<mtState::_aux>().useInUpdate_[i]){
             if(!outlierDetection.isOutlier(i)){

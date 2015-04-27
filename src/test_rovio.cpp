@@ -26,7 +26,6 @@
 *
 */
 
-#define EIGEN_STACK_ALLOCATION_LIMIT 1000000
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -73,19 +72,19 @@ class TestFilter{
   int poseMsgSeq_;
   typedef rovio::StandardOutput mtOutput;
   mtOutput output_;
-  mtOutput::mtCovMat outputCov_;
   rovio::CameraOutputCF<typename mtFilter::mtPrediction> cameraOutputCF_;
+  typename rovio::CameraOutputCF<typename mtFilter::mtPrediction>::mtOutputCovMat outputCov_;
 
 
   tf::TransformBroadcaster tb_;
 
   typedef rovio::AttitudeOutput mtAttitudeOutput;
   mtAttitudeOutput attitudeOutput_;
-  mtAttitudeOutput::mtCovMat attitudeOutputCov_;
   typedef rovio::YprOutput mtYprOutput;
   mtYprOutput yprOutput_;
-  mtYprOutput::mtCovMat yprOutputCov_;
   rovio::AttitudeToYprCF attitudeToYprCF_;
+  rovio::AttitudeToYprCF::mtInputCovMat attitudeOutputCov_;
+  rovio::AttitudeToYprCF::mtOutputCovMat yprOutputCov_;
 
   rovio::SceneObject* mpSensor_ = nullptr;
   rovio::SceneObject* mpLines_ = nullptr;
@@ -255,8 +254,8 @@ class TestFilter{
         mtFilterState& filterState = mpFilter->safe_;
         mtState& state = mpFilter->safe_.state_;
         mtFilterState::mtFilterCovMat& cov = mpFilter->safe_.cov_;
-        output_ = cameraOutputCF_.transformState(state);
-        outputCov_ = cameraOutputCF_.transformCovMat(state,cov);
+        cameraOutputCF_.transformState(state,output_);
+        cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
         mpSensor_->W_r_WB_ = output_.template get<mtOutput::_pos>().cast<float>();
         mpSensor_->q_BW_ = output_.template get<mtOutput::_att>();
@@ -395,8 +394,8 @@ class TestFilter{
         rovioOutputMsg_.odometry = odometryMsg_;
         attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.template get<mtOutput::_att>();
         attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
-        yprOutput_ = attitudeToYprCF_.transformState(attitudeOutput_);
-        yprOutputCov_ = attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_);
+        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
+        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
         rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
         rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
         rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
@@ -437,8 +436,8 @@ class TestFilter{
         }
         attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.template get<mtState::_vea>();
         attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(),mtState::template getId<mtState::_vea>());
-        yprOutput_ = attitudeToYprCF_.transformState(attitudeOutput_);
-        yprOutputCov_ = attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_);
+        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
+        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
         rovioOutputMsg_.ypr_extrinsics.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
         rovioOutputMsg_.ypr_extrinsics.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
         rovioOutputMsg_.ypr_extrinsics.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);

@@ -50,9 +50,9 @@ class YprOutput: public LWF::State<LWF::VectorElement<3>>{
   ~YprOutput(){};
 };
 
-class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput>{
+class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput> Base;
+  typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput,true> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;

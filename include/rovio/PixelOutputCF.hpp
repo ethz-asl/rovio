@@ -43,9 +43,9 @@ class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
   ~PixelOutput(){};
 };
 template<typename STATE>
-class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput>{
+class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<STATE,PixelOutput> Base;
+  typedef LWF::CoordinateTransform<STATE,PixelOutput,true> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;

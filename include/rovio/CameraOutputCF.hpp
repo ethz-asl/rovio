@@ -46,9 +46,9 @@ class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEle
 };
 
 template<typename ImuPrediction>
-class CameraOutputCF:public LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput>{
+class CameraOutputCF:public LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput> Base;
+  typedef LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true> Base;
   using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
