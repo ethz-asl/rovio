@@ -965,7 +965,7 @@ bool align2D(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyrami
       mlp.set_c(c_backup);
       return false;
     }
-    update = mlp.A_.jacobiSvd(ComputeThinU | ComputeThinV).solve(mlp.b_);
+    update = mlp.A_.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(mlp.b_);
     const cv::Point2f c_new(mlp.get_c().x + update[0],mlp.get_c().y + update[1]);
     mlp.set_c(c_new);
 

@@ -41,6 +41,9 @@
 #include "rovio/YprOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
 
+#include "rovio/Scene.hpp"
+
+rovio::Scene mScene;
 
 class TestFilter{
  public:
@@ -83,6 +86,11 @@ class TestFilter{
   mtYprOutput yprOutput_;
   mtYprOutput::mtCovMat yprOutputCov_;
   rovio::AttitudeToYprCF attitudeToYprCF_;
+
+  rovio::SceneObject* mpSensor_ = nullptr;
+  rovio::SceneObject* mpLines_ = nullptr;
+  rovio::SceneObject* mpDepthVar_ = nullptr;
+  rovio::SceneObject* mpPatches_[mtState::nMax_];
 
   TestFilter(ros::NodeHandle& nh): nh_(nh), mpFilter(new rovio::Filter<mtFilterState>()), cameraOutputCF_(mpFilter->mPrediction_){
     #ifndef NDEBUG
@@ -205,7 +213,7 @@ class TestFilter{
     cv_ptr->image.copyTo(cv_img);
 
     if(isInitialized_ && !cv_img.empty()){
-      imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img);
+      imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img,true);
       imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_ = img->header.stamp.toSec();
       mpFilter->addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
       double lastImuTime;
@@ -250,6 +258,71 @@ class TestFilter{
         output_ = cameraOutputCF_.transformState(state);
         outputCov_ = cameraOutputCF_.transformCovMat(state,cov);
 
+        mpSensor_->W_r_WB_ = output_.template get<mtOutput::_pos>().cast<float>();
+        mpSensor_->q_BW_ = output_.template get<mtOutput::_att>();
+
+        std::vector<Eigen::Vector3f> points;
+        std::vector<Eigen::Vector3f> lines;
+        mpLines_->clear();
+        mpDepthVar_->clear();
+        double d, d_far, d_near, d_p, p_d, p_d_p;
+        for(unsigned int i=0;i<mtState::nMax_;i++){
+          if(filterState.mlps_.isValid_[i]){
+            mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+            const double sigma = filterState.cov_(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
+            mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
+            if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
+            mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
+            const Eigen::Vector3d pos = filterState.state_.template get<mtState::_nor>(i).getVec()*d;
+            const Eigen::Vector3d pos_far = filterState.state_.template get<mtState::_nor>(i).getVec()*d_far;
+            const Eigen::Vector3d pos_near = filterState.state_.template get<mtState::_nor>(i).getVec()*d_near;
+            if(filterState.mlps_.features_[i].status_.inFrame_){
+              mpLines_->prolonge(Eigen::Vector3f::Zero());
+              mpLines_->prolonge(pos.cast<float>());
+              mpDepthVar_->prolonge(pos_far.cast<float>());
+              mpDepthVar_->prolonge(pos_near.cast<float>());
+              if(filterState.mlps_.features_[i].status_.trackingStatus_ == rovio::TRACKED){
+                std::next(mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+                mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+              } else {
+                std::next( mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+                mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+              }
+            }
+            mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
+            cv::Mat patch = cv::Mat::zeros(patchSize_*pow(2,nLevels_-1),patchSize_*pow(2,nLevels_-1),CV_8UC1);
+            filterState.mlps_.features_[i].drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
+            mpPatches_[i]->setTexture(patch);
+
+            mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+            const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+            LWF::NormalVectorElement corner;
+            const rovio::BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
+            Eigen::Vector2d dif;
+            Eigen::Vector3d cornerVec;
+            for(int x=0;x<2;x++){
+              for(int y=0;y<2;y++){
+                dif = 4.0*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
+                middle.boxPlus(dif,corner);
+                cornerVec = corner.getVec()*d;
+                mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec.cast<float>());
+              }
+            }
+            mpPatches_[i]->allocateBuffer();
+
+            mpPatches_[i]->W_r_WB_ = mpSensor_->W_r_WB_;
+            mpPatches_[i]->q_BW_ = mpSensor_->q_BW_;
+          } else {
+            mpPatches_[i]->clear();
+          }
+        }
+        mpLines_->setColorFull(Eigen::Vector4f(0.2f,0.2f,0.2f,1.0f));
+        mpLines_->W_r_WB_ = mpSensor_->W_r_WB_;
+        mpLines_->q_BW_ = mpSensor_->q_BW_;
+        mpLines_->allocateBuffer();
+        mpDepthVar_->W_r_WB_ = mpSensor_->W_r_WB_;
+        mpDepthVar_->q_BW_ = mpSensor_->q_BW_;
+        mpDepthVar_->allocateBuffer();
 
         poseMsg_.header.seq = poseMsgSeq_;
         poseMsg_.header.stamp = ros::Time(mpFilter->safe_.t_);
@@ -389,6 +462,42 @@ int main(int argc, char** argv){
   ros::init(argc, argv, "TestFilter");
   ros::NodeHandle nh;
   TestFilter testFilter(nh);
-  ros::spin();
+
+  initGlut(argc,argv,mScene);
+  mScene.init(argc, argv);
+
+  rovio::SceneObject* mpGroundplane1 = mScene.addSceneObject();
+  mpGroundplane1->makeGroundPlaneMesh(0.25,40);
+  mpGroundplane1->setColorFull(Eigen::Vector4f(0.6f,0.6f,0.6f,1.0f));
+  mpGroundplane1->lineWidth_ = 1.0f;
+  mpGroundplane1->W_r_WB_(2) = -1.0f;
+  rovio::SceneObject* mpGroundplane2 = mScene.addSceneObject();
+  mpGroundplane2->makeGroundPlaneMesh(1.0,10);
+  mpGroundplane2->setColorFull(Eigen::Vector4f(0.8f,0.8f,0.8f,1.0f));
+  mpGroundplane2->lineWidth_ = 3.0f;
+  mpGroundplane2->W_r_WB_(2) = -1.0f;
+  testFilter.mpSensor_ = mScene.addSceneObject();
+  testFilter.mpSensor_->makeCoordinateFrame(1.0f);
+  testFilter.mpSensor_->lineWidth_ = 5.0f;
+
+  for(int i=0;i<TestFilter::mtState::nMax_;i++){
+    testFilter.mpPatches_[i] = mScene.addSceneObject();
+  }
+
+  testFilter.mpLines_ = mScene.addSceneObject();
+  testFilter.mpLines_->makeLine();
+  testFilter.mpLines_->lineWidth_ = 1.0f;
+  testFilter.mpLines_->mode_ = GL_LINES;
+
+  testFilter.mpDepthVar_ = mScene.addSceneObject();
+  testFilter.mpDepthVar_->makeLine();
+  testFilter.mpDepthVar_->lineWidth_ = 3.0f;
+  testFilter.mpDepthVar_->mode_ = GL_LINES;
+
+  mScene.setView(Eigen::Vector3f(-5.0f,-5.0f,5.0f),Eigen::Vector3f(0.0f,0.0f,0.0f));
+  mScene.setYDown();
+  mScene.setIdleFunction(ros::spinOnce);
+  glutMainLoop();
+
   return 0;
 }

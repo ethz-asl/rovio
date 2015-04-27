@@ -34,9 +34,6 @@
 #include "lightweight_filtering/State.hpp"
 #include "yaml-cpp/yaml.h"
 
-
-using namespace Eigen;
-
 namespace rovio{
 
 class Camera{
@@ -45,7 +42,7 @@ class Camera{
     RADTAN,
     EQUIDIST
   } type_;
-  Matrix3d K_;
+  Eigen::Matrix3d K_;
   double k1_,k2_,k3_,k4_,k5_,k6_;
   double p1_,p2_,s1_,s2_,s3_,s4_;
   Camera(){
