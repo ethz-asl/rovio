@@ -46,7 +46,6 @@ template<typename STATE>
 class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
  public:
   typedef LWF::CoordinateTransform<STATE,PixelOutput,true> Base;
-  using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;

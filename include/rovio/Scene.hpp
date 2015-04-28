@@ -463,7 +463,7 @@ class Scene{
     }
     mSceneObjects_.clear();
   };
-  int init(int argc, char** argv){
+  int init(int argc, char** argv, const std::string& mVSFileName,const std::string& mFSFileName){
     // Must be done after glut is initialized!
     GLenum res = glewInit();
     if (res != GLEW_OK) {
@@ -478,7 +478,7 @@ class Scene{
     glDepthFunc(GL_LESS);
     glClearDepth(1.0f);
 
-    CompileShaders();
+    CompileShaders(mVSFileName,mFSFileName);
 
     mPersProjInfo_.FOV_ = M_PI/2;
     mPersProjInfo_.width_ = 1280;
@@ -677,20 +677,18 @@ class Scene{
 
       glAttachShader(ShaderProgram, ShaderObj);
   }
-  void CompileShaders(){
+  void CompileShaders(const std::string& mVSFileName,const std::string& mFSFileName){
     GLuint ShaderProgram = glCreateProgram();
     if (ShaderProgram == 0) {
         fprintf(stderr, "Error creating shader program\n");
         exit(1);
     }
 
-    const char* pVSFileName = "shader.vs";
-    const char* pFSFileName = "shader.fs";
     std::string vs, fs;
-    if (!ReadShaderFile(pVSFileName, vs)) {
+    if (!ReadShaderFile(mVSFileName.c_str(), vs)) {
         exit(1);
     };
-    if (!ReadShaderFile(pFSFileName, fs)) {
+    if (!ReadShaderFile(mFSFileName.c_str(), fs)) {
         exit(1);
     };
 

@@ -53,7 +53,6 @@ class YprOutput: public LWF::State<LWF::VectorElement<3>>{
 class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput,true>{
  public:
   typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput,true> Base;
-  using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;
@@ -71,7 +70,7 @@ class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput,t
     const double theta = ypr.pitch();
     const double phi = ypr.roll();
     const double t2 = cos(theta);
-    const double t3 = 1.0/t2; // TODO: carefull if t2 = 0;
+    const double t3 = 1.0/t2;
     const double t4 = cos(phi);
     const double t5 = sin(phi);
     const double t6 = sin(theta);

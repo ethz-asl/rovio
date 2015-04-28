@@ -272,50 +272,70 @@ class TestFilter{
             mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
             if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
             mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
-            const Eigen::Vector3d pos = filterState.state_.template get<mtState::_nor>(i).getVec()*d;
-            const Eigen::Vector3d pos_far = filterState.state_.template get<mtState::_nor>(i).getVec()*d_far;
-            const Eigen::Vector3d pos_near = filterState.state_.template get<mtState::_nor>(i).getVec()*d_near;
+            const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+            LWF::NormalVectorElement corner[4];
+            Eigen::Vector3d cornerVec[4];
+            const rovio::BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
+            for(int x=0;x<2;x++){
+              for(int y=0;y<2;y++){
+                const Eigen::Vector2d dif = 4.0*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
+                middle.boxPlus(dif,corner[y*2+x]);
+                cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
+              }
+            }
+            const Eigen::Vector3d pos = middle.getVec()*d;
+            const Eigen::Vector3d pos_far = middle.getVec()*d_far;
+            const Eigen::Vector3d pos_near = middle.getVec()*d_near;
+
+            mpLines_->prolonge(cornerVec[0].cast<float>());
+            mpLines_->prolonge(cornerVec[1].cast<float>());
+            mpLines_->prolonge(cornerVec[1].cast<float>());
+            mpLines_->prolonge(cornerVec[3].cast<float>());
+            mpLines_->prolonge(cornerVec[3].cast<float>());
+            mpLines_->prolonge(cornerVec[2].cast<float>());
+            mpLines_->prolonge(cornerVec[2].cast<float>());
+            mpLines_->prolonge(cornerVec[0].cast<float>());
+
+            mpDepthVar_->prolonge(pos_far.cast<float>());
+            mpDepthVar_->prolonge(pos_near.cast<float>());
             if(filterState.mlps_.features_[i].status_.inFrame_){
-              mpLines_->prolonge(Eigen::Vector3f::Zero());
-              mpLines_->prolonge(pos.cast<float>());
-              mpDepthVar_->prolonge(pos_far.cast<float>());
-              mpDepthVar_->prolonge(pos_near.cast<float>());
               if(filterState.mlps_.features_[i].status_.trackingStatus_ == rovio::TRACKED){
                 std::next(mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
                 mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+                for(int j=0;j<8;j++){
+                  std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+                }
               } else {
                 std::next( mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
                 mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+                for(int j=0;j<8;j++){
+                  std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+                }
+              }
+            } else {
+              std::next( mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
+              mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
+              for(int j=0;j<8;j++){
+                std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
               }
             }
+
             mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
             cv::Mat patch = cv::Mat::zeros(patchSize_*pow(2,nLevels_-1),patchSize_*pow(2,nLevels_-1),CV_8UC1);
             filterState.mlps_.features_[i].drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
             mpPatches_[i]->setTexture(patch);
-
-            mpFilter->mPrediction_.depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
-            const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
-            LWF::NormalVectorElement corner;
-            const rovio::BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
-            Eigen::Vector2d dif;
-            Eigen::Vector3d cornerVec;
             for(int x=0;x<2;x++){
               for(int y=0;y<2;y++){
-                dif = 4.0*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
-                middle.boxPlus(dif,corner);
-                cornerVec = corner.getVec()*d;
-                mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec.cast<float>());
+                mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec[y*2+x].cast<float>());
               }
             }
             mpPatches_[i]->allocateBuffer();
-
             mpPatches_[i]->W_r_WB_ = mpSensor_->W_r_WB_;
             mpPatches_[i]->q_BW_ = mpSensor_->q_BW_;
           } else {
             mpPatches_[i]->clear();
           }
         }
-        mpLines_->setColorFull(Eigen::Vector4f(0.2f,0.2f,0.2f,1.0f));
         mpLines_->W_r_WB_ = mpSensor_->W_r_WB_;
         mpLines_->q_BW_ = mpSensor_->q_BW_;
         mpLines_->allocateBuffer();
@@ -463,7 +483,12 @@ int main(int argc, char** argv){
   TestFilter testFilter(nh);
 
   initGlut(argc,argv,mScene);
-  mScene.init(argc, argv);
+
+  std::string rootdir = ros::package::getPath("rovio");
+  std::string mVSFileName = rootdir + "/shaders/shader.vs";
+  std::string mFSFileName = rootdir + "/shaders/shader.fs";
+
+  mScene.init(argc, argv,mVSFileName,mFSFileName);
 
   rovio::SceneObject* mpGroundplane1 = mScene.addSceneObject();
   mpGroundplane1->makeGroundPlaneMesh(0.25,40);
@@ -485,7 +510,7 @@ int main(int argc, char** argv){
 
   testFilter.mpLines_ = mScene.addSceneObject();
   testFilter.mpLines_->makeLine();
-  testFilter.mpLines_->lineWidth_ = 1.0f;
+  testFilter.mpLines_->lineWidth_ = 2.0f;
   testFilter.mpLines_->mode_ = GL_LINES;
 
   testFilter.mpDepthVar_ = mScene.addSceneObject();

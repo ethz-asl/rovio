@@ -49,7 +49,6 @@ template<typename ImuPrediction>
 class CameraOutputCF:public LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true>{
  public:
   typedef LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true> Base;
-  using Base::eval;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;
