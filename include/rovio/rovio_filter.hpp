@@ -42,12 +42,10 @@ namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
-using namespace LWF;
-
 template<typename FILTERSTATE>
-class Filter:public FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
+class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
  public:
-  typedef FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>> Base;
+  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
