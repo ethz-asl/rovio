@@ -55,7 +55,7 @@ Init
 Update0
 {
     doPatchWarping true
-    doDrawTracks true
+    doFrameVisualisation true
     useDirectMethod true
     maxNumIteration 10
     startLevel 3

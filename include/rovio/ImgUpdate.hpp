@@ -132,8 +132,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   double minAbsoluteSTScore_;
   bool doPatchWarping_;
   bool useDirectMethod_;
-  bool doDrawTracks_;
-  bool doDrawVirtualHorizon_;
+  bool doFrameVisualisation_;
   ImgUpdate(){
     mpCamera_ = nullptr;
     initCovFeature_.setIdentity();
@@ -148,8 +147,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
     doPatchWarping_ = true;
     useDirectMethod_ = true;
-    doDrawTracks_ = true;
-    doDrawVirtualHorizon_ = true; // TODO: register
+    doFrameVisualisation_ = true;
     trackingLocalRange_ = 20;
     trackingLocalVisibilityRange_ = 200;
     trackingUpperBound_ = 0.9;
@@ -175,7 +173,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
-    boolRegister_.registerScalar("doDrawTracks",doDrawTracks_);
+    boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
@@ -235,7 +233,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
-    cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], filterState.img_, CV_GRAY2RGB);
+    if(doFrameVisualisation_){
+      cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], filterState.img_, CV_GRAY2RGB);
+    }
     filterState.imgTime_ = filterState.t_;
     filterState.imageCounter_++;
     filterState.patchDrawing_ = cv::Mat::zeros(mtState::nMax_*pow(2,mtState::nLevels_-1),mtState::nMax_*pow(2,mtState::nLevels_-1),CV_8UC1); // TODO
@@ -347,7 +347,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           }
 
           // Drawing
-          if(mpFeature->status_.inFrame_ && doDrawTracks_){
+          if(mpFeature->status_.inFrame_ && doFrameVisualisation_){
             mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
             mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
             mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
@@ -435,7 +435,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         filterState.mlps_.features_[i].log_previous_.c_ = filterState.mlps_.features_[i].get_c();
       }
     }
-    if (doDrawVirtualHorizon_){
+    if (doFrameVisualisation_){
       drawVirtualHorizon(filterState);
     }
   };

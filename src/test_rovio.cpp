@@ -247,7 +247,7 @@ class TestFilter{
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_gyb>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vep>().transpose() << std::endl;
 //      std::cout << mpFilter->safe_.state_.template get<mtState::_vea>() << std::endl;
-      if(!mpFilter->safe_.img_.empty() && std::get<0>(mpFilter->mUpdates_).doDrawTracks_ ){
+      if(!mpFilter->safe_.img_.empty() && std::get<0>(mpFilter->mUpdates_).doFrameVisualisation_){
         cv::imshow("Tracker", mpFilter->safe_.img_);
         cv::waitKey(1);
       }
