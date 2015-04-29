@@ -306,8 +306,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     float averageScore;
     int countTracked;
-    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature2; // TODO: rename
-    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature2; // TODO: rename
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature;
     int requiredFreeFeature;
     double removalFactor;
     int featureIndex;
@@ -315,53 +315,54 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     countTracked = 0;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
-        mpFeature2 = &filterState.mlps_.features_[i];
-        if(mpFeature2->status_.inFrame_){
+        mpFeature = &filterState.mlps_.features_[i];
+        if(mpFeature->status_.inFrame_){
           // Handle Status
-          mpFeature2->set_nor(state.template get<mtState::_nor>(i));
-          mpFeature2->log_current_.c_ = mpFeature2->get_c();
+          mpFeature->set_nor(state.template get<mtState::_nor>(i));
+          mpFeature->log_current_.c_ = mpFeature->get_c();
           pixelOutputCF_.setIndex(i);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
-          mpFeature2->log_current_.setSigmaFromCov(pixelOutputCov_);
+          mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
           if(state.template get<mtState::_aux>().useInUpdate_[i]){
             if(!outlierDetection.isOutlier(i)){
-              mpFeature2->status_.trackingStatus_ = TRACKED;
+              mpFeature->status_.trackingStatus_ = TRACKED;
               countTracked++;
             } else {
-              mpFeature2->status_.trackingStatus_ = FAILED;
+              mpFeature->status_.trackingStatus_ = FAILED;
             }
           }
 
           // Extract feature patches
-          if(mpFeature2->status_.trackingStatus_ == TRACKED){
-            if(isMultilevelPatchInFrame(*mpFeature2,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false)){
-              testFeature2.set_c(mpFeature2->get_c());
-              extractMultilevelPatchFromImage(testFeature2,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false);
-              testFeature2.computeMultilevelShiTomasiScore();
-              if(testFeature2.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature2.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature2->s_){
-                extractMultilevelPatchFromImage(*mpFeature2,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false);
-                state.template get<mtState::_aux>().bearingCorners_[i] = mpFeature2->get_bearingCorners();
+          if(mpFeature->status_.trackingStatus_ == TRACKED){
+            if(isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false)){
+              testFeature.set_c(mpFeature->get_c());
+              extractMultilevelPatchFromImage(testFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false);
+              testFeature.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
+              if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){
+                extractMultilevelPatchFromImage(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,true,false);
+                mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
+                state.template get<mtState::_aux>().bearingCorners_[i] = mpFeature->get_bearingCorners();
               }
             }
           }
 
           // Drawing
-          if(mpFeature2->status_.inFrame_ && doDrawTracks_){
-            mpFeature2->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
-            mpFeature2->log_predictionC0_.drawLine(filterState.img_,mpFeature2->log_predictionC1_,cv::Scalar(0,175,175),1);
-            mpFeature2->log_predictionC0_.drawLine(filterState.img_,mpFeature2->log_predictionC2_,cv::Scalar(0,175,175),1);
-            mpFeature2->log_predictionC3_.drawLine(filterState.img_,mpFeature2->log_predictionC1_,cv::Scalar(0,175,175),1);
-            mpFeature2->log_predictionC3_.drawLine(filterState.img_,mpFeature2->log_predictionC2_,cv::Scalar(0,175,175),1);
-            if(mpFeature2->status_.trackingStatus_ == TRACKED){
-              mpFeature2->log_current_.drawLine(filterState.img_,mpFeature2->log_prediction_,cv::Scalar(0,255,0));
-              mpFeature2->log_current_.draw(filterState.img_,cv::Scalar(0, 255, 0));
-              mpFeature2->log_current_.drawText(filterState.img_,std::to_string(mpFeature2->totCount_),cv::Scalar(0,255,0));
-            } else if(mpFeature2->status_.trackingStatus_ == FAILED){
-              mpFeature2->log_current_.draw(filterState.img_,cv::Scalar(0, 0, 255));
-              mpFeature2->log_current_.drawText(filterState.img_,std::to_string(mpFeature2->countTrackingStatistics(FAILED,trackingLocalRange_)),cv::Scalar(0,0,255));
+          if(mpFeature->status_.inFrame_ && doDrawTracks_){
+            mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
+            mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+            mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
+            mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+            mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
+            if(mpFeature->status_.trackingStatus_ == TRACKED){
+              mpFeature->log_current_.drawLine(filterState.img_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
+              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 255, 0));
+              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
+            } else if(mpFeature->status_.trackingStatus_ == FAILED){
+              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 0, 255));
+              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countTrackingStatistics(FAILED,trackingLocalRange_)),cv::Scalar(0,0,255));
             } else {
-              mpFeature2->log_current_.draw(filterState.img_,cv::Scalar(0,255,255));
-              mpFeature2->log_current_.drawText(filterState.img_,std::to_string(mpFeature2->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
+              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0,255,255));
+              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
             }
           }
         }
@@ -369,11 +370,11 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
 
     // Remove bad feature
-    averageScore = filterState.mlps_.getAverageScore();
+    averageScore = filterState.mlps_.getAverageScore(); // TODO
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
-        mpFeature2 = &filterState.mlps_.features_[i];
-        if(!mpFeature2->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
+        mpFeature = &filterState.mlps_.features_[i];
+        if(!mpFeature->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_,trackingLowerBound_)){
           //          || fManager.features_[ind].s_ < static_cast<float>(minAbsoluteSTScore_) + static_cast<float>(minRelativeSTScore_)*averageScore){ //TODO: debug and fix
           filterState.mlps_.isValid_[i] = false;
           filterState.removeFeature(i);
@@ -387,9 +388,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     featureIndex = 0;
     while((int)(mtState::nMax_) - (int)(filterState.mlps_.getValidCount()) < requiredFreeFeature){
       if(filterState.mlps_.isValid_[featureIndex]){
-        mpFeature2 = &filterState.mlps_.features_[featureIndex];
-        if(mpFeature2->status_.trackingStatus_ != TRACKED &&
-          !mpFeature2->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*removalFactor,trackingLowerBound_*removalFactor)){ // TODO: improve
+        mpFeature = &filterState.mlps_.features_[featureIndex];
+        if(mpFeature->status_.trackingStatus_ != TRACKED &&
+          !mpFeature->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*removalFactor,trackingLowerBound_*removalFactor)){ // TODO: improve
           filterState.mlps_.isValid_[featureIndex] = false;
           filterState.removeFeature(featureIndex);
         }
@@ -402,7 +403,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
 
     // Get new features
-    averageScore = filterState.mlps_.getAverageScore();
+    averageScore = filterState.mlps_.getAverageScore(); // TODO
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
       std::list<cv::Point2f> candidates;
       ROS_DEBUG_STREAM(" Adding keypoints");
