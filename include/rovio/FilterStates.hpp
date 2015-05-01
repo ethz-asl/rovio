@@ -34,11 +34,72 @@
 #include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
-#include "rovio/common_vision.hpp"
+#include "rovio/commonVision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
+
+class DepthMap{
+ public:
+  enum DepthType{
+   REGULAR,
+   INVERSE
+  } type_;
+  DepthMap(const DepthType& type = REGULAR){
+    setType(type);
+  }
+  void setType(const DepthType& type){
+    type_ = type;
+  }
+  void setType(const int& type){
+    switch(type){
+      case 0:
+        type_ = REGULAR;
+        break;
+      case 1:
+        type_ = INVERSE;
+        break;
+      default:
+        std::cout << "Invalid type for depth parametrization: " << type << std::endl;
+        type_ = REGULAR;
+        break;
+    }
+  }
+  void map(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    switch(type_){
+      case REGULAR:
+        mapRegular(p,d,d_p,p_d,p_d_p);
+        break;
+      case INVERSE:
+        mapInverse(p,d,d_p,p_d,p_d_p);
+        break;
+      default:
+        mapRegular(p,d,d_p,p_d,p_d_p);
+        break;
+    }
+  }
+  void mapRegular(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    d = p;
+    d_p = 1.0;
+    p_d = 1.0;
+    p_d_p = 0.0;
+  }
+  void mapInverse(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    double p_temp = p;
+    if(fabs(p_temp) < 1e-6){
+      if(p_temp >= 0){
+        p_temp = 1e-6;
+      } else {
+        p_temp = -1e-6;
+      }
+    }
+    d = 1/p_temp;
+    d_p = -d*d;
+    p_d = -p_temp*p_temp;
+    p_d_p = -2*p_temp;
+  }
+};
 
 template<unsigned int nMax, int nLevels, int patchSize>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patchSize>>{
@@ -55,6 +116,11 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       bearingCorners_[i][0].setZero();
       bearingCorners_[i][1].setZero();
     }
+    qVM_.setIdentity();
+    MrMV_.setZero();
+    doVECalibration_ = true;
+    depthTypeInt_ = 1;
+    depthMap_.setType(depthTypeInt_);
   };
   ~StateAuxiliary(){};
   V3D MwIMest_;
@@ -65,6 +131,11 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   Eigen::Vector2d b_red_[nMax];
   LWF::NormalVectorElement bearingMeas_[nMax];
   BearingCorners bearingCorners_[nMax];
+  QPD qVM_;
+  V3D MrMV_;
+  bool doVECalibration_;
+  DepthMap depthMap_; // TODO: move to state
+  int depthTypeInt_;
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>
@@ -110,6 +181,26 @@ class State: public LWF::State<
     this->template getName<_aux>() = "auxiliary";
   }
   ~State(){};
+  QPD get_qVM() const{
+    if(this->template get<_aux>().doVECalibration_){
+      return this->template get<_vea>();
+    } else {
+      return this->template get<_aux>().qVM_;
+    }
+  }
+  V3D get_MrMV() const{
+    if(this->template get<_aux>().doVECalibration_){
+      return this->template get<_vep>();
+    } else {
+      return this->template get<_aux>().MrMV_;
+    }
+  }
+  QPD get_qBW() const{
+    return get_qVM()*this->template get<_att>().inverted();
+  }
+  V3D get_WrWB() const{
+    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV());
+  }
 };
 
 class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{

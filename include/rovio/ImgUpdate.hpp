@@ -34,7 +34,6 @@
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
 #include "rovio/FilterStates.hpp"
-#include <cv_bridge/cv_bridge.h>
 #include "rovio/Camera.hpp"
 #include "rovio/PixelOutputCF.hpp"
 
@@ -133,6 +132,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   bool doPatchWarping_;
   bool useDirectMethod_;
   bool doFrameVisualisation_;
+  bool verbose_;
   ImgUpdate(){
     mpCamera_ = nullptr;
     initCovFeature_.setIdentity();
@@ -148,6 +148,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     doPatchWarping_ = true;
     useDirectMethod_ = true;
     doFrameVisualisation_ = true;
+    verbose_ = false; // TODO: register
     trackingLocalRange_ = 20;
     trackingLocalVisibilityRange_ = 200;
     trackingUpperBound_ = 0.9;
@@ -406,21 +407,21 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     averageScore = filterState.mlps_.getAverageScore(); // TODO
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
       std::list<cv::Point2f> candidates;
-      ROS_DEBUG_STREAM(" Adding keypoints");
+      if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
         detectFastCorners(meas.template get<mtMeas::_aux>().pyr_,candidates,l,detectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
-      ROS_DEBUG_STREAM(" == Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+      if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       pruneCandidates(filterState.mlps_,candidates);
       const double t3 = (double) cv::getTickCount();
-      ROS_DEBUG_STREAM(" == Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
+      if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_,filterState.t_,
                                                                   endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
-      ROS_DEBUG_STREAM(" == Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
+      if(verbose_) std::cout << "== Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       for(auto it = newSet.begin();it != newSet.end();++it){
         filterState.mlps_.features_[*it].setCamera(mpCamera_);
         filterState.mlps_.features_[*it].status_.inFrame_ = true;

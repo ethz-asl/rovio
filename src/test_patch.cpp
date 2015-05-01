@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include <assert.h>
-#include "../include/rovio/common_vision.hpp"
+
+#include "../include/rovio/commonVision.hpp"
 
 using namespace rovio;
 

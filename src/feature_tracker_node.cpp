@@ -26,7 +26,7 @@
 *
 */
 
-#include "rovio/feature_tracker.hpp"
+#include "../include/rovio/featureTracker.hpp"
 
 int main(int argc, char** argv) {
   ros::init(argc, argv, "FeatureTrackerNode");

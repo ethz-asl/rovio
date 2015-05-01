@@ -26,56 +26,52 @@
 *
 */
 
-#include "rovio/RovioNode.hpp"
-#include "rovio/Scene.hpp"
+#include <ros/package.h>
 
-rovio::Scene mScene;
+#include "rovio/rovioFilter.hpp"
+#include "rovio/RovioNode.hpp"
+#ifdef MAKE_SCENE
+#include "rovio/RovioScene.hpp"
+#endif
+
+static constexpr unsigned int nMax_ = 50;
+static constexpr int nLevels_ = 4;
+static constexpr int patchSize_ = 8;
+typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_>> mtFilter;
+
+#ifdef MAKE_SCENE
+rovio::RovioScene<mtFilter> mRovioScene;
+
+void idleFunc(){
+  ros::spinOnce();
+  mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
+}
+#endif
 
 int main(int argc, char** argv){
   ros::init(argc, argv, "TestFilter");
   ros::NodeHandle nh;
-  rovio::RovioNode rovioNode(nh);
-
-  initGlut(argc,argv,mScene);
-
   std::string rootdir = ros::package::getPath("rovio");
+
+  // Filter
+  mtFilter* mpFilter = new mtFilter;
+  mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
+
+  // Node
+  rovio::RovioNode<mtFilter> rovioNode(nh,mpFilter);
+  rovioNode.makeTest();
+
+#ifdef MAKE_SCENE
+  // Scene
   std::string mVSFileName = rootdir + "/shaders/shader.vs";
   std::string mFSFileName = rootdir + "/shaders/shader.fs";
-
-  mScene.init(argc, argv,mVSFileName,mFSFileName);
-
-  rovio::SceneObject* mpGroundplane1 = mScene.addSceneObject();
-  mpGroundplane1->makeGroundPlaneMesh(0.25,40);
-  mpGroundplane1->setColorFull(Eigen::Vector4f(0.6f,0.6f,0.6f,1.0f));
-  mpGroundplane1->lineWidth_ = 1.0f;
-  mpGroundplane1->W_r_WB_(2) = -1.0f;
-  rovio::SceneObject* mpGroundplane2 = mScene.addSceneObject();
-  mpGroundplane2->makeGroundPlaneMesh(1.0,10);
-  mpGroundplane2->setColorFull(Eigen::Vector4f(0.8f,0.8f,0.8f,1.0f));
-  mpGroundplane2->lineWidth_ = 3.0f;
-  mpGroundplane2->W_r_WB_(2) = -1.0f;
-  rovioNode.mpSensor_ = mScene.addSceneObject();
-  rovioNode.mpSensor_->makeCoordinateFrame(1.0f);
-  rovioNode.mpSensor_->lineWidth_ = 5.0f;
-
-  for(int i=0;i<TestFilter::mtState::nMax_;i++){
-    rovioNode.mpPatches_[i] = mScene.addSceneObject();
-  }
-
-  rovioNode.mpLines_ = mScene.addSceneObject();
-  rovioNode.mpLines_->makeLine();
-  rovioNode.mpLines_->lineWidth_ = 2.0f;
-  rovioNode.mpLines_->mode_ = GL_LINES;
-
-  rovioNode.mpDepthVar_ = mScene.addSceneObject();
-  rovioNode.mpDepthVar_->makeLine();
-  rovioNode.mpDepthVar_->lineWidth_ = 3.0f;
-  rovioNode.mpDepthVar_->mode_ = GL_LINES;
-
-  mScene.setView(Eigen::Vector3f(-5.0f,-5.0f,5.0f),Eigen::Vector3f(0.0f,0.0f,0.0f));
-  mScene.setYDown();
-  mScene.setIdleFunction(ros::spinOnce);
+  mRovioScene.initScene(argc,argv,mVSFileName,mFSFileName,mpFilter);
+  mRovioScene.setIdleFunction(idleFunc);
   glutMainLoop();
+#else
+  ros::spin();
+#endif
 
+  delete mpFilter;
   return 0;
 }

@@ -45,61 +45,48 @@ class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEle
   ~StandardOutput(){};
 };
 
-template<typename ImuPrediction>
-class CameraOutputCF:public LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true>{
+template<typename STATE>
+class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<typename ImuPrediction::mtState,StandardOutput,true> Base;
+  typedef LWF::CoordinateTransform<STATE,StandardOutput,true> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtOutputCovMat mtOutputCovMat;
-  CameraOutputCF(const ImuPrediction& imuPrediction): mpImuPrediction_(&imuPrediction){};
+  CameraOutputCF(){};
   ~CameraOutputCF(){};
-  const ImuPrediction* mpImuPrediction_;
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // IrIV = IrIM + qIM*(MrMV)
     // VvV = qVM*(MvM + MwIM x MrMV)
     // qVI = qVM*qIM^T
     // VwIV = qVM*MwIM
-    V3D MrMV = mpImuPrediction_->MrMV_;
-    QPD qVM = mpImuPrediction_->qVM_;
-    if(mpImuPrediction_->doVECalibration_){
-      MrMV = input.template get<mtInput::_vep>();
-      qVM = input.template get<mtInput::_vea>();
-    }
-    output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(MrMV);
-    output.template get<mtOutput::_ror>() = qVM.rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
+    output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(input.get_MrMV());
+    output.template get<mtOutput::_ror>() = input.get_qVM().rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
     output.template get<mtOutput::_vel>() =
-        qVM.rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*MrMV));
-    output.template get<mtOutput::_att>() = qVM*input.template get<mtInput::_att>().inverted();
+        input.get_qVM().rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV()));
+    output.template get<mtOutput::_att>() = input.get_qVM()*input.template get<mtInput::_att>().inverted();
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
-    V3D MrMV = mpImuPrediction_->MrMV_;
-    QPD qVM = mpImuPrediction_->qVM_;
-    if(mpImuPrediction_->doVECalibration_){
-      MrMV = input.template get<mtInput::_vep>();
-      qVM = input.template get<mtInput::_vea>();
-    }
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) = M3D::Identity();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_att>()) =
-        gSM(input.template get<mtInput::_att>().rotate(MrMV));
+        gSM(input.template get<mtInput::_att>().rotate(input.get_MrMV()));
     J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_att>()) =
-        -MPD(qVM*input.template get<mtInput::_att>().inverted()).matrix();
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -MPD(qVM).matrix();
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_gyb>()) = MPD(qVM).matrix()
-        * gSM(MrMV);
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_gyb>()) = -MPD(qVM).matrix();
-    if(mpImuPrediction_->doVECalibration_){
+        -MPD(input.get_qVM()*input.template get<mtInput::_att>().inverted()).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -MPD(input.get_qVM()).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_gyb>()) = MPD(input.get_qVM()).matrix()
+        * gSM(input.get_MrMV());
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_gyb>()) = -MPD(input.get_qVM()).matrix();
+    if(input.template get<mtInput::_aux>().doVECalibration_){
       J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_vep>()) =
           MPD(input.template get<mtInput::_att>()).matrix();
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vep>()) =
-          MPD(qVM).matrix()*gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
+          MPD(input.get_qVM()).matrix()*gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_vea>()) =
-          gSM(qVM.rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>())));
+          gSM(input.get_qVM().rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vea>()) =
-          gSM(qVM.rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*MrMV)));
+          gSM(input.get_qVM().rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_vea>()) =
           M3D::Identity();
     }

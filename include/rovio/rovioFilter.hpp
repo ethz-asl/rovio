@@ -43,7 +43,7 @@ namespace rot = kindr::rotations::eigen_impl;
 namespace rovio {
 
 template<typename FILTERSTATE>
-class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
+class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
  public:
   typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>> Base;
   using Base::init_;
@@ -52,6 +52,8 @@ class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERS
   using Base::safe_;
   using Base::front_;
   using Base::readFromInfo;
+  using Base::boolRegister_;
+  using Base::intRegister_;
   using Base::doubleRegister_;
   using Base::mUpdates_;
   using Base::mPrediction_;
@@ -61,10 +63,14 @@ class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERS
   typedef typename Base::mtState mtState;
   rovio::Camera camera_;
   std::string cameraCalibrationFile_;
-  Filter(){
+  RovioFilter(){
     std::get<0>(mUpdates_).setCamera(&camera_);
     cameraCalibrationFile_ = "calib.yaml";
     stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
+    boolRegister_.registerScalar("doVECalibration",init_.state_.template get<mtState::_aux>().doVECalibration_);
+    intRegister_.registerScalar("depthType",init_.state_.template get<mtState::_aux>().depthTypeInt_);
+    doubleRegister_.registerVector("MrMV",init_.state_.template get<mtState::_aux>().MrMV_);
+    doubleRegister_.registerQuaternion("qVM",init_.state_.template get<mtState::_aux>().qVM_);
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtState::template getId<mtState::_nor>(i);
@@ -85,8 +91,9 @@ class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERS
   }
   void refreshProperties(){
     camera_.load(cameraCalibrationFile_);
+    init_.state_.template get<mtState::_aux>().depthMap_.setType(init_.state_.template get<mtState::_aux>().depthTypeInt_);
   };
-  ~Filter(){};
+  ~RovioFilter(){};
 //  void resetToImuPose(V3D IrIM, QPD qMI, double t = 0.0){
 //    init_.state_.initWithImuPose(IrIM,qMI);
 //    reset(t);
@@ -94,6 +101,11 @@ class Filter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERS
   void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
     init_.initWithAccelerometer(fMeasInit);
     reset(t);
+  }
+  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM){
+    rot::RotationMatrixAD R(R_VM);
+    init_.state_.template get<mtState::_aux>().qVM_ = QPD(R.getPassive());
+    init_.state_.template get<mtState::_aux>().MrMV_ = -init_.state_.template get<mtState::_aux>().qVM_.inverseRotate(VrVM); // TODO: all filterstates
   }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;
