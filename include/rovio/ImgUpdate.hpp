@@ -259,20 +259,20 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         if(mpFeature->status_.inFrame_){
           pixelOutputCF_.setIndex(i);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
-          mpFeature->log_prediction_.c_ = mpFeature->get_c();
-          mpFeature->log_prediction_.setSigmaFromCov(pixelOutputCov_);
+          mpFeature->setSigmaFromCov(pixelOutputCov_);
+          mpFeature->log_prediction_ = static_cast<FeatureCoordinates>(*mpFeature);
           mpFeature->set_bearingCorners(state.template get<mtState::_aux>().bearingCorners_[i]);
           const PixelCorners& pixelCorners = mpFeature->get_pixelCorners();
-          mpFeature->log_predictionC0_.c_ = mpFeature->get_c() - 4*pixelCorners[0] - 4*pixelCorners[1];
-          mpFeature->log_predictionC1_.c_ = mpFeature->get_c() + 4*pixelCorners[0] - 4*pixelCorners[1];
-          mpFeature->log_predictionC2_.c_ = mpFeature->get_c() - 4*pixelCorners[0] + 4*pixelCorners[1];
-          mpFeature->log_predictionC3_.c_ = mpFeature->get_c() + 4*pixelCorners[0] + 4*pixelCorners[1];
+          mpFeature->log_predictionC0_.set_c(mpFeature->get_c() - 4*pixelCorners[0] - 4*pixelCorners[1]);
+          mpFeature->log_predictionC1_.set_c(mpFeature->get_c() + 4*pixelCorners[0] - 4*pixelCorners[1]);
+          mpFeature->log_predictionC2_.set_c(mpFeature->get_c() - 4*pixelCorners[0] + 4*pixelCorners[1]);
+          mpFeature->log_predictionC3_.set_c(mpFeature->get_c() + 4*pixelCorners[0] + 4*pixelCorners[1]);
 
           // Search patch // TODO: do adaptive
           if(!useDirectMethod_ || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_){
             align2DComposed(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           }
-          if(mpFeature->status_.matchingStatus_ == FOUND) mpFeature->log_meas_.c_ = mpFeature->get_c();
+          if(mpFeature->status_.matchingStatus_ == FOUND) mpFeature->log_meas_.set_c(mpFeature->get_c());
 
           // Add as measurement
           if(useDirectMethod_){
@@ -326,10 +326,10 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         if(mpFeature->status_.inFrame_){
           // Handle Status
           mpFeature->set_nor(state.template get<mtState::_nor>(i));
-          mpFeature->log_current_.c_ = mpFeature->get_c();
           pixelOutputCF_.setIndex(i);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
-          mpFeature->log_current_.setSigmaFromCov(pixelOutputCov_);
+          mpFeature->setSigmaFromCov(pixelOutputCov_);
+          mpFeature->log_current_ = static_cast<FeatureCoordinates>(*mpFeature);
           if(state.template get<mtState::_aux>().useInUpdate_[i]){
             if(!outlierDetection.isOutlier(i)){
               mpFeature->status_.trackingStatus_ = TRACKED;
@@ -355,21 +355,21 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
 
           // Drawing
           if(mpFeature->status_.inFrame_ && doFrameVisualisation_){
-            mpFeature->log_prediction_.draw(filterState.img_,cv::Scalar(0,175,175));
-            mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
-            mpFeature->log_predictionC0_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
-            mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
-            mpFeature->log_predictionC3_.drawLine(filterState.img_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
+            drawEllipse(filterState.img_,mpFeature->log_prediction_,cv::Scalar(0,175,175));
+            drawLine(filterState.img_,mpFeature->log_predictionC0_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+            drawLine(filterState.img_,mpFeature->log_predictionC0_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
+            drawLine(filterState.img_,mpFeature->log_predictionC3_,mpFeature->log_predictionC1_,cv::Scalar(0,175,175),1);
+            drawLine(filterState.img_,mpFeature->log_predictionC3_,mpFeature->log_predictionC2_,cv::Scalar(0,175,175),1);
             if(mpFeature->status_.trackingStatus_ == TRACKED){
-              mpFeature->log_current_.drawLine(filterState.img_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
-              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 255, 0));
-              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
+              drawLine(filterState.img_,mpFeature->log_current_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
+              drawEllipse(filterState.img_,mpFeature->log_current_,cv::Scalar(0, 255, 0));
+              drawText(filterState.img_,mpFeature->log_current_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
             } else if(mpFeature->status_.trackingStatus_ == FAILED){
-              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0, 0, 255));
-              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countTrackingStatistics(FAILED,trackingLocalRange_)),cv::Scalar(0,0,255));
+              drawEllipse(filterState.img_,mpFeature->log_current_,cv::Scalar(0, 0, 255));
+              drawText(filterState.img_,mpFeature->log_current_,std::to_string(mpFeature->countTrackingStatistics(FAILED,trackingLocalRange_)),cv::Scalar(0,0,255));
             } else {
-              mpFeature->log_current_.draw(filterState.img_,cv::Scalar(0,255,255));
-              mpFeature->log_current_.drawText(filterState.img_,std::to_string(mpFeature->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
+              drawEllipse(filterState.img_,mpFeature->log_current_,cv::Scalar(0,255,255));
+              drawText(filterState.img_,mpFeature->log_current_,std::to_string(mpFeature->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
             }
           }
         }
@@ -439,7 +439,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].status_.inFrame_){
-        filterState.mlps_.features_[i].log_previous_.c_ = filterState.mlps_.features_[i].get_c();
+        filterState.mlps_.features_[i].log_previous_ = static_cast<FeatureCoordinates>(filterState.mlps_.features_[i]);
       }
     }
     if (doFrameVisualisation_){

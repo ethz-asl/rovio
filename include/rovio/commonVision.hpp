@@ -62,48 +62,6 @@ struct Status{
   }
 };
 
-class DrawPoint{
- public:
-  cv::Point2f c_;
-  double sigma1_;
-  double sigma2_;
-  double sigmaAngle_;
-  bool hasSigma_;
-  double factor_;
-  Eigen::EigenSolver<Eigen::Matrix2d> es_;
-  DrawPoint(){
-    c_ = cv::Point2f(0,0);
-    sigma1_ = 1.0;
-    sigma2_ = 1.0;
-    hasSigma_ = false;
-    sigmaAngle_ = 0.0;
-    factor_ = 2.0;
-  }
-  void draw(cv::Mat& drawImg,const cv::Scalar& color){
-    cv::Size size(2,2);
-    cv::ellipse(drawImg,c_,size,0,0,360,color,-1,8,0);
-    if(hasSigma_){
-      cv::ellipse(drawImg,c_,cv::Size(std::max(static_cast<int>(factor_*sigma1_+0.5),1),std::max(static_cast<int>(factor_*sigma2_+0.5),1)),sigmaAngle_,0,360,color,1,8,0);
-    }
-  }
-  void drawLine(cv::Mat& drawImg,const DrawPoint& p,const cv::Scalar& color, int thickness = 2){
-    drawLine(drawImg,p.c_,color,thickness);
-  }
-  void drawLine(cv::Mat& drawImg,const cv::Point2f& c,const cv::Scalar& color, int thickness = 2){
-    cv::line(drawImg,c_,c,color, thickness);
-  }
-  void drawText(cv::Mat& drawImg,const std::string& s,const cv::Scalar& color){
-    cv::putText(drawImg,s,c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
-  }
-  void setSigmaFromCov(const Eigen::Matrix2d& cov){
-    es_.compute(cov);
-    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
-    sigma1_ = sqrt(es_.eigenvalues()(0).real());
-    sigma2_ = sqrt(es_.eigenvalues()(1).real());
-    hasSigma_ = true;
-  }
-};
-
 void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
   imgOut.create(imgIn.rows/2,imgIn.cols/2,imgIn.type());
   const int refStepIn = imgIn.step.p[0];
@@ -361,81 +319,30 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
   }
 }
 
-template<int n_levels,int patch_size>
-class MultilevelPatchFeature{
+class FeatureCoordinates{
  public:
-  static const int nLevels_ = n_levels;
-  Patch<patch_size> patches_[nLevels_];
-  bool isValidPatch_[nLevels_];
   cv::Point2f c_;
   bool valid_c_;
   LWF::NormalVectorElement nor_;
   bool valid_nor_;
-  static constexpr float warpDistance_ = static_cast<float>(patch_size);
-  PixelCorners pixelCorners_;
-  bool valid_pixelCorners_;
-  BearingCorners bearingCorners_;
-  bool valid_bearingCorners_;
-  Eigen::Matrix2f affineTransform_;
-  bool valid_affineTransform_;
-  int idx_;
-  double initTime_;
-  double currentTime_;
-  Eigen::Matrix3f H_;
-  float s_;
   const Camera* mpCamera_;
-  int totCount_;
-  Eigen::MatrixXf A_;
-  Eigen::MatrixXf b_;
-  Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
-
-  DrawPoint log_previous_;
-  DrawPoint log_prediction_;
-  DrawPoint log_predictionC0_;
-  DrawPoint log_predictionC1_;
-  DrawPoint log_predictionC2_;
-  DrawPoint log_predictionC3_;
-  DrawPoint log_meas_;
-  DrawPoint log_current_;
-
-  Status status_;
-  std::map<MatchingStatus,int> cumulativeMatchingStatus_;
-  std::map<TrackingStatus,int> cumulativeTrackingStatus_;
-  int inFrameCount_;
-  std::map<double,Status> statistics_;
-
-  MultilevelPatchFeature(){
+  double sigma1_;
+  double sigma2_;
+  double sigmaAngle_;
+  Eigen::EigenSolver<Eigen::Matrix2d> es_;
+  FeatureCoordinates(){
     mpCamera_ == nullptr;
-    reset();
+    resetCoordinates();
   }
-  MultilevelPatchFeature(const Camera* mpCamera): mpCamera_(mpCamera){
-    reset();
+  FeatureCoordinates(const Camera* mpCamera): mpCamera_(mpCamera){
+    resetCoordinates();
   }
-  ~MultilevelPatchFeature(){}
-  void setCamera(const Camera* mpCamera){
-    mpCamera_ = mpCamera;
-  }
-  void reset(const int idx = -1, const double initTime = 0.0){
-    idx_ = idx;
-    initTime_ = initTime;
-    currentTime_ = initTime;
-    c_ = cv::Point2f(0,0);
+  void resetCoordinates(){
     valid_c_ = false;
     valid_nor_ = false;
-    valid_pixelCorners_ = false;
-    valid_bearingCorners_ = false;
-    valid_affineTransform_ = false;
-    H_.setIdentity();
-    s_ = 0;
-    totCount_ = 0;
-    inFrameCount_ = 0;
-    statistics_.clear();
-    cumulativeMatchingStatus_.clear();
-    cumulativeTrackingStatus_.clear();
-    status_ = Status();
-    for(unsigned int i = 0;i<nLevels_;i++){
-      isValidPatch_[i] = false;
-    }
+    sigma1_ = 0.0;
+    sigma2_ = 0.0;
+    sigmaAngle_ = 0.0;
   }
   const cv::Point2f& get_c(){
     if(!valid_c_){
@@ -469,6 +376,103 @@ class MultilevelPatchFeature{
   }
   bool isInFront(){
     return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
+  }
+  void setSigmaFromCov(const Eigen::Matrix2d& cov){
+    es_.compute(cov);
+    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real());
+    sigma1_ = sqrt(es_.eigenvalues()(0).real());
+    sigma2_ = sqrt(es_.eigenvalues()(1).real());
+    if(sigma1_<sigma2_){
+      const double temp = sigma1_;
+      sigma1_ = sigma2_;
+      sigma2_ = temp;
+      sigmaAngle_ += 0.5*M_PI;
+    }
+  }
+};
+
+static void drawPoint(cv::Mat& drawImg, const FeatureCoordinates& C, const cv::Scalar& color){
+  cv::Size size(2,2);
+  cv::ellipse(drawImg,C.c_,size,0,0,360,color,-1,8,0);
+}
+static void drawEllipse(cv::Mat& drawImg, const FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
+  drawPoint(drawImg,C,color);
+  cv::ellipse(drawImg,C.c_,cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
+}
+static void drawLine(cv::Mat& drawImg, const FeatureCoordinates& C1, const FeatureCoordinates& C2, const cv::Scalar& color, int thickness = 2){
+  cv::line(drawImg,C1.c_,C2.c_,color,thickness);
+}
+static void drawText(cv::Mat& drawImg, const FeatureCoordinates& C, const std::string& s, const cv::Scalar& color){
+  cv::putText(drawImg,s,C.c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
+}
+
+template<int n_levels,int patch_size>
+class MultilevelPatchFeature: public FeatureCoordinates{
+ public:
+  static const int nLevels_ = n_levels;
+  Patch<patch_size> patches_[nLevels_];
+  bool isValidPatch_[nLevels_];
+  static constexpr float warpDistance_ = static_cast<float>(patch_size);
+  PixelCorners pixelCorners_;
+  bool valid_pixelCorners_;
+  BearingCorners bearingCorners_;
+  bool valid_bearingCorners_;
+  Eigen::Matrix2f affineTransform_;
+  bool valid_affineTransform_;
+  int idx_;
+  double initTime_;
+  double currentTime_;
+  Eigen::Matrix3f H_;
+  float s_;
+  int totCount_;
+  Eigen::MatrixXf A_;
+  Eigen::MatrixXf b_;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
+
+  FeatureCoordinates log_previous_;
+  FeatureCoordinates log_prediction_;
+  FeatureCoordinates log_predictionC0_;
+  FeatureCoordinates log_predictionC1_;
+  FeatureCoordinates log_predictionC2_;
+  FeatureCoordinates log_predictionC3_;
+  FeatureCoordinates log_meas_;
+  FeatureCoordinates log_current_;
+
+  Status status_;
+  std::map<MatchingStatus,int> cumulativeMatchingStatus_;
+  std::map<TrackingStatus,int> cumulativeTrackingStatus_;
+  int inFrameCount_;
+  std::map<double,Status> statistics_;
+
+  MultilevelPatchFeature(){
+    reset();
+  }
+  MultilevelPatchFeature(const Camera* mpCamera): FeatureCoordinates(mpCamera){
+    reset();
+  }
+  ~MultilevelPatchFeature(){}
+  void setCamera(const Camera* mpCamera){
+    mpCamera_ = mpCamera;
+  }
+  void reset(const int idx = -1, const double initTime = 0.0){
+    resetCoordinates();
+    idx_ = idx;
+    initTime_ = initTime;
+    currentTime_ = initTime;
+    valid_pixelCorners_ = false;
+    valid_bearingCorners_ = false;
+    valid_affineTransform_ = false;
+    H_.setIdentity();
+    s_ = 0;
+    totCount_ = 0;
+    inFrameCount_ = 0;
+    statistics_.clear();
+    cumulativeMatchingStatus_.clear();
+    cumulativeTrackingStatus_.clear();
+    status_ = Status();
+    for(unsigned int i = 0;i<nLevels_;i++){
+      isValidPatch_[i] = false;
+    }
   }
   const PixelCorners& get_pixelCorners(){
     if(!valid_pixelCorners_){
