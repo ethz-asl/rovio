@@ -98,8 +98,8 @@ class DrawPoint{
   void setSigmaFromCov(const Eigen::Matrix2d& cov){
     es_.compute(cov);
     sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real())*180/M_PI;
-    sigma1_ =  sqrt(es_.eigenvalues()(0).real());
-    sigma2_  = sqrt(es_.eigenvalues()(1).real());
+    sigma1_ = sqrt(es_.eigenvalues()(0).real());
+    sigma2_ = sqrt(es_.eigenvalues()(1).real());
     hasSigma_ = true;
   }
 };

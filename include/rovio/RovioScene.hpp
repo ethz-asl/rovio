@@ -102,6 +102,7 @@ class RovioScene{
     mpLines_->clear();
     mpDepthVar_->clear();
     double d, d_far, d_near, d_p, p_d, p_d_p;
+    const double stretchFactor = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-1)/(filterState.mlps_.features_[0].warpDistance_*2.0);
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
         state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
@@ -115,7 +116,7 @@ class RovioScene{
         const BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
         for(int x=0;x<2;x++){
           for(int y=0;y<2;y++){
-            const Eigen::Vector2d dif = 4.0*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
+            const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
             middle.boxPlus(dif,corner[y*2+x]);
             cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
           }
