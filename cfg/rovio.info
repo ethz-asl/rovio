@@ -94,6 +94,8 @@ Update0
     minTrackedAndFreeFeatures 0.5
     minRelativeSTScore 0.75
     minAbsoluteSTScore 5.0
+    fastDetectionThreshold 10
+    matchingPixelThreshold 0.0
 }
 Prediction
 {

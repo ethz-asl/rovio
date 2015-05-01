@@ -120,7 +120,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   int endLevel_;
   double startDetectionTh_;
   int nDetectionBuckets_;
-  int detectionThreshold_;
+  int fastDetectionThreshold_;
   double scoreDetectionExponent_;
   double penaltyDistance_;
   double zeroDistancePenalty_;
@@ -129,6 +129,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   double minTrackedAndFreeFeatures_;
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
+  double matchingPixelThreshold_;
   bool doPatchWarping_;
   bool useDirectMethod_;
   bool doFrameVisualisation_;
@@ -141,7 +142,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     endLevel_ = 1;
     startDetectionTh_ = 0.9;
     nDetectionBuckets_ = 100;
-    detectionThreshold_ = 10; // TODO: register
+    fastDetectionThreshold_ = 10;
     scoreDetectionExponent_ = 0.5;
     penaltyDistance_ = 20;
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
@@ -156,6 +157,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     minTrackedAndFreeFeatures_ = 0.5;
     minRelativeSTScore_ = 0.2;
     minAbsoluteSTScore_ = 0.2;
+    matchingPixelThreshold_ = 4.0;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -169,6 +171,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);
     doubleRegister_.registerScalar("minRelativeSTScore",minRelativeSTScore_);
     doubleRegister_.registerScalar("minAbsoluteSTScore",minAbsoluteSTScore_);
+    doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
+    intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
@@ -265,7 +269,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           mpFeature->log_predictionC3_.c_ = mpFeature->get_c() + 4*pixelCorners[0] + 4*pixelCorners[1];
 
           // Search patch // TODO: do adaptive
-          align2DComposed(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
+          if(!useDirectMethod_ || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_){
+            align2DComposed(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
+          }
           if(mpFeature->status_.matchingStatus_ == FOUND) mpFeature->log_meas_.c_ = mpFeature->get_c();
 
           // Add as measurement
@@ -410,7 +416,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
-        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_,candidates,l,detectionThreshold_);
+        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_,candidates,l,fastDetectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
