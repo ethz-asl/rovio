@@ -234,16 +234,23 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       G.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) = Eigen::Matrix2d::Identity();
     }
   }
-  void preProcess(mtFilterState& filterState, const mtMeas& meas, const int s = 0){
+  void commonPreProcess(mtFilterState& filterState, const mtMeas& meas){
     assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
-    typename mtFilterState::mtState& state = filterState.state_;
-    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     if(doFrameVisualisation_){
       cvtColor(meas.template get<mtMeas::_aux>().pyr_.imgs_[0], filterState.img_, CV_GRAY2RGB);
     }
     filterState.imgTime_ = filterState.t_;
     filterState.imageCounter_++;
     filterState.patchDrawing_ = cv::Mat::zeros(mtState::nMax_*pow(2,mtState::nLevels_-1),mtState::nMax_*pow(2,mtState::nLevels_-1),CV_8UC1); // TODO
+
+  }
+  void preProcess(mtFilterState& filterState, const mtMeas& meas, bool& isFinished){
+    if(isFinished){ // gets called if this is the first call
+      commonPreProcess(filterState,meas);
+      isFinished = false;
+    }
+    typename mtFilterState::mtState& state = filterState.state_;
+    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
 
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     Eigen::Vector2d vec2;
@@ -307,19 +314,13 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
     }
   };
-  void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, const int s = 0){
+  void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     // Temps
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
-    float averageScore;
-    int countTracked;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature;
-    int requiredFreeFeature;
-    double removalFactor;
-    int featureIndex;
 
-    countTracked = 0;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
         mpFeature = &filterState.mlps_.features_[i];
@@ -333,7 +334,6 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           if(state.template get<mtState::_aux>().useInUpdate_[i]){
             if(!outlierDetection.isOutlier(i)){
               mpFeature->status_.trackingStatus_ = TRACKED;
-              countTracked++;
             } else {
               mpFeature->status_.trackingStatus_ = FAILED;
             }
@@ -373,6 +373,26 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             }
           }
         }
+      }
+    }
+    commonPostProcess(filterState,meas);
+    isFinished = true;
+  };
+  void commonPostProcess(mtFilterState& filterState, const mtMeas& meas){
+    float averageScore;
+    int countTracked;
+    int requiredFreeFeature;
+    double removalFactor;
+    int featureIndex;
+    typename mtFilterState::mtState& state = filterState.state_;
+    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
+
+    // Count tracked
+    countTracked = 0;
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].status_.trackingStatus_ == TRACKED){
+        countTracked++;
       }
     }
 
@@ -445,7 +465,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     if (doFrameVisualisation_){
       drawVirtualHorizon(filterState);
     }
-  };
+
+  }
   void drawVirtualHorizon(mtFilterState& filterState){
     typename mtFilterState::mtState& state = filterState.state_;
     cv::rectangle(filterState.img_,cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);
