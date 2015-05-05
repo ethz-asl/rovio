@@ -306,24 +306,24 @@ class RovioNode{
       rovioOutputMsg_.gyr_bias_sigma.z = cov(mtState::template getId<mtState::_gyb>()+2,mtState::template getId<mtState::_gyb>()+2);
 
       // Extrinsics
-      rovioOutputMsg_.extrinsics.pose.position.x = state.template get<mtState::_vep>()(0);
-      rovioOutputMsg_.extrinsics.pose.position.y = state.template get<mtState::_vep>()(1);
-      rovioOutputMsg_.extrinsics.pose.position.z = state.template get<mtState::_vep>()(2);
-      rovioOutputMsg_.extrinsics.pose.orientation.w = state.template get<mtState::_vea>().w();
-      rovioOutputMsg_.extrinsics.pose.orientation.x = state.template get<mtState::_vea>().x();
-      rovioOutputMsg_.extrinsics.pose.orientation.y = state.template get<mtState::_vea>().y();
-      rovioOutputMsg_.extrinsics.pose.orientation.z = state.template get<mtState::_vea>().z();
+      rovioOutputMsg_.extrinsics.pose.position.x = state.template get<mtState::_vep>(0)(0);
+      rovioOutputMsg_.extrinsics.pose.position.y = state.template get<mtState::_vep>(0)(1);
+      rovioOutputMsg_.extrinsics.pose.position.z = state.template get<mtState::_vep>(0)(2);
+      rovioOutputMsg_.extrinsics.pose.orientation.w = state.template get<mtState::_vea>(0).w();
+      rovioOutputMsg_.extrinsics.pose.orientation.x = state.template get<mtState::_vea>(0).x();
+      rovioOutputMsg_.extrinsics.pose.orientation.y = state.template get<mtState::_vea>(0).y();
+      rovioOutputMsg_.extrinsics.pose.orientation.z = state.template get<mtState::_vea>(0).z();
       for(unsigned int i=0;i<6;i++){
-        unsigned int ind1 = mtState::template getId<mtState::_vep>()+i;
-        if(i>=3) ind1 = mtState::template getId<mtState::_vea>()+i-3;
+        unsigned int ind1 = mtState::template getId<mtState::_vep>(0)+i;
+        if(i>=3) ind1 = mtState::template getId<mtState::_vea>(0)+i-3;
         for(unsigned int j=0;j<6;j++){
-          unsigned int ind2 = mtState::template getId<mtState::_vep>()+j;
-          if(j>=3) ind2 = mtState::template getId<mtState::_vea>()+j-3;
+          unsigned int ind2 = mtState::template getId<mtState::_vep>(0)+j;
+          if(j>=3) ind2 = mtState::template getId<mtState::_vea>(0)+j-3;
           rovioOutputMsg_.extrinsics.covariance[j+6*i] = cov(ind1,ind2);
         }
       }
-      attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.template get<mtState::_vea>();
-      attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(),mtState::template getId<mtState::_vea>());
+      attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.template get<mtState::_vea>(0);
+      attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(0),mtState::template getId<mtState::_vea>(0));
       attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
       attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
       rovioOutputMsg_.ypr_extrinsics.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);

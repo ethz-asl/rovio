@@ -482,7 +482,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     cv::Scalar rollColor3(120,120,120);
     cv::circle(filterState.img_[camID],rollCenter,32,rollColor1,-1,8,0);
     cv::circle(filterState.img_[camID],rollCenter,30,rollColor2,-1,8,0);
-    Eigen::Vector3d Vg = (state.template get<mtState::_vea>()*state.template get<mtState::_att>().inverted()).rotate(Eigen::Vector3d(0,0,-1));
+    Eigen::Vector3d Vg = (state.template get<mtState::_vea>(camID)*state.template get<mtState::_att>().inverted()).rotate(Eigen::Vector3d(0,0,-1));
     double roll = atan2(Vg(1),Vg(0))-0.5*M_PI;
     double pitch = acos(Vg.dot(Eigen::Vector3d(0,0,1)))-0.5*M_PI;
     double pixelFor10Pitch = 5.0;

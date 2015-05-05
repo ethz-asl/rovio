@@ -69,8 +69,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
     boolRegister_.registerScalar("doVECalibration",init_.state_.template get<mtState::_aux>().doVECalibration_);
     intRegister_.registerScalar("depthType",init_.state_.template get<mtState::_aux>().depthTypeInt_);
-    doubleRegister_.registerVector("MrMV",init_.state_.template get<mtState::_aux>().MrMV_);
-    doubleRegister_.registerQuaternion("qVM",init_.state_.template get<mtState::_aux>().qVM_);
+    for(int i=0;i<FILTERSTATE::mtState::nCam_;i++){
+      doubleRegister_.registerVector("MrMV_" + std::to_string(i),init_.state_.template get<mtState::_aux>().MrMV_[i]);
+      doubleRegister_.registerQuaternion("qVM_" + std::to_string(i),init_.state_.template get<mtState::_aux>().qVM_[i]);
+    }
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtState::template getId<mtState::_nor>(i);
@@ -102,10 +104,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     init_.initWithAccelerometer(fMeasInit);
     reset(t);
   }
-  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM){
+  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM, const int camID = 0){
     rot::RotationMatrixAD R(R_VM);
-    init_.state_.template get<mtState::_aux>().qVM_ = QPD(R.getPassive());
-    init_.state_.template get<mtState::_aux>().MrMV_ = -init_.state_.template get<mtState::_aux>().qVM_.inverseRotate(VrVM); // TODO: all filterstates
+    init_.state_.template get<mtState::_aux>().qVM_[camID] = QPD(R.getPassive());
+    init_.state_.template get<mtState::_aux>().MrMV_[camID] = -init_.state_.template get<mtState::_aux>().qVM_[camID].inverseRotate(VrVM); // TODO: all filterstates
   }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;

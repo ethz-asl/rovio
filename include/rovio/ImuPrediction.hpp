@@ -78,23 +78,13 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     const V3D imuRor = output.template get<mtState::_aux>().MwIMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
     const V3D dOmega = dt*imuRor;
     QPD dQ = dQ.exponentialMap(-dOmega);
-    const V3D camRor = state.get_qVM().rotate(imuRor);
-    const V3D camVel = state.get_qVM().rotate(V3D(imuRor.cross(state.get_MrMV())-state.template get<mtState::_vel>()));
     double d, d_p, p_d, p_d_p;
-
-    output.template get<mtState::_pos>() = state.template get<mtState::_pos>()-dt*(state.template get<mtState::_att>().rotate(state.template get<mtState::_vel>())
-        -noise.template get<mtNoise::_pos>()/sqrt(dt));
-    output.template get<mtState::_vel>() = (M3D::Identity()-gSM(dOmega))*state.template get<mtState::_vel>()
-        -dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
-    output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
-    output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
-    output.template get<mtState::_att>() = state.template get<mtState::_att>()*dQ;
-    output.template get<mtState::_vep>() = state.template get<mtState::_vep>()+noise.template get<mtNoise::_vep>()*sqrt(dt);
-    dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>()*sqrt(dt));
-    output.template get<mtState::_vea>() = dQ*state.template get<mtState::_vea>();
     LWF::NormalVectorElement tempNormal;
     LWF::NormalVectorElement oldBearing;
     for(unsigned int i=0;i<mtState::nMax_;i++){
+      const int camID = state.template get<mtState::_aux>().camID_[i];
+      const V3D camRor = state.get_qVM(camID).rotate(imuRor);
+      const V3D camVel = state.get_qVM(camID).rotate(V3D(imuRor.cross(state.get_MrMV(camID))-state.template get<mtState::_vel>()));
       oldBearing = state.template get<mtState::_nor>(i);
       state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
       output.template get<mtState::_dep>(i) = state.template get<mtState::_dep>(i)-dt*p_d
@@ -114,6 +104,18 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
         tempNormal.boxMinus(output.template get<mtState::_nor>(i),output.template get<mtState::_aux>().bearingCorners_[i][j]);
       }
     }
+    output.template get<mtState::_pos>() = state.template get<mtState::_pos>()-dt*(state.template get<mtState::_att>().rotate(state.template get<mtState::_vel>())
+        -noise.template get<mtNoise::_pos>()/sqrt(dt));
+    output.template get<mtState::_vel>() = (M3D::Identity()-gSM(dOmega))*state.template get<mtState::_vel>()
+        -dt*(meas.template get<mtMeas::_acc>()-state.template get<mtState::_acb>()+state.template get<mtState::_att>().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
+    output.template get<mtState::_acb>() = state.template get<mtState::_acb>()+noise.template get<mtNoise::_acb>()*sqrt(dt);
+    output.template get<mtState::_gyb>() = state.template get<mtState::_gyb>()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
+    output.template get<mtState::_att>() = state.template get<mtState::_att>()*dQ;
+    for(unsigned int i=0;i<mtState::nCam_;i++){
+      output.template get<mtState::_vep>(i) = state.template get<mtState::_vep>(i)+noise.template get<mtNoise::_vep>(i)*sqrt(dt);
+      dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>(i)*sqrt(dt));
+      output.template get<mtState::_vea>(i) = dQ*state.template get<mtState::_vea>(i);
+    }
     output.template get<mtState::_aux>().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
   }
@@ -124,8 +126,6 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt) const{
     const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
     const V3D dOmega = dt*imuRor;
-    const V3D camRor = state.get_qVM().rotate(imuRor);
-    const V3D camVel = state.get_qVM().rotate(V3D(imuRor.cross(state.get_MrMV())-state.template get<mtState::_vel>()));
     double d, d_p, p_d, p_d_p;
     F.setZero();
     F.template block<3,3>(mtState::template getId<mtState::_pos>(),mtState::template getId<mtState::_pos>()) = M3D::Identity();
@@ -142,6 +142,9 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     LWF::NormalVectorElement nOut;
     QPD qm;
     for(unsigned int i=0;i<mtState::nMax_;i++){
+      const int camID = state.template get<mtState::_aux>().camID_[i];
+      const V3D camRor = state.get_qVM(camID).rotate(imuRor);
+      const V3D camVel = state.get_qVM(camID).rotate(V3D(imuRor.cross(state.get_MrMV(camID))-state.template get<mtState::_vel>()));
       state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(i).getVec())*camVel/d
           + (M3D::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*camRor);
@@ -150,9 +153,9 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       F(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = 1.0 - dt*p_d_p
               *state.template get<mtState::_nor>(i).getVec().transpose()*camVel;
       F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vel>()) =
-          dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*MPD(state.get_qVM()).matrix();
+          dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*MPD(state.get_qVM(camID)).matrix();
       F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_gyb>()) =
-          -dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*gSM(state.get_qVM().rotate(state.get_MrMV()))*MPD(state.get_qVM()).matrix();
+          -dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*gSM(state.get_qVM(camID).rotate(state.get_MrMV(camID)))*MPD(state.get_qVM(camID)).matrix();
       F.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) =
           -dt*p_d*camVel.transpose()*state.template get<mtState::_nor>(i).getM();
       F.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
@@ -167,37 +170,37 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
               *dt*gSM(state.template get<mtState::_nor>(i).getVec())*camVel*(d_p/(d*d));
       F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vel>()) =
           -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
-              *dt/d*gSM(state.template get<mtState::_nor>(i).getVec())*MPD(state.get_qVM()).matrix();
+              *dt/d*gSM(state.template get<mtState::_nor>(i).getVec())*MPD(state.get_qVM(camID)).matrix();
       F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_gyb>()) =
           nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*(
               - (M3D::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())
-              +1.0/d*gSM(state.template get<mtState::_nor>(i).getVec())*gSM(state.get_qVM().rotate(state.get_MrMV()))
-          )*dt*MPD(state.get_qVM()).matrix();
+              +1.0/d*gSM(state.template get<mtState::_nor>(i).getVec())*gSM(state.get_qVM(camID).rotate(state.get_MrMV(camID)))
+          )*dt*MPD(state.get_qVM(camID)).matrix();
       if(state.template get<mtState::_aux>().doVECalibration_){
-        F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vea>()) =
+        F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vea>(camID)) =
             -dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*gSM(camVel);
-        F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vep>()) =
-            -dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*MPD(state.get_qVM()).matrix()*gSM(imuRor);
+        F.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_vep>(camID)) =
+            -dt*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*MPD(state.get_qVM(camID)).matrix()*gSM(imuRor);
 
-        F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vea>()) =
+        F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vea>(camID)) =
             nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*(
                 (M3D::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())
             )*dt*gSM(camRor)
             +nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
                 *dt/d*gSM(state.template get<mtState::_nor>(i).getVec())*gSM(camVel);
-        F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vep>()) =
+        F.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_vep>(camID)) =
             nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)
-                *dt/d*gSM(state.template get<mtState::_nor>(i).getVec())*MPD(state.get_qVM()).matrix()*gSM(imuRor);
+                *dt/d*gSM(state.template get<mtState::_nor>(i).getVec())*MPD(state.get_qVM(camID)).matrix()*gSM(imuRor);
       }
     }
-    F.template block<3,3>(mtState::template getId<mtState::_vep>(),mtState::template getId<mtState::_vep>()) = M3D::Identity();
-    F.template block<3,3>(mtState::template getId<mtState::_vea>(),mtState::template getId<mtState::_vea>()) = M3D::Identity();
+    for(unsigned int i=0;i<mtState::nCam_;i++){
+      F.template block<3,3>(mtState::template getId<mtState::_vep>(i),mtState::template getId<mtState::_vep>(i)) = M3D::Identity();
+      F.template block<3,3>(mtState::template getId<mtState::_vea>(i),mtState::template getId<mtState::_vea>(i)) = M3D::Identity();
+    }
   }
   void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt) const{
     const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
     const V3D dOmega = dt*imuRor;
-    const V3D camRor = state.get_qVM().rotate(imuRor);
-    const V3D camVel = state.get_qVM().rotate(V3D(imuRor.cross(state.get_MrMV())-state.template get<mtState::_vel>()));
     double d, d_p, p_d, p_d_p;
     G.setZero();
     G.template block<3,3>(mtState::template getId<mtState::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity()*sqrt(dt);
@@ -208,10 +211,15 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     G.template block<3,3>(mtState::template getId<mtState::_gyb>(),mtNoise::template getId<mtNoise::_gyb>()) = M3D::Identity()*sqrt(dt);
     G.template block<3,3>(mtState::template getId<mtState::_att>(),mtNoise::template getId<mtNoise::_att>()) =
         -MPD(state.template get<mtState::_att>()).matrix()*Lmat(-dOmega)*sqrt(dt);
-    G.template block<3,3>(mtState::template getId<mtState::_vep>(),mtNoise::template getId<mtNoise::_vep>()) = M3D::Identity()*sqrt(dt);
-    G.template block<3,3>(mtState::template getId<mtState::_vea>(),mtNoise::template getId<mtNoise::_vea>()) = M3D::Identity()*sqrt(dt);
+    for(unsigned int i=0;i<mtState::nCam_;i++){
+      G.template block<3,3>(mtState::template getId<mtState::_vep>(i),mtNoise::template getId<mtNoise::_vep>(i)) = M3D::Identity()*sqrt(dt);
+      G.template block<3,3>(mtState::template getId<mtState::_vea>(i),mtNoise::template getId<mtNoise::_vea>(i)) = M3D::Identity()*sqrt(dt);
+    }
     LWF::NormalVectorElement nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
+      const int camID = state.template get<mtState::_aux>().camID_[i];
+      const V3D camRor = state.get_qVM(camID).rotate(imuRor);
+      const V3D camVel = state.get_qVM(camID).rotate(V3D(imuRor.cross(state.get_MrMV(camID))-state.template get<mtState::_vel>()));
       state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
       V3D dm = dt*(gSM(state.template get<mtState::_nor>(i).getVec())*camVel/d
           + (M3D::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())*camRor);
@@ -219,14 +227,14 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       nOut = state.template get<mtState::_nor>(i).rotated(qm);
       G(mtState::template getId<mtState::_dep>(i),mtNoise::template getId<mtNoise::_dep>(i)) = sqrt(dt);
       G.template block<1,3>(mtState::template getId<mtState::_dep>(i),mtNoise::template getId<mtNoise::_att>()) =
-          sqrt(dt)*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*gSM(state.get_qVM().rotate(state.get_MrMV()))*MPD(state.get_qVM()).matrix();
+          sqrt(dt)*p_d*state.template get<mtState::_nor>(i).getVec().transpose()*gSM(state.get_qVM(camID).rotate(state.get_MrMV(camID)))*MPD(state.get_qVM(camID)).matrix();
       G.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) =
           nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*state.template get<mtState::_nor>(i).getN()*sqrt(dt);
       G.template block<2,3>(mtState::template getId<mtState::_nor>(i),mtNoise::template getId<mtNoise::_att>()) =
           -nOut.getM().transpose()*gSM(qm.rotate(state.template get<mtState::_nor>(i).getVec()))*Lmat(dm)*(
               - (M3D::Identity()-state.template get<mtState::_nor>(i).getVec()*state.template get<mtState::_nor>(i).getVec().transpose())
-              +1.0/d*gSM(state.template get<mtState::_nor>(i).getVec())*gSM(state.get_qVM().rotate(state.get_MrMV()))
-           )*sqrt(dt)*MPD(state.get_qVM()).matrix();
+              +1.0/d*gSM(state.template get<mtState::_nor>(i).getVec())*gSM(state.get_qVM(camID).rotate(state.get_MrMV(camID)))
+           )*sqrt(dt)*MPD(state.get_qVM(camID)).matrix();
     }
   }
 };
