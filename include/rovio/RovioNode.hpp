@@ -49,7 +49,8 @@ class RovioNode{
  public:
   ros::NodeHandle nh_;
   ros::Subscriber subImu_;
-  ros::Subscriber subImg_;
+  ros::Subscriber subImg0_;
+  ros::Subscriber subImg1_;
   ros::Publisher pubPose_;
   ros::Publisher pubRovioOutput_;
   ros::Publisher pubOdometry_;
@@ -87,7 +88,8 @@ class RovioNode{
       ROS_WARN("====================== Debug Mode ======================");
     #endif
     subImu_ = nh_.subscribe("/imu0", 1000, &RovioNode::imuCallback,this);
-    subImg_ = nh_.subscribe("/cam0/image_raw", 1000, &RovioNode::imgCallback,this);
+    subImg0_ = nh_.subscribe("/cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
+    subImg1_ = nh_.subscribe("/cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("/rovio/pose", 1);
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/rovio/transform", 1);
     pubRovioOutput_ = nh_.advertise<RovioOutput>("/rovio/output", 1);
@@ -142,7 +144,13 @@ class RovioNode{
       isInitialized_ = true;
     }
   }
-  void imgCallback(const sensor_msgs::ImageConstPtr & img){
+  void imgCallback0(const sensor_msgs::ImageConstPtr & img){
+    imgCallback(img,0);
+  }
+  void imgCallback1(const sensor_msgs::ImageConstPtr & img){
+    imgCallback(img,1);
+  }
+  void imgCallback(const sensor_msgs::ImageConstPtr & img, const int camID = 0){
     // Get image from msg
     cv_bridge::CvImagePtr cv_ptr;
     try {
@@ -155,17 +163,23 @@ class RovioNode{
     cv_ptr->image.copyTo(cv_img);
 
     if(isInitialized_ && !cv_img.empty()){
-      imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_.computeFromImage(cv_img,true);
-      imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_ = img->header.stamp.toSec();
-      mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,img->header.stamp.toSec());
-      double lastImuTime;
-      if(mpFilter_->predictionTimeline_.getLastTime(lastImuTime)){
-        auto rit = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rbegin();
-        while(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend() && rit->first > lastImuTime){
-          ++rit;
-        }
-        if(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend()){
-          updateAndPublish(rit->first);
+      double msgTime = img->header.stamp.toSec();
+      if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
+        imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
+      }
+      imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_[camID].computeFromImage(cv_img,true);
+      imgUpdateMeas_.template get<mtImgMeas::_aux>().isValidPyr_[camID] = true;
+      if(imgUpdateMeas_.template get<mtImgMeas::_aux>().areAllValid()){
+        mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,msgTime);
+        double lastImuTime;
+        if(mpFilter_->predictionTimeline_.getLastTime(lastImuTime)){
+          auto rit = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rbegin();
+          while(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend() && rit->first > lastImuTime){
+            ++rit;
+          }
+          if(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend()){
+            updateAndPublish(rit->first);
+          }
         }
       }
     }
@@ -185,9 +199,11 @@ class RovioNode{
       if(plotTiming){
         ROS_INFO_STREAM(" == Filter Update: " << (t2-t1)/cv::getTickFrequency()*1000 << " ms for processing " << c1-c2 << " images, average: " << timing_T/timing_C);
       }
-      if(!mpFilter_->safe_.img_.empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
-        cv::imshow("Tracker", mpFilter_->safe_.img_);
-        cv::waitKey(1);
+      for(int i=0;i<mtState::nCam_;i++){
+        if(!mpFilter_->safe_.img_[i].empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
+          cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
+          cv::waitKey(1);
+        }
       }
       mtFilterState& filterState = mpFilter_->safe_;
       mtState& state = mpFilter_->safe_.state_;
