@@ -83,9 +83,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().z());
-      std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
-      std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
     }
+    std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
+    std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     reset(0.0);
   }

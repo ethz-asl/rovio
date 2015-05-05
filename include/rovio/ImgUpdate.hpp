@@ -42,9 +42,9 @@ namespace rot = kindr::rotations::eigen_impl;
 namespace rovio {
 
 template<typename STATE>
-class ImgInnovation: public LWF::State<LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
+class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
  public:
-  typedef LWF::State<LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>> Base;
+  typedef LWF::State<LWF::VectorElement<2>> Base;
   using Base::E_;
   static constexpr unsigned int _nor = 0;
   ImgInnovation(){
@@ -75,9 +75,9 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
   ~ImgUpdateMeas(){};
 };
 template<typename STATE>
-class ImgUpdateNoise: public LWF::State<LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
+class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
  public:
-  typedef LWF::State<LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>> Base;
+  typedef LWF::State<LWF::VectorElement<2>> Base;
   using Base::E_;
   static constexpr unsigned int _nor = 0;
   ImgUpdateNoise(){
@@ -87,7 +87,7 @@ class ImgUpdateNoise: public LWF::State<LWF::ArrayElement<LWF::VectorElement<2>,
   ~ImgUpdateNoise(){};
 };
 template<typename STATE>
-class ImgOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ImgInnovation<STATE>::template getId<ImgInnovation<STATE>::_nor>(),2,STATE::nMax_>>{
+class ImgOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ImgInnovation<STATE>::template getId<ImgInnovation<STATE>::_nor>(),2>>{
 };
 
 template<typename FILTERSTATE>
@@ -178,15 +178,10 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
-    boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
-    int ind;
-    for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
-      ind = mtNoise::template getId<mtNoise::_nor>(i);
-      doubleRegister_.removeScalarByVar(updnoiP_(ind,ind));
-      doubleRegister_.removeScalarByVar(updnoiP_(ind+1,ind+1));
-      doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(ind,ind));
-      doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(ind+1,ind+1));
-    }
+    doubleRegister_.removeScalarByVar(updnoiP_(0,0));
+    doubleRegister_.removeScalarByVar(updnoiP_(1,1));
+    doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(0,0));
+    doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(1,1));
   };
   ~ImgUpdate(){};
   void refreshProperties(){
@@ -197,42 +192,32 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     pixelOutputCF_.setCamera(mpCamera);
   }
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
-    for(unsigned int i=0;i<state.nMax_;i++){
-      if(state.template get<mtState::_aux>().useInUpdate_[i]){
-        if(useDirectMethod_){
-          y.template get<mtInnovation::_nor>(i) = state.template get<mtState::_aux>().b_red_[i]+noise.template get<mtNoise::_nor>(i);
-        } else {
-          state.template get<mtState::_nor>(i).boxMinus(state.template get<mtState::_aux>().bearingMeas_[i],y.template get<mtInnovation::_nor>(i)); // 0 = m - m_meas + n
-          y.template get<mtInnovation::_nor>(i) += noise.template get<mtNoise::_nor>(i);
-        }
-      } else {
-        y.template get<mtInnovation::_nor>(i) = noise.template get<mtNoise::_nor>(i);
-      }
+    const int& ID = state.template get<mtState::_aux>().activeFeature_;
+    if(useDirectMethod_){
+      y.template get<mtInnovation::_nor>() = state.template get<mtState::_aux>().b_red_[ID]+noise.template get<mtNoise::_nor>();
+    } else {
+      state.template get<mtState::_nor>(ID).boxMinus(state.template get<mtState::_aux>().bearingMeas_[ID],y.template get<mtInnovation::_nor>()); // 0 = m - m_meas + n
+      y.template get<mtInnovation::_nor>() += noise.template get<mtNoise::_nor>();
     }
   }
   void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+    const int& ID = state.template get<mtState::_aux>().activeFeature_;
     F.setZero();
     cv::Point2f c_temp;
     Eigen::Matrix2d c_J;
-    for(unsigned int i=0;i<state.nMax_;i++){
-      if(state.template get<mtState::_aux>().useInUpdate_[i]){
-        if(useDirectMethod_){
-          mpCamera_->bearingToPixel(state.template get<mtState::_nor>(i),c_temp,c_J);
-          F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) = -state.template get<mtState::_aux>().A_red_[i]*c_J;
-        } else {
-          F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtState::template getId<mtState::_nor>(i)) =
-                state.template get<mtState::_aux>().bearingMeas_[i].getN().transpose()
-                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(i),state.template get<mtState::_aux>().bearingMeas_[i])
-                *state.template get<mtState::_nor>(i).getM();
-        }
-      }
+    if(useDirectMethod_){
+      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ID),c_temp,c_J);
+      F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtState::template getId<mtState::_nor>(ID)) = -state.template get<mtState::_aux>().A_red_[ID]*c_J;
+    } else {
+      F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtState::template getId<mtState::_nor>(ID)) =
+            state.template get<mtState::_aux>().bearingMeas_[ID].getN().transpose()
+            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(state.template get<mtState::_nor>(ID),state.template get<mtState::_aux>().bearingMeas_[ID])
+            *state.template get<mtState::_nor>(ID).getM();
     }
   }
   void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     G.setZero();
-    for(unsigned int i=0;i<FILTERSTATE::mtState::nMax_;i++){
-      G.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(i),mtNoise::template getId<mtNoise::_nor>(i)) = Eigen::Matrix2d::Identity();
-    }
+    G.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtNoise::template getId<mtNoise::_nor>()) = Eigen::Matrix2d::Identity();
   }
   void commonPreProcess(mtFilterState& filterState, const mtMeas& meas){
     assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
@@ -242,7 +227,12 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     filterState.imgTime_ = filterState.t_;
     filterState.imageCounter_++;
     filterState.patchDrawing_ = cv::Mat::zeros(mtState::nMax_*pow(2,mtState::nLevels_-1),mtState::nMax_*pow(2,mtState::nLevels_-1),CV_8UC1); // TODO
+    filterState.state_.template get<mtState::_aux>().activeFeature_ = 0;
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      filterState.state_.template get<mtState::_aux>().useInUpdate_[i] = false;
+    }
 
+    // TODO sort feature by covariance and use more accurate ones first
   }
   void preProcess(mtFilterState& filterState, const mtMeas& meas, bool& isFinished){
     if(isFinished){ // gets called if this is the first call
@@ -251,24 +241,25 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
 
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     Eigen::Vector2d vec2;
-    for(unsigned int i=0;i<mtState::nMax_;i++){
-      if(filterState.mlps_.isValid_[i]){
-        mpFeature = &filterState.mlps_.features_[i];
+    while(ID < mtState::nMax_ && state.template get<mtState::_aux>().useInUpdate_[ID] == false){
+      if(filterState.mlps_.isValid_[ID]){
+        mpFeature = &filterState.mlps_.features_[ID];
         // Data handling stuff
-        mpFeature->set_nor(state.template get<mtState::_nor>(i));
+        mpFeature->set_nor(state.template get<mtState::_nor>(ID));
         mpFeature->increaseStatistics(filterState.t_);
 
         // Check if prediction in frame
         mpFeature->status_.inFrame_ = isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,startLevel_,false,doPatchWarping_);
         if(mpFeature->status_.inFrame_){
-          pixelOutputCF_.setIndex(i);
+          pixelOutputCF_.setIndex(ID);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature->setSigmaFromCov(pixelOutputCov_);
           mpFeature->log_prediction_ = static_cast<FeatureCoordinates>(*mpFeature);
-          mpFeature->set_bearingCorners(state.template get<mtState::_aux>().bearingCorners_[i]);
+          mpFeature->set_bearingCorners(state.template get<mtState::_aux>().bearingCorners_[ID]);
           const PixelCorners& pixelCorners = mpFeature->get_pixelCorners();
           mpFeature->log_predictionC0_.set_c(mpFeature->get_c() - 4*pixelCorners[0] - 4*pixelCorners[1]);
           mpFeature->log_predictionC1_.set_c(mpFeature->get_c() + 4*pixelCorners[0] - 4*pixelCorners[1]);
@@ -285,58 +276,73 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           if(useDirectMethod_){
             vec2.setZero();
             if(mpFeature->status_.matchingStatus_ == FOUND){
-              mpFeature->get_nor().boxMinus(state.template get<mtState::_nor>(i),vec2);
-              if((vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).inverse()*vec2)(0,0) > 5.886){ // TODO: param
-                mpFeature->set_nor(state.template get<mtState::_nor>(i));
+              mpFeature->get_nor().boxMinus(state.template get<mtState::_nor>(ID),vec2);
+              if((vec2.transpose()*cov.template block<2,2>(mtState::template getId<mtState::_nor>(ID),mtState::template getId<mtState::_nor>(ID)).inverse()*vec2)(0,0) > 5.886){ // TODO: param
+                mpFeature->set_nor(state.template get<mtState::_nor>(ID));
                 vec2.setZero();
               }
             }
-            filterState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(i),0) = vec2;
+            filterState.difVecLin_.template block<2,1>(mtState::template getId<mtState::_nor>(ID),0) = vec2;
             if(getLinearAlignEquationsReduced(*mpFeature,meas.template get<mtMeas::_aux>().pyr_,endLevel_,startLevel_,doPatchWarping_,
-                                              state.template get<mtState::_aux>().A_red_[i],state.template get<mtState::_aux>().b_red_[i])){
-              state.template get<mtState::_aux>().useInUpdate_[i] = true;
-            } else {
-              state.template get<mtState::_aux>().useInUpdate_[i] = false;
+                                              state.template get<mtState::_aux>().A_red_[ID],state.template get<mtState::_aux>().b_red_[ID])){
+              state.template get<mtState::_aux>().useInUpdate_[ID] = true;
             }
           } else {
             if(mpFeature->status_.matchingStatus_ == FOUND){
-              state.template get<mtState::_aux>().useInUpdate_[i] = true;
-              state.template get<mtState::_aux>().bearingMeas_[i] = mpFeature->get_nor();
-            } else {
-              state.template get<mtState::_aux>().useInUpdate_[i] = false;
+              state.template get<mtState::_aux>().useInUpdate_[ID] = true;
+              state.template get<mtState::_aux>().bearingMeas_[ID] = mpFeature->get_nor();
             }
           }
-        } else {
-          state.template get<mtState::_aux>().useInUpdate_[i] = false;
         }
-      } else {
-        state.template get<mtState::_aux>().useInUpdate_[i] = false;
       }
+      if(state.template get<mtState::_aux>().useInUpdate_[ID] == false){
+        ID++;
+      }
+    }
+    if(ID >= mtState::nMax_){
+      isFinished = true;
     }
   };
   void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
+    if(isFinished){
+      commonPostProcess(filterState,meas);
+    } else {
+      int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
+      if(!outlierDetection.isOutlier(0)){
+        filterState.mlps_.features_[ID].status_.trackingStatus_ = TRACKED;
+      } else {
+        filterState.mlps_.features_[ID].status_.trackingStatus_ = FAILED;
+      }
+      ID++;
+    }
+  };
+  void commonPostProcess(mtFilterState& filterState, const mtMeas& meas){
     // Temps
+    float averageScore;
+    int countTracked;
+    int requiredFreeFeature;
+    double removalFactor;
+    int featureIndex;
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature;
 
+    countTracked = 0;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
         mpFeature = &filterState.mlps_.features_[i];
         if(mpFeature->status_.inFrame_){
-          // Handle Status
+          // Logging
           mpFeature->set_nor(state.template get<mtState::_nor>(i));
           pixelOutputCF_.setIndex(i);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature->setSigmaFromCov(pixelOutputCov_);
           mpFeature->log_current_ = static_cast<FeatureCoordinates>(*mpFeature);
-          if(state.template get<mtState::_aux>().useInUpdate_[i]){
-            if(!outlierDetection.isOutlier(i)){
-              mpFeature->status_.trackingStatus_ = TRACKED;
-            } else {
-              mpFeature->status_.trackingStatus_ = FAILED;
-            }
+
+          // Count Tracked
+          if(mpFeature->status_.trackingStatus_ == TRACKED){
+            countTracked++;
           }
 
           // Extract feature patches
@@ -373,26 +379,6 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             }
           }
         }
-      }
-    }
-    commonPostProcess(filterState,meas);
-    isFinished = true;
-  };
-  void commonPostProcess(mtFilterState& filterState, const mtMeas& meas){
-    float averageScore;
-    int countTracked;
-    int requiredFreeFeature;
-    double removalFactor;
-    int featureIndex;
-    typename mtFilterState::mtState& state = filterState.state_;
-    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
-    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
-
-    // Count tracked
-    countTracked = 0;
-    for(unsigned int i=0;i<mtState::nMax_;i++){
-      if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].status_.trackingStatus_ == TRACKED){
-        countTracked++;
       }
     }
 

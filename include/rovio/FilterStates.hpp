@@ -121,6 +121,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     doVECalibration_ = true;
     depthTypeInt_ = 1;
     depthMap_.setType(depthTypeInt_);
+    activeFeature_ = 0;
   };
   ~StateAuxiliary(){};
   V3D MwIMest_;
@@ -136,6 +137,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   bool doVECalibration_;
   DepthMap depthMap_; // TODO: move to state
   int depthTypeInt_;
+  int activeFeature_;
 };
 
 template<unsigned int nMax, int nLevels, int patchSize>
