@@ -1106,21 +1106,23 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   for(unsigned int i=0;i<nMax;i++){
     if(mlpSet.isValid_[i]){
       mpFeature = &mlpSet.features_[i];
-      for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
-        for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
-          doDelete = false;
-          d2 = std::pow(mpFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpFeature->c_.y - (*it_cand)->c_.y,2);
-          if(d2<t2){
-            newBucketID = std::max((int)(bucketID - (t2-d2)/t2*zeroDistancePenalty),0);
-            if(bucketID != newBucketID){
-              buckets[newBucketID].insert(*it_cand);
-              doDelete = true;
+      if(mpFeature->status_.inFrame_){
+        for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
+          for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
+            doDelete = false;
+            d2 = std::pow(mpFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpFeature->c_.y - (*it_cand)->c_.y,2);
+            if(d2<t2){
+              newBucketID = std::max((int)(bucketID - (t2-d2)/t2*zeroDistancePenalty),0);
+              if(bucketID != newBucketID){
+                buckets[newBucketID].insert(*it_cand);
+                doDelete = true;
+              }
             }
-          }
-          if(doDelete){
-            buckets[bucketID].erase(it_cand++);
-          } else {
-            ++it_cand;
+            if(doDelete){
+              buckets[bucketID].erase(it_cand++);
+            } else {
+              ++it_cand;
+            }
           }
         }
       }
@@ -1184,7 +1186,7 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
     for(unsigned int i=0;i<nMax;i++){
       if(mlpSet.isValid_[i]){
         mpFeature = &mlpSet.features_[i];
-        if(pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2) < t2){ // TODO: check inFrame
+        if(mpFeature->status_.inFrame_ && pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2) < t2){ // TODO: check inFrame
           prune = true;
           break;
         }
