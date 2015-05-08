@@ -125,7 +125,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
   M3D initCovFeature_;
   double initDepth_;
-  Camera* mpCamera_; // TODO IMG
+  Camera* mpCameras_; // TODO IMG
   PixelOutputCF<typename FILTERSTATE::mtState> pixelOutputCF_;
   PixelOutput pixelOutput_;
   typename PixelOutputCF<typename FILTERSTATE::mtState>::mtOutputCovMat pixelOutputCov_;
@@ -148,7 +148,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   bool doFrameVisualisation_;
   bool verbose_;
   ImgUpdate(){
-    mpCamera_ = nullptr; // TODO IMG
+    mpCameras_ = nullptr; // TODO IMG
     initCovFeature_.setIdentity();
     initDepth_ = 0;
     startLevel_ = 3;
@@ -200,9 +200,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   void refreshProperties(){
     useSpecialLinearizationPoint_ = useDirectMethod_;
   };
-  void setCamera(Camera* mpCamera){
-    mpCamera_ = mpCamera; // TODO IMG
-    pixelOutputCF_.setCamera(mpCamera); // TODO IMG
+  void setCamera(Camera* mpCameras){
+    mpCameras_ = mpCameras; // TODO IMG
+    pixelOutputCF_.setCamera(mpCameras); // TODO IMG
   }
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     const int& ID = state.template get<mtState::_aux>().activeFeature_;
@@ -215,11 +215,12 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   }
   void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     const int& ID = state.template get<mtState::_aux>().activeFeature_;
+    const int& camID = state.template get<mtState::_aux>().camID_[ID];
     F.setZero();
     cv::Point2f c_temp;
     Eigen::Matrix2d c_J;
     if(useDirectMethod_){
-      mpCamera_->bearingToPixel(state.template get<mtState::_nor>(ID),c_temp,c_J); // TODO IMG
+      mpCameras_[camID].bearingToPixel(state.template get<mtState::_nor>(ID),c_temp,c_J); // TODO IMG
       F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtState::template getId<mtState::_nor>(ID)) = -state.template get<mtState::_aux>().A_red_[ID]*c_J;
     } else {
       F.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtState::template getId<mtState::_nor>(ID)) =
@@ -433,32 +434,33 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
 
     // Get new features // TODO IMG do for both images
+    const int searchCamID = rand()%mtState::nCam_;
     averageScore = filterState.mlps_.getAverageScore(); // TODO
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
       std::list<cv::Point2f> candidates;
       if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
-        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[0],candidates,l,fastDetectionThreshold_); // TODO IMG
+        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID],candidates,l,fastDetectionThreshold_); // TODO IMG
       }
       const double t2 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
-      pruneCandidates(filterState.mlps_,candidates);
+      pruneCandidates(filterState.mlps_,candidates,searchCamID);
       const double t3 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
-      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_[0],filterState.t_,
+      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_[searchCamID],searchCamID,filterState.t_,
                                                                   endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0); // TODO IMG
       const double t4 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       for(auto it = newSet.begin();it != newSet.end();++it){
-        filterState.mlps_.features_[*it].setCamera(mpCamera_); // TODO IMG make method for different camera
+        filterState.mlps_.features_[*it].setCamera(mpCameras_); // TODO IMG make method for different camera
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
         filterState.initializeFeatureState(*it,filterState.mlps_.features_[*it].get_nor().getVec(),initDepth_,initCovFeature_);
         state.template get<mtState::_aux>().bearingCorners_[*it] = filterState.mlps_.features_[*it].get_bearingCorners();
-        state.template get<mtState::_aux>().camID_[*it] = 0; // TODO IMG
+        state.template get<mtState::_aux>().camID_[*it] = searchCamID; // TODO IMG
       }
     }
     for(unsigned int i=0;i<mtState::nMax_;i++){

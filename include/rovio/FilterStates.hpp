@@ -206,10 +206,10 @@ class State: public LWF::State<
       return this->template get<_aux>().MrMV_[camID];
     }
   }
-  QPD get_qBW(const int camID = 0) const{ // TODO rename
+  QPD get_qVI(const int camID = 0) const{
     return get_qVM(camID)*this->template get<_att>().inverted();
   }
-  V3D get_WrWB(const int camID = 0) const{ // TODO rename
+  V3D get_IrIV(const int camID = 0) const{
     return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
   }
 };

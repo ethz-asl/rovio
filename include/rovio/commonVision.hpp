@@ -321,21 +321,24 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
 
 class FeatureCoordinates{
  public:
+  int camID_;
   cv::Point2f c_;
   bool valid_c_;
   LWF::NormalVectorElement nor_;
   bool valid_nor_;
-  const Camera* mpCamera_;
+  const Camera* mpCameras_;
   double sigma1_;
   double sigma2_;
   double sigmaAngle_;
   Eigen::EigenSolver<Eigen::Matrix2d> es_;
   FeatureCoordinates(){
-    mpCamera_ == nullptr;
+    mpCameras_ == nullptr;
     resetCoordinates();
+    camID_ = 0;
   }
-  FeatureCoordinates(const Camera* mpCamera): mpCamera_(mpCamera){
+  FeatureCoordinates(const Camera* mpCameras): mpCameras_(mpCameras){
     resetCoordinates();
+    camID_ = 0;
   }
   void resetCoordinates(){
     valid_c_ = false;
@@ -346,7 +349,7 @@ class FeatureCoordinates{
   }
   const cv::Point2f& get_c(){
     if(!valid_c_){
-      if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
+      if(valid_nor_ && mpCameras_[camID_].bearingToPixel(nor_,c_)){
         valid_c_ = true;
       } else {
         std::cout << "ERROR: No valid coordinate data!" << std::endl;
@@ -356,7 +359,7 @@ class FeatureCoordinates{
   }
   const LWF::NormalVectorElement& get_nor(){
     if(!valid_nor_){
-      if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
+      if(valid_c_ && mpCameras_[camID_].pixelToBearing(c_,nor_)){
         valid_nor_ = true;
       } else {
         std::cout << "ERROR: No valid coordinate data!" << std::endl;
@@ -447,12 +450,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   MultilevelPatchFeature(){
     reset();
   }
-  MultilevelPatchFeature(const Camera* mpCamera): FeatureCoordinates(mpCamera){
+  MultilevelPatchFeature(const Camera* mpCameras): FeatureCoordinates(mpCameras){
     reset();
   }
   ~MultilevelPatchFeature(){}
-  void setCamera(const Camera* mpCamera){
-    mpCamera_ = mpCamera;
+  void setCamera(const Camera* mpCameras){
+    mpCameras_ = mpCameras;
   }
   void reset(const int idx = -1, const double initTime = 0.0){
     resetCoordinates();
@@ -481,7 +484,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       if(valid_bearingCorners_){
         for(unsigned int i=0;i<2;i++){
           get_nor().boxPlus(bearingCorners_[i],tempNormal);
-          if(!mpCamera_->bearingToPixel(tempNormal,tempPixel)){
+          if(!mpCameras_[camID_].bearingToPixel(tempNormal,tempPixel)){
             std::cout << "ERROR: Problem during bearing corner to pixel mapping!" << std::endl;
           }
           pixelCorners_[i] = tempPixel - get_c();
@@ -506,7 +509,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       get_pixelCorners();
       for(unsigned int i=0;i<2;i++){
         tempPixel = get_c()+pixelCorners_[i];
-        if(!mpCamera_->pixelToBearing(tempPixel,tempNormal)){
+        if(!mpCameras_[camID_].pixelToBearing(tempPixel,tempNormal)){
           std::cout << "ERROR: Problem during pixel corner to bearing mapping!" << std::endl;
         }
         tempNormal.boxMinus(get_nor(),bearingCorners_[i]);
@@ -1009,14 +1012,14 @@ class MultilevelPatchSet{
   MultilevelPatchFeature<n_levels,patch_size> features_[nMax];
   bool isValid_[nMax];
   int maxIdx_;
-  MultilevelPatchSet(const Camera* mpCamera = nullptr){
-    reset(mpCamera);
+  MultilevelPatchSet(){
+    reset();
   }
   ~MultilevelPatchSet(){}
-  void reset(const Camera* mpCamera = nullptr){
+  void reset(){
     maxIdx_ = 0;
     for(unsigned int i=0;i<nMax;i++){
-      features_[i].setCamera(mpCamera);
+      features_[i].setCamera(nullptr);
       isValid_[i] = false;
     }
   }
@@ -1036,11 +1039,12 @@ class MultilevelPatchSet{
     }
     return count;
   }
-  int addFeature(const MultilevelPatchFeature<n_levels,patch_size>& feature){
+  int addFeature(const MultilevelPatchFeature<n_levels,patch_size>& feature, const int camID){
     int newInd = -1;
     if(getFreeIndex(newInd)){
       features_[newInd] = feature;
       features_[newInd].idx_ = maxIdx_++;
+      features_[newInd].camID_ = camID;
       isValid_[newInd] = true;
     } else {
       std::cout << "Feature Manager: maximal number of feature reached" << std::endl;
@@ -1062,9 +1066,9 @@ class MultilevelPatchSet{
 };
 
 template<int n_levels,int patch_size,int nMax>
-std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const ImagePyramid<n_levels>& pyr, const double initTime,
+std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const ImagePyramid<n_levels>& pyr, const int camID, const double initTime,
                                                    const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
-                                                   const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
+                                                   const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){ // TODO  solve issue with border effect
   std::unordered_set<unsigned int> newSet;
   std::list<MultilevelPatchFeature<n_levels,patch_size>> candidatesWithPatch;
   float maxScore = -1.0;
@@ -1106,7 +1110,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   for(unsigned int i=0;i<nMax;i++){
     if(mlpSet.isValid_[i]){
       mpFeature = &mlpSet.features_[i];
-      if(mpFeature->status_.inFrame_){
+      if(mpFeature->status_.inFrame_ && mpFeature->camID_ == camID ){
         for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
           for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
             doDelete = false;
@@ -1136,7 +1140,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
     while(!buckets[bucketID].empty() && addedCount < maxN && mlpSet.getValidCount() != nMax) {
       mpNewFeature = *(buckets[bucketID].begin());
       buckets[bucketID].erase(mpNewFeature);
-      const int ind = mlpSet.addFeature(*mpNewFeature);
+      const int ind = mlpSet.addFeature(*mpNewFeature,camID);
       if(ind >= 0){
         newSet.insert(ind);
       }
@@ -1177,7 +1181,7 @@ void detectFastCorners(const ImagePyramid<n_levels>& pyr, std::list<cv::Point2f>
 }
 
 template<int n_levels,int patch_size,int nMax>
-void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates){ // TODO: add corner motion dependency
+void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int camID){ // TODO: add corner motion dependency, solve issue with border effect
   constexpr float t2 = patch_size*patch_size; // TODO: param
   bool prune;
   const MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
@@ -1186,7 +1190,7 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
     for(unsigned int i=0;i<nMax;i++){
       if(mlpSet.isValid_[i]){
         mpFeature = &mlpSet.features_[i];
-        if(mpFeature->status_.inFrame_ && pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2) < t2){ // TODO: check inFrame
+        if(mpFeature->status_.inFrame_ && mpFeature->camID_ == camID && pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2) < t2){ // TODO: check inFrame
           prune = true;
           break;
         }

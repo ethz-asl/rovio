@@ -34,7 +34,6 @@
 #include "lightweight_filtering/Prediction.hpp"
 #include "lightweight_filtering/State.hpp"
 #include "rovio/FilterStates.hpp"
-#include "rovio/Camera.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 

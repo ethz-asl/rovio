@@ -67,14 +67,16 @@ class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
     // MrMV = MrMV
     // qVM = qVM
     cv::Point2f c;
-    mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c);
+    const int& camID = input.template get<mtInput::_aux>().camID_[ind_];
+    mpCamera_[camID].bearingToPixel(input.template get<mtInput::_nor>(ind_),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     cv::Point2f c;
     Eigen::Matrix<double,2,2> J_temp;
-    mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c,J_temp);
+    const int& camID = input.template get<mtInput::_aux>().camID_[ind_];
+    mpCamera_[camID].bearingToPixel(input.template get<mtInput::_nor>(ind_),c,J_temp);
     J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>(ind_)) = J_temp;
   }
 };
