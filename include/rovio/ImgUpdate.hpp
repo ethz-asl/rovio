@@ -263,20 +263,20 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     Eigen::Vector2d vec2;
     while(ID < mtState::nMax_ && state.template get<mtState::_aux>().useInUpdate_[ID] == false){
       if(filterState.mlps_.isValid_[ID]){
-        const int camID = state.template get<mtState::_aux>().camID_[ID];
-        mpFeature = &filterState.mlps_.features_[ID];
         // Data handling stuff
-        mpFeature->set_nor(state.template get<mtState::_nor>(ID));
+        mpFeature = &filterState.mlps_.features_[ID];
+        mpFeature->fromState();
+        const int camID = mpFeature->camID_;
         mpFeature->increaseStatistics(filterState.t_);
 
         // Check if prediction in frame
         mpFeature->status_.inFrame_ = isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,false,doPatchWarping_); // TODO IMG
+
         if(mpFeature->status_.inFrame_){
           pixelOutputCF_.setIndex(ID);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature->setSigmaFromCov(pixelOutputCov_);
           mpFeature->log_prediction_ = static_cast<FeatureCoordinates>(*mpFeature);
-          mpFeature->set_bearingCorners(state.template get<mtState::_aux>().bearingCorners_[ID]);
           const PixelCorners& pixelCorners = mpFeature->get_pixelCorners();
           mpFeature->log_predictionC0_.set_c(mpFeature->get_c() - 4*pixelCorners[0] - 4*pixelCorners[1]);
           mpFeature->log_predictionC1_.set_c(mpFeature->get_c() + 4*pixelCorners[0] - 4*pixelCorners[1]);
@@ -345,14 +345,20 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature;
 
+    // Actualize camera extrinsics
+    for(int i=0;i<mtState::nCam_;i++){
+      mpCameras_[i].setExtrinsics(state.template get<mtState::_vep>(i),state.template get<mtState::_vea>(i));
+    }
+
     countTracked = 0;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
-        const int camID = state.template get<mtState::_aux>().camID_[i];
         mpFeature = &filterState.mlps_.features_[i];
+        mpFeature->fromState(); // Has to be done for every valid feature
+        mpFeature->setDepth(state.get_depth(i));
+        const int camID = mpFeature->camID_;
         if(mpFeature->status_.inFrame_){
           // Logging
-          mpFeature->set_nor(state.template get<mtState::_nor>(i));
           pixelOutputCF_.setIndex(i);
           pixelOutputCF_.transformCovMat(state,cov,pixelOutputCov_);
           mpFeature->setSigmaFromCov(pixelOutputCov_);
@@ -372,7 +378,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
               if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){
                 extractMultilevelPatchFromImage(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false); // TODO IMG
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
-                state.template get<mtState::_aux>().bearingCorners_[i] = mpFeature->get_bearingCorners();
+                mpFeature->toState();
               }
             }
           }
@@ -395,6 +401,11 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
               drawEllipse(filterState.img_[camID],mpFeature->log_current_,cv::Scalar(0,255,255));
               drawText(filterState.img_[camID],mpFeature->log_current_,std::to_string(mpFeature->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
             }
+
+            FeatureCoordinates featureCoordinates;
+            featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
+            featureCoordinates.set_nor(featureCoordinates.get_nor_other((camID+1)%2));
+            drawPoint(filterState.img_[(camID+1)%2], featureCoordinates, cv::Scalar(255,175,0));
           }
         }
       }
@@ -445,7 +456,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
       const double t2 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
-      pruneCandidates(filterState.mlps_,candidates,searchCamID);
+      for(unsigned int camID=0;camID<mtState::nCam_;camID++){
+        pruneCandidates(filterState.mlps_,candidates,searchCamID);
+      }
       const double t3 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_[searchCamID],searchCamID,filterState.t_,
@@ -459,8 +472,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
         filterState.initializeFeatureState(*it,filterState.mlps_.features_[*it].get_nor().getVec(),initDepth_,initCovFeature_);
-        state.template get<mtState::_aux>().bearingCorners_[*it] = filterState.mlps_.features_[*it].get_bearingCorners();
-        state.template get<mtState::_aux>().camID_[*it] = searchCamID; // TODO IMG
+        filterState.mlps_.features_[*it].linkToState(&state.template get<mtState::_aux>().camID_[*it],&state.template get<mtState::_nor>(*it),&state.template get<mtState::_aux>().bearingCorners_[*it]);
+        filterState.mlps_.features_[*it].toState();
       }
     }
     for(unsigned int i=0;i<mtState::nMax_;i++){

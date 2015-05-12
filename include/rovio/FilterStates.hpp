@@ -212,6 +212,11 @@ class State: public LWF::State<
   V3D get_IrIV(const int camID = 0) const{
     return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
   }
+  double get_depth(const int i){
+    double d, d_p, p_d, p_d_p;
+    this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
+    return d;
+  }
 };
 
 class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{

@@ -34,7 +34,7 @@
 #include "rovio/RovioScene.hpp"
 #endif
 
-static constexpr unsigned int nMax_ = 50;
+static constexpr unsigned int nMax_ = 40;
 static constexpr int nLevels_ = 4;
 static constexpr int patchSize_ = 8;
 static constexpr int nCam_ = 2;

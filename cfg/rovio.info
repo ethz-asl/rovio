@@ -16,7 +16,7 @@ Camera0
 }
 Camera1
 {
-	CalibrationFile /home/michael/calibrations/p22035_equidist.yaml
+	CalibrationFile /home/michael/calibrations/p22035_equidist_cam1.yaml
 	qVM_x  0.0085952428576699432122; 0.0083632 ; [1]-0.0172361
 	qVM_y  0.0016098433991980941934; -0.00390811; [1]0.00214608
 	qVM_z  0.99995487558238660419; 0.712747  ; [1]-0.01682
@@ -113,7 +113,7 @@ Update0
     initCovFeature_1 0.00001
     initCovFeature_2 0.00001
     initDepth 1.0
-    startDetectionTh 0.9
+    startDetectionTh 0.5
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100

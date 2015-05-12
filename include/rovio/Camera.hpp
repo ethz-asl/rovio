@@ -42,14 +42,22 @@ class Camera{
     RADTAN,
     EQUIDIST
   } type_;
+  V3D BrBC_;
+  QPD qCB_;
   Eigen::Matrix3d K_;
   double k1_,k2_,k3_,k4_,k5_,k6_;
   double p1_,p2_,s1_,s2_,s3_,s4_;
+  void setExtrinsics(const V3D& BrBC, const QPD& qCB){ // TODO: clean and get functionality into this class
+    BrBC_ = BrBC;
+    qCB_ = qCB;
+  }
   Camera(){
     k1_ = 0.0; k2_ = 0.0; k3_ = 0.0; k4_ = 0.0; k5_ = 0.0; k6_ = 0.0;
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
     K_.setIdentity();
     type_ = RADTAN;
+    qCB_.setIdentity();
+    BrBC_.setZero();
   };
   ~Camera(){};
   void loadCameraMatrix(const std::string& filename){

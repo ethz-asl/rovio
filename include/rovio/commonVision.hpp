@@ -331,14 +331,20 @@ class FeatureCoordinates{
   double sigma2_;
   double sigmaAngle_;
   Eigen::EigenSolver<Eigen::Matrix2d> es_;
+  bool isLinkedToState_;
+  int* mpCamID_;
+  LWF::NormalVectorElement* mpNor_;
+  double depth_;
   FeatureCoordinates(){
     mpCameras_ == nullptr;
     resetCoordinates();
     camID_ = 0;
+    isLinkedToState_ = false;
   }
   FeatureCoordinates(const Camera* mpCameras): mpCameras_(mpCameras){
     resetCoordinates();
     camID_ = 0;
+    isLinkedToState_ = false;
   }
   void resetCoordinates(){
     valid_c_ = false;
@@ -346,6 +352,24 @@ class FeatureCoordinates{
     sigma1_ = 0.0;
     sigma2_ = 0.0;
     sigmaAngle_ = 0.0;
+  }
+  void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor){
+    mpCamID_ = mpCamID;
+    mpNor_ = mpNor;
+    isLinkedToState_ = true;
+  }
+  void setDepth(const double& depth){
+    depth_ = depth;
+  }
+  void toState(){
+    assert(isLinkedToState_);
+    *mpCamID_ = camID_;
+    *mpNor_ = get_nor();
+  }
+  void fromState(){
+    assert(isLinkedToState_);
+    camID_ = *mpCamID_;
+    set_nor(*mpNor_);
   }
   const cv::Point2f& get_c(){
     if(!valid_c_){
@@ -366,6 +390,13 @@ class FeatureCoordinates{
       }
     }
     return nor_;
+  }
+  LWF::NormalVectorElement get_nor_other(const int otherCamID){
+    const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
+    const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
+    const V3D CrCP = depth_*get_nor().getVec();
+    const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+    return LWF::NormalVectorElement(DrDP);
   }
   void set_c(const cv::Point2f& c){
     c_ = c;
@@ -426,7 +457,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   double initTime_;
   double currentTime_;
   Eigen::Matrix3f H_;
-  float s_;
+  float s_; // TODO: define and store method of computation
   int totCount_;
   Eigen::MatrixXf A_;
   Eigen::MatrixXf b_;
@@ -447,6 +478,8 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   int inFrameCount_;
   std::map<double,Status> statistics_;
 
+  BearingCorners* mpBearingCorners_;
+
   MultilevelPatchFeature(){
     reset();
   }
@@ -454,6 +487,18 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     reset();
   }
   ~MultilevelPatchFeature(){}
+  void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor, BearingCorners* mpBearingCorners){
+    mpBearingCorners_ = mpBearingCorners;
+    FeatureCoordinates::linkToState(mpCamID,mpNor);
+  }
+  void toState(){
+    FeatureCoordinates::toState();
+    *mpBearingCorners_ = get_bearingCorners();
+  }
+  void fromState(){
+    FeatureCoordinates::fromState();
+    set_bearingCorners(*mpBearingCorners_);
+  }
   void setCamera(const Camera* mpCameras){
     mpCameras_ = mpCameras;
   }
@@ -1065,10 +1110,11 @@ class MultilevelPatchSet{
   }
 };
 
+// TODO: work more on bearing vectors (in general)
 template<int n_levels,int patch_size,int nMax>
 std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const ImagePyramid<n_levels>& pyr, const int camID, const double initTime,
                                                    const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
-                                                   const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){ // TODO  solve issue with border effect
+                                                   const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
   std::unordered_set<unsigned int> newSet;
   std::list<MultilevelPatchFeature<n_levels,patch_size>> candidatesWithPatch;
   float maxScore = -1.0;
@@ -1107,10 +1153,13 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   double t2 = pow(penaltyDistance,2);
   bool doDelete;
   MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+  FeatureCoordinates featureCoordinates;
   for(unsigned int i=0;i<nMax;i++){
     if(mlpSet.isValid_[i]){
       mpFeature = &mlpSet.features_[i];
-      if(mpFeature->status_.inFrame_ && mpFeature->camID_ == camID ){
+      featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
+      featureCoordinates.set_nor(featureCoordinates.get_nor_other(camID));
+      if(featureCoordinates.isInFront()){
         for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
           for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
             doDelete = false;
@@ -1181,16 +1230,19 @@ void detectFastCorners(const ImagePyramid<n_levels>& pyr, std::list<cv::Point2f>
 }
 
 template<int n_levels,int patch_size,int nMax>
-void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int camID){ // TODO: add corner motion dependency, solve issue with border effect
+void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int candidateID){ // TODO: add corner motion dependency
   constexpr float t2 = patch_size*patch_size; // TODO: param
   bool prune;
   const MultilevelPatchFeature<n_levels,patch_size>* mpFeature;
+  FeatureCoordinates featureCoordinates;
   for (auto it = candidates.begin(); it != candidates.end();) {
     prune = false;
     for(unsigned int i=0;i<nMax;i++){
       if(mlpSet.isValid_[i]){
         mpFeature = &mlpSet.features_[i];
-        if(mpFeature->status_.inFrame_ && mpFeature->camID_ == camID && pow(it->x-mpFeature->c_.x,2) + pow(it->y-mpFeature->c_.y,2) < t2){ // TODO: check inFrame
+        featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
+        featureCoordinates.set_nor(featureCoordinates.get_nor_other(candidateID));
+        if(featureCoordinates.isInFront() && pow(it->x-featureCoordinates.get_c().x,2) + pow(it->y-featureCoordinates.get_c().y,2) < t2){ // TODO: check inFrame, only if covariance not too large
           prune = true;
           break;
         }
