@@ -124,7 +124,6 @@ class RovioNode{
     mtState testState = mpFilter_->init_.state_;
     unsigned int s = 2;
     testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
-    testState.template get<mtState::_aux>().useInUpdate_[0] = false;
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 

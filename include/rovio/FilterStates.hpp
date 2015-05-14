@@ -109,7 +109,6 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
     for(unsigned int i=0;i<nMax;i++){
-      useInUpdate_[i] = true;
       A_red_[i].setIdentity();
       b_red_[i].setZero();
       bearingMeas_[i].setIdentity();
@@ -121,6 +120,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     depthTypeInt_ = 1;
     depthMap_.setType(depthTypeInt_);
     activeFeature_ = 0;
+    activeCamera_ = 0;
     for(unsigned int i=0;i<nCam;i++){
       qVM_[i].setIdentity();
       MrMV_[i].setZero();
@@ -130,7 +130,6 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   V3D MwIMest_;
   V3D MwIMmeas_;
   M3D wMeasCov_;
-  bool useInUpdate_[nMax];
   Eigen::Matrix2d A_red_[nMax];
   Eigen::Vector2d b_red_[nMax];
   LWF::NormalVectorElement bearingMeas_[nMax];
@@ -142,6 +141,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   DepthMap depthMap_;
   int depthTypeInt_;
   int activeFeature_;
+  int activeCamera_;
 };
 
 template<unsigned int nMax, int nLevels, int patchSize, int nCam>

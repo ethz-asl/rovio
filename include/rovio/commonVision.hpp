@@ -425,19 +425,19 @@ class FeatureCoordinates{
   }
 };
 
-static void drawPoint(cv::Mat& drawImg, const FeatureCoordinates& C, const cv::Scalar& color){
+static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color){
   cv::Size size(2,2);
-  cv::ellipse(drawImg,C.c_,size,0,0,360,color,-1,8,0);
+  cv::ellipse(drawImg,C.get_c(),size,0,0,360,color,-1,8,0);
 }
-static void drawEllipse(cv::Mat& drawImg, const FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
+static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
   drawPoint(drawImg,C,color);
-  cv::ellipse(drawImg,C.c_,cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
+  cv::ellipse(drawImg,C.get_c(),cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
 }
-static void drawLine(cv::Mat& drawImg, const FeatureCoordinates& C1, const FeatureCoordinates& C2, const cv::Scalar& color, int thickness = 2){
-  cv::line(drawImg,C1.c_,C2.c_,color,thickness);
+static void drawLine(cv::Mat& drawImg, FeatureCoordinates& C1, FeatureCoordinates& C2, const cv::Scalar& color, int thickness = 2){
+  cv::line(drawImg,C1.get_c(),C2.get_c(),color,thickness);
 }
-static void drawText(cv::Mat& drawImg, const FeatureCoordinates& C, const std::string& s, const cv::Scalar& color){
-  cv::putText(drawImg,s,C.c_,cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
+static void drawText(cv::Mat& drawImg, FeatureCoordinates& C, const std::string& s, const cv::Scalar& color){
+  cv::putText(drawImg,s,C.get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
 }
 
 template<int n_levels,int patch_size>
@@ -1159,11 +1159,12 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
       mpFeature = &mlpSet.features_[i];
       featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
       featureCoordinates.set_nor(featureCoordinates.get_nor_other(camID));
+      featureCoordinates.camID_ = camID;
       if(featureCoordinates.isInFront()){
         for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
           for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
             doDelete = false;
-            d2 = std::pow(mpFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpFeature->c_.y - (*it_cand)->c_.y,2);
+            d2 = std::pow(featureCoordinates.get_c().x - (*it_cand)->c_.x,2) + std::pow(featureCoordinates.get_c().y - (*it_cand)->c_.y,2);
             if(d2<t2){
               newBucketID = std::max((int)(bucketID - (t2-d2)/t2*zeroDistancePenalty),0);
               if(bucketID != newBucketID){
@@ -1197,7 +1198,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
       for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
         for (auto it_cand = buckets[bucketID2].begin();it_cand != buckets[bucketID2].end();) {
           doDelete = false;
-          d2 = std::pow(mpNewFeature->c_.x - (*it_cand)->c_.x,2) + std::pow(mpNewFeature->c_.y - (*it_cand)->c_.y,2);
+          d2 = std::pow(mpNewFeature->get_c().x - (*it_cand)->c_.x,2) + std::pow(mpNewFeature->get_c().y - (*it_cand)->c_.y,2);
           if(d2<t2){
             newBucketID = std::max((int)(bucketID2 - (t2-d2)/t2*zeroDistancePenalty),0);
             if(bucketID2 != newBucketID){
@@ -1242,6 +1243,7 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
         mpFeature = &mlpSet.features_[i];
         featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
         featureCoordinates.set_nor(featureCoordinates.get_nor_other(candidateID));
+        featureCoordinates.camID_ = candidateID;
         if(featureCoordinates.isInFront() && pow(it->x-featureCoordinates.get_c().x,2) + pow(it->y-featureCoordinates.get_c().y,2) < t2){ // TODO: check inFrame, only if covariance not too large
           prune = true;
           break;
