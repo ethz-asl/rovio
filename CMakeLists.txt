@@ -11,7 +11,7 @@ endif()
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
-if(MAKE_SCENE)
+if(0)
 	message(STATUS "Building ROVIO with openGL Scene Visualization")
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAKE_SCENE=1")
 	find_package(GLEW REQUIRED)
@@ -30,6 +30,18 @@ endif()
 
 find_package(PkgConfig)
 pkg_check_modules(YamlCpp yaml-cpp)
+
+# DOXYGEN
+if(1)
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+    add_custom_target(doc ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Generating API documentation with Doxygen" VERBATIM
+ )
+endif(DOXYGEN_FOUND)
+endif()
 
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS

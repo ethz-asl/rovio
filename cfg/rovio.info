@@ -1,4 +1,4 @@
-cameraCalibrationFile /home/michael/calibrations/p22035_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
+cameraCalibrationFile /home/andreas/catkin_ws/src/rovio/cfg/p22021_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
 doVECalibration true
 depthType 1
 qVM_x  0.0085952428576699432122; 0.0083632 ; [1]-0.0172361
@@ -33,8 +33,8 @@ Init
         att_w 1
         vea_x 0;0.0083632
         vea_y 0;-0.00390811
-        vea_z 0.712747
-        vea_w 0.70136
+        vea_z 0;0.712747
+        vea_w 1;0.70136
     }
     Covariance
     {
