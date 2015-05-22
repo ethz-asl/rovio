@@ -5,11 +5,12 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Status1
         - /PointCloud21
         - /Axes1
         - /Axes2
+        - /Axes3
         - /Marker1
+        - /Marker1/Namespaces1
       Splitter Ratio: 0.5
     Tree Height: 565
   - Class: rviz/Selection
@@ -90,17 +91,24 @@ Visualization Manager:
       Value: true
     - Class: rviz/Axes
       Enabled: true
-      Length: 1
+      Length: 0.5
       Name: Axes
-      Radius: 0.1
+      Radius: 0.02
       Reference Frame: imu
+      Value: true
+    - Class: rviz/Axes
+      Enabled: true
+      Length: 0.3
+      Name: Axes
+      Radius: 0.04
+      Reference Frame: camera
       Value: true
     - Class: rviz/Marker
       Enabled: true
-      Marker Topic: /rovio/lines
+      Marker Topic: /rovio/urays
       Name: Marker
       Namespaces:
-        {}
+        "": true
       Queue Size: 100
       Value: true
   Enabled: true
@@ -127,7 +135,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 11.8918
+      Distance: 6.20806
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1
@@ -139,10 +147,10 @@ Visualization Manager:
         Z: 0
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 0.329798
+      Pitch: 0.8848
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.18857
+      Yaw: 3.46357
     Saved: ~
 Window Geometry:
   Displays:
@@ -161,4 +169,4 @@ Window Geometry:
     collapsed: false
   Width: 1200
   X: 55
-  Y: 17
+  Y: 14
