@@ -11,7 +11,7 @@ endif()
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
-if(MAKE_SCENE)
+if(0)
 	message(STATUS "Building ROVIO with openGL Scene Visualization")
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAKE_SCENE=1")
 	find_package(GLEW REQUIRED)
