@@ -62,6 +62,11 @@ struct Status{
   }
 };
 
+/** \brief Halfsamples an image.
+ *
+ *   @param imgIn - Input image.
+ *   @param imgOut - Output image (halfsampled).
+ */
 void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
   imgOut.create(imgIn.rows/2,imgIn.cols/2,imgIn.type());
   const int refStepIn = imgIn.step.p[0];
@@ -80,13 +85,24 @@ void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
   }
 }
 
+/** \brief Image pyramid with a selectable number of levels.
+ *
+ *   @tparam n_levels - Number of pyramid levels.
+ */
 template<int n_levels>
 class ImagePyramid{
  public:
   ImagePyramid(){};
   ~ImagePyramid(){};
-  cv::Mat imgs_[n_levels];
-  cv::Point2f centers_[n_levels];
+  cv::Mat imgs_[n_levels];  /**<Array, containing the pyramid images.*/
+  cv::Point2f centers_[n_levels]; /**<Array, containing the image center coordinates (in pixel), defined in an
+                                      image centered coordinate system of the image at level 0.*/
+
+  /** \brief Initializes the image pyramid from an input image (level 0).
+   *
+   *   @param img   - Input image (level 0).
+   *   @param useCv - Set to true, if opencv (cv::pyrDown) should be used for the pyramid creation.
+   */
   void computeFromImage(const cv::Mat& img, const bool useCv = false){
     img.copyTo(imgs_[0]);
     centers_[0] = cv::Point2f(0,0);
@@ -102,6 +118,9 @@ class ImagePyramid{
       }
     }
   }
+
+  /** \brief Copies the image pyramid.
+   */
   ImagePyramid<n_levels>& operator=(const ImagePyramid<n_levels> &rhs) {
     for(unsigned int i=0;i<n_levels;i++){
       rhs.imgs_[i].copyTo(imgs_[i]);

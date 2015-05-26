@@ -3,4 +3,10 @@
  * \section intro_sec Introduction
  *  This is the introduction.
  *
+ *
+ *
+ * 
  */
+ 
+ \cond ----------- Document the the rovio namespace. ------------   \endcond
+ /*! \namespace rovio */
