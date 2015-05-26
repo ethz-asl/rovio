@@ -38,19 +38,28 @@ namespace rovio{
 
 class Camera{
  public:
+  /** \brief Distortion model of the camera.
+   * */
   enum ModelType{
-    RADTAN,
-    EQUIDIST
+    RADTAN,    //!< Radial tangential distortion model.
+    EQUIDIST   //!< Equidistant distortion model.
   } type_;
+
   V3D BrBC_;
   QPD qCB_;
-  Eigen::Matrix3d K_;
+  Eigen::Matrix3d K_; //!< Intrinsic parameter matrix.
+
+  //@{
+  /** \brief Distortion Parameter. */
   double k1_,k2_,k3_,k4_,k5_,k6_;
   double p1_,p2_,s1_,s2_,s3_,s4_;
-  void setExtrinsics(const V3D& BrBC, const QPD& qCB){ // TODO: clean and get functionality into this class
-    BrBC_ = BrBC;
-    qCB_ = qCB;
-  }
+  //@}
+
+  /** \brief Constructor.
+   *
+   *  Initializes the camera object as pinhole camera, i.e. all distortion coefficients are set to zero.
+   *  The intrinsic parameter matrix is set equal to the identity matrix.
+   * */
   Camera(){
     k1_ = 0.0; k2_ = 0.0; k3_ = 0.0; k4_ = 0.0; k5_ = 0.0; k6_ = 0.0;
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
@@ -60,6 +69,16 @@ class Camera{
     BrBC_.setZero();
   };
   ~Camera(){};
+
+  void setExtrinsics(const V3D& BrBC, const QPD& qCB){ // TODO: clean and get functionality into this class
+    BrBC_ = BrBC;
+    qCB_ = qCB;
+  }
+
+  /** \brief Loads and sets the intrinsic parameter matrix K_ from yaml-file.
+   *
+   *   @param filename - Path to the yaml-file, containing the intrinsic parameter matrix coefficients.
+   */
   void loadCameraMatrix(const std::string& filename){
     YAML::Node config = YAML::LoadFile(filename);
     K_(0,0) = config["camera_matrix"]["data"][0].as<double>();
@@ -73,6 +92,11 @@ class Camera{
     K_(2,2) = config["camera_matrix"]["data"][8].as<double>();
     std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
   }
+
+  /** \brief Loads and sets the distortion parameters {k1_, k2_, k3_, p1_, p2_} for the Radtan distortion model from
+   *         yaml-file.
+   *   @param filename - Path to the yaml-file, containing the distortion coefficients.
+   */
   void loadRadtan(const std::string& filename){
     loadCameraMatrix(filename);
     YAML::Node config = YAML::LoadFile(filename);
@@ -83,6 +107,11 @@ class Camera{
     k3_ = config["distortion_coefficients"]["data"][4].as<double>();
     std::cout << "Set distortion parameters (Radtan) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
+
+  /** \brief Loads and sets the distortion parameters {k1_, k2_, k3_, k4_} for the Equidistant distortion model from
+   *         yaml-file.
+   *   @param filename - Path to the yaml-file, containing the distortion coefficients.
+   */
   void loadEquidist(const std::string& filename){
     loadCameraMatrix(filename);
     YAML::Node config = YAML::LoadFile(filename);
@@ -92,20 +121,31 @@ class Camera{
     k4_ = config["distortion_coefficients"]["data"][3].as<double>();
     std::cout << "Set distortion parameters (Equidist) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
   }
+
+  /** \brief Loads and sets the distortion model and the corresponding distortion coefficients from yaml-file.
+   *
+   *   @param filename - Path to the yaml-file, containing the distortion model and distortion coefficient data.
+   */
   void load(const std::string& filename){
     YAML::Node config = YAML::LoadFile(filename);
     std::string distortionModel;
     distortionModel = config["distortion_model"].as<std::string>();
     if(distortionModel == "plumb_bob"){
-        type_ = RADTAN;
-        loadRadtan(filename);
+      type_ = RADTAN;
+      loadRadtan(filename);
     } else if(distortionModel == "equidistant"){
-        type_ = EQUIDIST;
-        loadEquidist(filename);
+      type_ = EQUIDIST;
+      loadEquidist(filename);
     } else {
-        std::cout << "ERROR: no camera Model detected!";
+      std::cout << "ERROR: no camera Model detected!";
     }
   }
+
+  /** \brief Distorts a point on the unit plane (in camera coordinates) according to the Radtan distortion model.
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   */
   void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
@@ -115,6 +155,14 @@ class Camera{
     out(0) = in(0) * kr + p1_ * 2 * xy + p2_ * (r2 + 2 * x2);
     out(1) = in(1) * kr + p1_ * (r2 + 2 * y2) + p2_ * 2 * xy;
   }
+
+  /** \brief Distorts a point on the unit plane (in camera coordinates) according to the Radtan distortion model and
+   *         outputs additionally the corresponding jacobian matrix (input to output).
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   *   @param J   - Jacobian matrix of the distortion process (input to output).
+   */
   void distortRadtan(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
@@ -128,6 +176,12 @@ class Camera{
     J(1,0) = J(0,1);
     J(1,1) = kr + 2.0 * k1_ * y2 + 4.0 * k2_ * y2 * r2 + 6.0 * k3_ * y2 * r2 * r2 + 6.0 * p1_ * in(1) + 2.0 * p2_ * in(0);
   }
+
+  /** \brief Distorts a point on the unit plane (in camera coordinates) according to the Equidistant distortion model.
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   */
   void distortEquidist(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
@@ -150,6 +204,14 @@ class Camera{
     out(0) = in(0) * s;
     out(1) = in(1) * s;
   }
+
+  /** \brief Distorts a point on the unit plane (in camera coordinates) according to the Equidistant distortion model
+   *         and outputs additionally the corresponding jacobian matrix (input to output).
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   *   @param J   - Jacobian matrix of the distortion process (input to output).
+   */
   void distortEquidist(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
     const double x2 = in(0) * in(0);
     const double y2 = in(1) * in(1);
@@ -184,6 +246,13 @@ class Camera{
     J(1,0) = in(1)*s_r*r_x;
     J(1,1) = s + in(1)*s_r*r_y;
   }
+
+  /** \brief Distorts a point on the unit plane, according to the set distortion model (#ModelType) and to the set
+   *         distortion coefficients.
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   */
   void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     switch(type_){
       case RADTAN:
@@ -197,6 +266,14 @@ class Camera{
         break;
     }
   }
+
+  /** \brief Distorts a point on the unit plane, according to the set distortion model (#ModelType) and to the set
+   *         distortion coefficients. Outputs additionally the corresponding jacobian matrix (input to output).
+   *
+   *   @param in  - Undistorted point coordinates on the unit plane (in camera coordinates).
+   *   @param out - Distorted point coordinates on the unit plane (in camera coordinates).
+   *   @param J   - Jacobian matrix of the distortion process (input to output).
+   */
   void distort(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
     switch(type_){
       case RADTAN:
@@ -210,6 +287,14 @@ class Camera{
         break;
     }
   }
+
+  /** \brief Outputs the (distorted) pixel coordinates corresponding to a given bearing vector,
+   *         using the set distortion model.
+   *
+   *   @param vec - Bearing vector (in camera coordinates | unit length not necessary).
+   *   @param c   - (Distorted) pixel coordinates.
+   *   @return True, if process successful.
+   */
   bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c) const{
     // Project
     if(vec(2)<=0) return false;
@@ -224,6 +309,15 @@ class Camera{
     c.y = static_cast<float>(K_(1, 1)*distorted(1) + K_(1, 2));
     return true;
   }
+
+  /** \brief Outputs the (distorted) pixel coordinates corresponding to a given bearing vector,
+   *         using the set distortion model. Outputs additionally the corresponding jacobian matrix (input to output).
+   *
+   *   @param vec - Bearing vector (in camera coordinates | unit length not necessary).
+   *   @param c   - (Distorted) pixel coordinates.
+   *   @param J   - Jacobian matrix of the distortion process (input to output).
+   *   @return True, if process successful.
+   */
   bool bearingToPixel(const Eigen::Vector3d& vec, cv::Point2f& c, Eigen::Matrix<double,2,3>& J) const{
     // Project
     if(vec(2)<=0) return false;
@@ -250,9 +344,26 @@ class Camera{
 
     return true;
   }
+
+  /** \brief Outputs the (distorted) pixel coordinates corresponding to a given NormalVectorElement-Object
+   *         (bearing vector), using the set distortion model.
+   *
+   *   @param n   - NormalVectorElement-Object.
+   *   @param c   - (Distorted pixel) coordinates.
+   *   @return True, if process successful.
+   */
   bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c) const{
     return bearingToPixel(n.getVec(),c);
   }
+
+  /** \brief Outputs the (distorted) pixel coordinates corresponding to a given NormalVectorElement-Object
+   *         (bearing vector), using the set distortion model.
+   *
+   *   @param n   - NormalVectorElement-Object.
+   *   @param c   - (Distorted) pixel coordinates.
+   *   @param J   - Jacobian matrix of the distortion process (input to output).
+   *   @return True, if process successful.
+   */
   bool bearingToPixel(const LWF::NormalVectorElement& n, cv::Point2f& c, Eigen::Matrix<double,2,2>& J) const{
     Eigen::Matrix<double,3,2> J1;
     J1 = n.getM();
@@ -261,6 +372,13 @@ class Camera{
     J = J2*J1;
     return success;
   }
+
+  /** \brief Get the bearing vector, corresponding to a specific (distorted) pixel.
+   *
+   *   @param c   - (Distorted) pixel.
+   *   @param vec - Bearing vector (unit length).
+   *   @return True, if process successful.
+   */
   bool pixelToBearing(const cv::Point2f& c,Eigen::Vector3d& vec) const{
     // Shift origin and scale
     Eigen::Vector2d y;
@@ -292,12 +410,22 @@ class Camera{
     }
     return success;
   }
+
+  /** \brief Get the NormalVectorElement-Object (bearing vector) corresponding to a specific (distorted) pixel.
+   *
+   *   @param c   - (Distorted) pixel.
+   *   @param vec - NormalVectorElement-Object.
+   *   @return True, if process successful.
+   */
   bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n) const{
     Eigen::Vector3d vec;
     bool success = pixelToBearing(c,vec);
     n.setFromVector(vec);
     return success;
   }
+
+  /** \brief Function testing the camera model by randomly mapping bearing vectors to pixel coordinates and vice versa.
+   */
   void testCameraModel(){
     double d = 1e-4;
     LWF::NormalVectorElement b_s;

@@ -35,6 +35,7 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
 #include <rovio/RovioOutput.h>
@@ -42,6 +43,7 @@
 #include "rovio/YprOutputCF.hpp"
 #include "rovio/FeatureLocationOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
+#include <visualization_msgs/Marker.h>
 
 namespace rovio {
 
@@ -57,6 +59,9 @@ class RovioNode{
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
+  ros::Publisher pubPcl_;
+  ros::Publisher pubURays_;
+
   typedef FILTER mtFilter;
   mtFilter* mpFilter_;
   typedef typename mtFilter::mtFilterState mtFilterState;
@@ -95,6 +100,10 @@ class RovioNode{
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/rovio/transform", 1);
     pubRovioOutput_ = nh_.advertise<RovioOutput>("/rovio/output", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("/rovio/odometry", 1);
+    pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("/rovio/pcl", 1);
+    pubURays_ = nh_.advertise<visualization_msgs::Marker>("/rovio/urays", 1 );
+
+
 
 //    // p21012_equidist_190215
 //    Eigen::Matrix3d R_VM;
@@ -242,16 +251,27 @@ class RovioNode{
       cameraOutputCF_.transformState(state,output_);
       cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
+      Eigen::Vector3d IrIV = output_.template get<mtOutput::_pos>();
+      rot::RotationQuaternionPD qVI = output_.template get<mtOutput::_att>();
+
       poseMsg_.header.seq = poseMsgSeq_;
       poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      poseMsg_.pose.position.x = output_.template get<mtOutput::_pos>()(0);
-      poseMsg_.pose.position.y = output_.template get<mtOutput::_pos>()(1);
-      poseMsg_.pose.position.z = output_.template get<mtOutput::_pos>()(2);
-      poseMsg_.pose.orientation.w = output_.template get<mtOutput::_att>().w();
-      poseMsg_.pose.orientation.x = output_.template get<mtOutput::_att>().x();
-      poseMsg_.pose.orientation.y = output_.template get<mtOutput::_att>().y();
-      poseMsg_.pose.orientation.z = output_.template get<mtOutput::_att>().z();
+      poseMsg_.pose.position.x = IrIV(0);
+      poseMsg_.pose.position.y = IrIV(1);
+      poseMsg_.pose.position.z = IrIV(2);
+      poseMsg_.pose.orientation.w = qVI.w();
+      poseMsg_.pose.orientation.x = qVI.x();
+      poseMsg_.pose.orientation.y = qVI.y();
+      poseMsg_.pose.orientation.z = qVI.z();
       pubPose_.publish(poseMsg_);
+
+      tf::StampedTransform tf_transform_v;
+      tf_transform_v.frame_id_ = "world";
+      tf_transform_v.child_frame_id_ = "camera";
+      tf_transform_v.stamp_ = ros::Time(mpFilter_->safe_.t_);
+      tf_transform_v.setOrigin(tf::Vector3(IrIV(0),IrIV(1),IrIV(2)));
+      tf_transform_v.setRotation(tf::Quaternion(qVI.x(),qVI.y(),qVI.z(),qVI.w()));
+      tb_.sendTransform(tf_transform_v);
 
       tf::StampedTransform tf_transform;
       tf_transform.frame_id_ = "world";
@@ -372,6 +392,124 @@ class RovioNode{
       pubRovioOutput_.publish(rovioOutputMsg_);
       pubOdometry_.publish(odometryMsg_);
       poseMsgSeq_++;
+
+      // RVIZ Visualization
+      ////////////////////////////////////////////////////////////
+
+      // PointCloud2 message.
+      sensor_msgs::PointCloud2 pcl_msg;
+      pcl_msg.header.seq = poseMsgSeq_;
+      pcl_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
+      pcl_msg.header.frame_id = "camera";
+      pcl_msg.height = 1;               // Unordered point cloud.
+      pcl_msg.width  = mtState::nMax_;  // Number of features/points.
+      pcl_msg.fields.resize(4);
+
+      pcl_msg.fields[0].name     = "x";
+      pcl_msg.fields[0].offset   = 0;
+      pcl_msg.fields[0].count    = 1;
+      pcl_msg.fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+
+      pcl_msg.fields[1].name     = "y";
+      pcl_msg.fields[1].offset   = 4;
+      pcl_msg.fields[1].count    = 1;
+      pcl_msg.fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+
+      pcl_msg.fields[2].name     = "z";
+      pcl_msg.fields[2].offset   = 8;
+      pcl_msg.fields[2].count    = 1;
+      pcl_msg.fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+
+      pcl_msg.fields[3].name     = "rgb";
+      pcl_msg.fields[3].offset   = 12;
+      pcl_msg.fields[3].count    = 1;
+      pcl_msg.fields[3].datatype = sensor_msgs::PointField::UINT32;
+
+      pcl_msg.point_step = 16;
+      pcl_msg.row_step = pcl_msg.point_step * pcl_msg.width;
+      pcl_msg.data.resize(pcl_msg.row_step * pcl_msg.height);
+      pcl_msg.is_dense = false;
+
+      float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
+      int offset = 0;
+      double d, d_far, d_near, d_p, p_d, p_d_p;
+
+      // Marker message (Uncertainty rays).
+      visualization_msgs::Marker marker_msg;
+      marker_msg.header.frame_id = "camera";
+      marker_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
+      marker_msg.id = 0;
+      marker_msg.type = visualization_msgs::Marker::LINE_LIST;
+      marker_msg.action = visualization_msgs::Marker::ADD;
+      marker_msg.pose.position.x = 0;
+      marker_msg.pose.position.y = 0;
+      marker_msg.pose.position.z = 0;
+      marker_msg.pose.orientation.x = 0.0;
+      marker_msg.pose.orientation.y = 0.0;
+      marker_msg.pose.orientation.z = 0.0;
+      marker_msg.pose.orientation.w = 1.0;
+      marker_msg.scale.x = 0.04; // Line width.
+      marker_msg.color.a = 1.0;
+      marker_msg.color.r = 0.0;
+      marker_msg.color.g = 1.0;
+      marker_msg.color.b = 0.0;
+
+      for (unsigned int i=0;i<mtState::nMax_; i++, offset += pcl_msg.point_step) {
+    	  if(filterState.mlps_.isValid_[i]){
+
+    	    // Get 3D feature coordinates.
+    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+    		  const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
+    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
+    		  if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
+    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
+    		  const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+    		  const Eigen::Vector3f pos = middle.getVec().cast<float>()*d;
+    		  const Eigen::Vector3f pos_far = middle.getVec().cast<float>()*d_far;
+    		  const Eigen::Vector3f pos_near = middle.getVec().cast<float>()*d_near;
+
+    		  // Add feature coordinates to pcl message.
+    		  memcpy(&pcl_msg.data[offset + 0],
+    				  &pos[0], sizeof(float));  // x
+    		  memcpy(&pcl_msg.data[offset + 4],
+    				  &pos[1], sizeof(float));  // y
+    		  memcpy(&pcl_msg.data[offset + 8],
+    				  &pos[2], sizeof(float));  // z
+
+    		  // Add color (gray values).
+    		  uint8_t gray = 255;
+    		  uint32_t rgb = (gray << 16) | (gray << 8) | gray;
+    		  memcpy(&pcl_msg.data[offset + 12],
+    				  &rgb, sizeof(uint32_t));
+
+    		  // Line markers (Uncertainty rays).
+    		  geometry_msgs::Point point_near_msg;
+    		  geometry_msgs::Point point_far_msg;
+    		  point_near_msg.x = float(pos_near[0]);
+    		  point_near_msg.y = float(pos_near[1]);
+    		  point_near_msg.z = float(pos_near[2]);
+    		  point_far_msg.x = float(pos_far[0]);
+    		  point_far_msg.y = float(pos_far[1]);
+    		  point_far_msg.z = float(pos_far[2]);
+    		  marker_msg.points.push_back(point_near_msg);
+    		  marker_msg.points.push_back(point_far_msg);
+    	  }
+    	  else {
+    		  // If current feature is not valid copy NaN
+    		  memcpy(&pcl_msg.data[offset + 0], &badPoint,     // x
+    				  sizeof(float));
+    		  memcpy(&pcl_msg.data[offset + 4], &badPoint,     // y
+    				  sizeof(float));
+    		  memcpy(&pcl_msg.data[offset + 8], &badPoint,     // z
+    				  sizeof(float));
+    		  memcpy(&pcl_msg.data[offset + 12], &badPoint,
+    				  sizeof(float));
+    	  }
+      }
+      // Publish point cloud.
+      pubPcl_.publish(pcl_msg);
+      // Publish uncertainty rays.
+      pubURays_.publish(marker_msg);
     }
   }
 };
