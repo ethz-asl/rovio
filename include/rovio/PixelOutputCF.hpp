@@ -32,6 +32,7 @@
 #include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 #include "rovio/Camera.hpp"
+#include "rovio/FeatureLocationOutputCF.hpp"
 
 namespace rovio {
 
@@ -41,6 +42,9 @@ class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
   PixelOutput(){
   }
   ~PixelOutput(){};
+  cv::Point2f getPoint2f() const{
+    return cv::Point2f(static_cast<float>(this->get<_pix>()(0)),static_cast<float>(this->get<_pix>()(1)));
+  }
 };
 template<typename STATE>
 class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
@@ -50,32 +54,70 @@ class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtJacInput mtJacInput;
-  int ind_;
-  rovio::Camera* mpCamera_;
+  int ID_;
+  rovio::Camera* mpCameras_;
   PixelOutputCF(){
-    ind_ = 0;
-    mpCamera_ = nullptr;
+    ID_ = 0;
+    mpCameras_ = nullptr;
   };
-  void setCamera(Camera* mpCamera){
-    mpCamera_ = mpCamera;
+  void setCamera(Camera* mpCameras){
+    mpCameras_ = mpCameras;
   }
   void setIndex(int ind){
-    ind_ = ind;
+    ID_ = ind;
   }
   ~PixelOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // MrMV = MrMV
     // qVM = qVM
     cv::Point2f c;
-    mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c);
+    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
+    mpCameras_[camID].bearingToPixel(input.template get<mtInput::_nor>(ID_),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     cv::Point2f c;
     Eigen::Matrix<double,2,2> J_temp;
-    mpCamera_->bearingToPixel(input.template get<mtInput::_nor>(ind_),c,J_temp);
-    J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>(ind_)) = J_temp;
+    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
+    mpCameras_[camID].bearingToPixel(input.template get<mtInput::_nor>(ID_),c,J_temp);
+    J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>(ID_)) = J_temp;
+  }
+};
+
+class PixelOutputFromNorCF:public LWF::CoordinateTransform<FeatureLocationOutput,PixelOutput,true>{
+ public:
+  typedef LWF::CoordinateTransform<FeatureLocationOutput,PixelOutput,true> Base;
+  typedef typename Base::mtInput mtInput;
+  typedef typename Base::mtOutput mtOutput;
+  typedef typename Base::mtMeas mtMeas;
+  typedef typename Base::mtJacInput mtJacInput;
+  int camID_;
+  rovio::Camera* mpCameras_;
+  PixelOutputFromNorCF(){
+    camID_ = 0;
+    mpCameras_ = nullptr;
+  };
+  void setCamera(Camera* mpCameras){
+    mpCameras_ = mpCameras;
+  }
+  void setCameraID(int ID){
+    camID_ = ID;
+  }
+  ~PixelOutputFromNorCF(){};
+  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+    // MrMV = MrMV
+    // qVM = qVM
+    cv::Point2f c;
+    mpCameras_[camID_].bearingToPixel(input.template get<mtInput::_nor>(),c);
+    output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
+  }
+  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+    J.setZero();
+    cv::Point2f c;
+    Eigen::Matrix<double,2,2> J_temp;
+    mpCameras_[camID_].bearingToPixel(input.template get<mtInput::_nor>(),c,J_temp);
+    J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>()) = J_temp;
   }
 };
 

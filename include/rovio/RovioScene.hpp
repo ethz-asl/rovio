@@ -47,10 +47,21 @@ class RovioScene{
   FILTER* mpFilter_;
 
   rovio::Scene mScene;
-  SceneObject* mpSensor_ = nullptr;
-  SceneObject* mpLines_ = nullptr;
-  SceneObject* mpDepthVar_ = nullptr;
+  SceneObject* mpSensor_[mtState::nCam_];
+  SceneObject* mpLines_[mtState::nCam_];
+  SceneObject* mpDepthVar_[mtState::nCam_];
   SceneObject* mpPatches_[mtState::nMax_];
+  RovioScene(){
+    mpFilter_ = nullptr;
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      mpSensor_[camID] = nullptr;
+      mpLines_[camID] = nullptr;
+      mpDepthVar_[camID] = nullptr;
+    }
+    for(int i=0;i<mtState::nMax_;i++){
+      mpPatches_[i] = nullptr;
+    }
+  }
   void initScene(int argc, char** argv, const std::string& mVSFileName,const std::string& mFSFileName,FILTER* mpFilter){
     initGlut(argc,argv,mScene);
     mScene.init(argc, argv,mVSFileName,mFSFileName);
@@ -66,23 +77,24 @@ class RovioScene{
     mpGroundplane2->setColorFull(Eigen::Vector4f(0.8f,0.8f,0.8f,1.0f));
     mpGroundplane2->lineWidth_ = 3.0f;
     mpGroundplane2->W_r_WB_(2) = -1.0f;
-    mpSensor_ = mScene.addSceneObject();
-    mpSensor_->makeCoordinateFrame(1.0f);
-    mpSensor_->lineWidth_ = 5.0f;
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      mpSensor_[camID] = mScene.addSceneObject();
+      mpSensor_[camID]->makeCoordinateFrame(1.0f);
+      mpSensor_[camID]->lineWidth_ = 5.0f;
 
+      mpLines_[camID] = mScene.addSceneObject();
+      mpLines_[camID]->makeLine();
+      mpLines_[camID]->lineWidth_ = 2.0f;
+      mpLines_[camID]->mode_ = GL_LINES;
+
+      mpDepthVar_[camID] = mScene.addSceneObject();
+      mpDepthVar_[camID]->makeLine();
+      mpDepthVar_[camID]->lineWidth_ = 3.0f;
+      mpDepthVar_[camID]->mode_ = GL_LINES;
+    }
     for(int i=0;i<mtState::nMax_;i++){
       mpPatches_[i] = mScene.addSceneObject();
     }
-
-    mpLines_ = mScene.addSceneObject();
-    mpLines_->makeLine();
-    mpLines_->lineWidth_ = 2.0f;
-    mpLines_->mode_ = GL_LINES;
-
-    mpDepthVar_ = mScene.addSceneObject();
-    mpDepthVar_->makeLine();
-    mpDepthVar_->lineWidth_ = 3.0f;
-    mpDepthVar_->mode_ = GL_LINES;
 
     mScene.setView(Eigen::Vector3f(-5.0f,-5.0f,5.0f),Eigen::Vector3f(0.0f,0.0f,0.0f));
     mScene.setYDown();
@@ -94,92 +106,93 @@ class RovioScene{
     const mtState& state = filterState.state_;
     const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
 
-    mpSensor_->W_r_WB_ = state.get_WrWB().template cast<float>();
-    mpSensor_->q_BW_ = state.get_qBW();
+    for(unsigned int camID=0;camID<mtState::nCam_;camID++){
+      mpSensor_[camID]->W_r_WB_ = state.get_IrIV(camID).template cast<float>();
+      mpSensor_[camID]->q_BW_ = state.get_qVI(camID);
 
-    std::vector<Eigen::Vector3f> points;
-    std::vector<Eigen::Vector3f> lines;
-    mpLines_->clear();
-    mpDepthVar_->clear();
-    double d, d_far, d_near, d_p, p_d, p_d_p;
-    const double stretchFactor = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-1)/(filterState.mlps_.features_[0].warpDistance_*2.0);
-    for(unsigned int i=0;i<mtState::nMax_;i++){
-      if(filterState.mlps_.isValid_[i]){
-        state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
-        const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-        state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
-        if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
-        state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
-        const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
-        LWF::NormalVectorElement corner[4];
-        Eigen::Vector3d cornerVec[4];
-        const BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
-        for(int x=0;x<2;x++){
-          for(int y=0;y<2;y++){
-            const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
-            middle.boxPlus(dif,corner[y*2+x]);
-            cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
+      std::vector<Eigen::Vector3f> points;
+      std::vector<Eigen::Vector3f> lines;
+      mpLines_[camID]->clear();
+      mpDepthVar_[camID]->clear();
+      double d, d_far, d_near, d_p, p_d, p_d_p;
+      const double stretchFactor = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-1)/(filterState.mlps_.features_[0].warpDistance_*2.0);
+      for(unsigned int i=0;i<mtState::nMax_;i++){
+        if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].camID_ == camID){
+          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+          const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
+          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-sigma,d_far,d_p,p_d,p_d_p);
+          if(state.template get<mtState::_aux>().depthMap_.type_ == DepthMap::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+sigma,d_near,d_p,p_d,p_d_p);
+          const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+          LWF::NormalVectorElement corner[4];
+          Eigen::Vector3d cornerVec[4];
+          const BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
+          for(int x=0;x<2;x++){
+            for(int y=0;y<2;y++){
+              const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
+              middle.boxPlus(dif,corner[y*2+x]);
+              cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
+            }
           }
-        }
-        const Eigen::Vector3d pos = middle.getVec()*d;
-        const Eigen::Vector3d pos_far = middle.getVec()*d_far;
-        const Eigen::Vector3d pos_near = middle.getVec()*d_near;
+          const Eigen::Vector3d pos = middle.getVec()*d;
+          const Eigen::Vector3d pos_far = middle.getVec()*d_far;
+          const Eigen::Vector3d pos_near = middle.getVec()*d_near;
 
-        mpLines_->prolonge(cornerVec[0].cast<float>());
-        mpLines_->prolonge(cornerVec[1].cast<float>());
-        mpLines_->prolonge(cornerVec[1].cast<float>());
-        mpLines_->prolonge(cornerVec[3].cast<float>());
-        mpLines_->prolonge(cornerVec[3].cast<float>());
-        mpLines_->prolonge(cornerVec[2].cast<float>());
-        mpLines_->prolonge(cornerVec[2].cast<float>());
-        mpLines_->prolonge(cornerVec[0].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[0].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[1].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[1].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[3].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[3].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[2].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[2].cast<float>());
+          mpLines_[camID]->prolonge(cornerVec[0].cast<float>());
 
-        mpDepthVar_->prolonge(pos_far.cast<float>());
-        mpDepthVar_->prolonge(pos_near.cast<float>());
-        if(filterState.mlps_.features_[i].status_.inFrame_){
-          if(filterState.mlps_.features_[i].status_.trackingStatus_ == TRACKED){
-            std::next(mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
-            mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
-            for(int j=0;j<8;j++){
-              std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+          mpDepthVar_[camID]->prolonge(pos_far.cast<float>());
+          mpDepthVar_[camID]->prolonge(pos_near.cast<float>());
+          if(filterState.mlps_.features_[i].status_.inFrame_){
+            if(filterState.mlps_.features_[i].status_.trackingStatus_ == TRACKED){
+              std::next(mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+              mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+              for(int j=0;j<8;j++){
+                std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+              }
+            } else {
+              std::next( mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+              mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+              for(int j=0;j<8;j++){
+                std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+              }
             }
           } else {
-            std::next( mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
-            mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+            std::next( mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
+            mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
             for(int j=0;j<8;j++){
-              std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+              std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
             }
           }
-        } else {
-          std::next( mpDepthVar_->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
-          mpDepthVar_->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
-          for(int j=0;j<8;j++){
-            std::next(mpLines_->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
-          }
-        }
 
-        mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
-        cv::Mat patch = cv::Mat::zeros(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1),CV_8UC1);
-        filterState.mlps_.features_[i].drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
-        mpPatches_[i]->setTexture(patch);
-        for(int x=0;x<2;x++){
-          for(int y=0;y<2;y++){
-            mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec[y*2+x].cast<float>());
+          mpPatches_[i]->clear();
+          mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
+          cv::Mat patch = cv::Mat::zeros(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1),CV_8UC1);
+          filterState.mlps_.features_[i].drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
+          mpPatches_[i]->setTexture(patch);
+          for(int x=0;x<2;x++){
+            for(int y=0;y<2;y++){
+              mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec[y*2+x].cast<float>());
+            }
           }
+          mpPatches_[i]->allocateBuffer();
+          mpPatches_[i]->W_r_WB_ = mpSensor_[camID]->W_r_WB_;
+          mpPatches_[i]->q_BW_ = mpSensor_[camID]->q_BW_;
         }
-        mpPatches_[i]->allocateBuffer();
-        mpPatches_[i]->W_r_WB_ = mpSensor_->W_r_WB_;
-        mpPatches_[i]->q_BW_ = mpSensor_->q_BW_;
-      } else {
-        mpPatches_[i]->clear();
+        mpLines_[camID]->W_r_WB_ = mpSensor_[camID]->W_r_WB_;
+        mpLines_[camID]->q_BW_ = mpSensor_[camID]->q_BW_;
+        mpLines_[camID]->allocateBuffer();
+        mpDepthVar_[camID]->W_r_WB_ = mpSensor_[camID]->W_r_WB_;
+        mpDepthVar_[camID]->q_BW_ = mpSensor_[camID]->q_BW_;
+        mpDepthVar_[camID]->allocateBuffer();
       }
     }
-    mpLines_->W_r_WB_ = mpSensor_->W_r_WB_;
-    mpLines_->q_BW_ = mpSensor_->q_BW_;
-    mpLines_->allocateBuffer();
-    mpDepthVar_->W_r_WB_ = mpSensor_->W_r_WB_;
-    mpDepthVar_->q_BW_ = mpSensor_->q_BW_;
-    mpDepthVar_->allocateBuffer();
   }
 };
 
