@@ -40,6 +40,7 @@
 #include <rovio/RovioOutput.h>
 #include "rovio/CameraOutputCF.hpp"
 #include "rovio/YprOutputCF.hpp"
+#include "rovio/FeatureLocationOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
 
 namespace rovio {
@@ -127,10 +128,40 @@ class RovioNode{
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
+    testState.template get<mtState::_aux>().camID_[0] = mtState::nCam_-1;
+    for(int i=0;i<mtState::nMax_;i++){
+      testState.template get<mtState::_aux>().bearingMeas_[i].setRandom(s);
+    }
+
+    // Prediction
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
-    std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-9,1e-6,0.1);
+
+    // Update
+    for(int i=0;i<mtState::nMax_;i++){
+      testState.template get<mtState::_aux>().activeFeature_ = i;
+      testState.template get<mtState::_aux>().activeCameraCounter_ = 0;
+      const int camID = testState.template get<mtState::_aux>().camID_[i];
+      int activeCamID = (testState.template get<mtState::_aux>().activeCameraCounter_ + camID)%mtState::nCam_;
+      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setFeatureID(i);
+      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
+      std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+      testState.template get<mtState::_aux>().activeCameraCounter_ = mtState::nCam_-1;
+      activeCamID = (testState.template get<mtState::_aux>().activeCameraCounter_ + camID)%mtState::nCam_;
+      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
+      std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+    }
+
+    // CF
     cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
     attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);
+    rovio::FeatureLocationOutputCF<mtState> featureLocationOutputCFTest;
+    featureLocationOutputCFTest.setFeatureID(0);
+    if(mtState::nCam_>1){
+      featureLocationOutputCFTest.setOutputCameraID(1);
+      featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+    }
+    featureLocationOutputCFTest.setOutputCameraID(0);
+    featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
   }
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
     predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);
@@ -139,7 +170,8 @@ class RovioNode{
       mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
     } else {
       mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
-      std::cout << "-- Filter: Initialized!" << std::endl;
+      std::cout << std::setprecision(12);
+      std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
       isInitialized_ = true;
     }
   }
@@ -147,7 +179,7 @@ class RovioNode{
     imgCallback(img,0);
   }
   void imgCallback1(const sensor_msgs::ImageConstPtr & img){
-    imgCallback(img,1);
+    if(mtState::nCam_ > 1) imgCallback(img,1); //TODO generalize
   }
   void imgCallback(const sensor_msgs::ImageConstPtr & img, const int camID = 0){
     // Get image from msg
@@ -189,7 +221,7 @@ class RovioNode{
       int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
-      mpFilter_->updateSafe(&updateTime);
+      mpFilter_->updateSafe(&updateTime); // TODO: continue inly if actually updates
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -201,7 +233,7 @@ class RovioNode{
       for(int i=0;i<mtState::nCam_;i++){
         if(!mpFilter_->safe_.img_[i].empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
           cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
-          cv::waitKey(1);
+          cv::waitKey(5);
         }
       }
       mtFilterState& filterState = mpFilter_->safe_;

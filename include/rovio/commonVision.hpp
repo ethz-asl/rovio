@@ -189,10 +189,10 @@ class Patch {
     if(!validGradientParameters_) computeGradientParameters();
     return H_;
   }
-  void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false){
+  void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
     const int refStep = drawImg.step.p[0];
     uint8_t* img_ptr;
-    float* it_patch;
+    const float* it_patch;
     if(withBorder){
       it_patch = patchWithBorder_;
     } else {
@@ -322,10 +322,10 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
 class FeatureCoordinates{
  public:
   int camID_;
-  cv::Point2f c_;
-  bool valid_c_;
-  LWF::NormalVectorElement nor_;
-  bool valid_nor_;
+  mutable cv::Point2f c_;
+  mutable bool valid_c_;
+  mutable LWF::NormalVectorElement nor_;
+  mutable bool valid_nor_;
   const Camera* mpCameras_;
   double sigma1_;
   double sigma2_;
@@ -371,7 +371,7 @@ class FeatureCoordinates{
     camID_ = *mpCamID_;
     set_nor(*mpNor_);
   }
-  const cv::Point2f& get_c(){
+  const cv::Point2f& get_c() const{
     if(!valid_c_){
       if(valid_nor_ && mpCameras_[camID_].bearingToPixel(nor_,c_)){
         valid_c_ = true;
@@ -381,7 +381,7 @@ class FeatureCoordinates{
     }
     return c_;
   }
-  const LWF::NormalVectorElement& get_nor(){
+  const LWF::NormalVectorElement& get_nor() const{
     if(!valid_nor_){
       if(valid_c_ && mpCameras_[camID_].pixelToBearing(c_,nor_)){
         valid_nor_ = true;
@@ -391,7 +391,7 @@ class FeatureCoordinates{
     }
     return nor_;
   }
-  LWF::NormalVectorElement get_nor_other(const int otherCamID){
+  LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
     const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
     const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
     const V3D CrCP = depth_*get_nor().getVec();
@@ -408,7 +408,7 @@ class FeatureCoordinates{
     valid_nor_ = true;
     valid_c_ = false;
   }
-  bool isInFront(){
+  bool isInFront() const{
     return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
   }
   void setSigmaFromCov(const Eigen::Matrix2d& cov){
@@ -447,17 +447,17 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   Patch<patch_size> patches_[nLevels_];
   bool isValidPatch_[nLevels_];
   static constexpr float warpDistance_ = static_cast<float>(patch_size);
-  PixelCorners pixelCorners_;
-  bool valid_pixelCorners_;
-  BearingCorners bearingCorners_;
-  bool valid_bearingCorners_;
-  Eigen::Matrix2f affineTransform_;
-  bool valid_affineTransform_;
+  mutable PixelCorners pixelCorners_;
+  mutable bool valid_pixelCorners_;
+  mutable BearingCorners bearingCorners_;
+  mutable bool valid_bearingCorners_;
+  mutable Eigen::Matrix2f affineTransform_;
+  mutable bool valid_affineTransform_;
   int idx_;
   double initTime_;
   double currentTime_;
   Eigen::Matrix3f H_;
-  float s_; // TODO: define and store method of computation
+  float s_; // TODO: define and store method of computation, add mutable
   int totCount_;
   Eigen::MatrixXf A_;
   Eigen::MatrixXf b_;
@@ -522,7 +522,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       isValidPatch_[i] = false;
     }
   }
-  const PixelCorners& get_pixelCorners(){
+  const PixelCorners& get_pixelCorners() const{
     if(!valid_pixelCorners_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
@@ -547,7 +547,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
     return pixelCorners_;
   }
-  const BearingCorners& get_bearingCorners(){
+  const BearingCorners& get_bearingCorners() const{
     if(!valid_bearingCorners_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
@@ -563,7 +563,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
     return bearingCorners_;
   }
-  const Eigen::Matrix2f& get_affineTransform(){
+  const Eigen::Matrix2f& get_affineTransform() const{
     if(!valid_affineTransform_){
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
@@ -604,13 +604,13 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     currentTime_ = currentTime;
     status_ = Status();
   }
-  int countMatchingStatistics(const MatchingStatus s){
-    return cumulativeMatchingStatus_[s] + (int)(status_.matchingStatus_ == s);
+  int countMatchingStatistics(const MatchingStatus s) const{
+    return cumulativeMatchingStatus_.at(s) + (int)(status_.matchingStatus_ == s);
   }
-  int countTrackingStatistics(const TrackingStatus s){
-    return cumulativeTrackingStatus_[s] + (int)(status_.trackingStatus_ == s);
+  int countTrackingStatistics(const TrackingStatus s) const{
+    return cumulativeTrackingStatus_.at(s) + (int)(status_.trackingStatus_ == s);
   }
-  int countMatchingStatistics(const MatchingStatus s, const int n){
+  int countMatchingStatistics(const MatchingStatus s, const int n) const{
     int c = 0;
     auto it = statistics_.rbegin();
     for(int i=0;i<n-1 && it != statistics_.rend();++i){
@@ -619,7 +619,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
     return c + (int)(status_.matchingStatus_ == s);
   }
-  int countTrackingStatistics(const TrackingStatus s, const int n){
+  int countTrackingStatistics(const TrackingStatus s, const int n) const{
     int c = 0;
     auto it = statistics_.rbegin();
     for(int i=0;i<n-1 && it != statistics_.rend();++i){
@@ -628,13 +628,13 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
     return c + (int)(status_.trackingStatus_ == s);
   }
-  int countTot(){
+  int countTot() const{
     return totCount_+1;
   }
-  int countTotInFrame(){
+  int countTotInFrame() const{
     return inFrameCount_+(int)(status_.inFrame_);
   }
-  double getLocalQuality(const int localRange = 10){
+  double getLocalQuality(const int localRange = 10) const{
     // Local quality of feature for last "inFrames"
     int countTracked = 0;
     int countInFrame = 0;
@@ -654,7 +654,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       return static_cast<double>(countTracked)/static_cast<double>(countInFrame);
     }
   }
-  double getLocalVisibilityQuality(const int localRange = 200){
+  double getLocalVisibilityQuality(const int localRange = 200) const{
     int countTot = 0;
     int countInFrame = 0;
     countTot++;
@@ -665,11 +665,11 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
     return static_cast<double>(countInFrame)/static_cast<double>(countTot);
   }
-  double getGlobalQuality(const int frameCountRef = 100){
+  double getGlobalQuality(const int frameCountRef = 100) const{
     const double trackingRatio = static_cast<double>(countTrackingStatistics(TRACKED))/static_cast<double>(countTot());
     return trackingRatio*std::min(static_cast<double>(countTot())/frameCountRef,1.0);
   }
-  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.8, const double lower = 0.1){
+  bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.8, const double lower = 0.1) const{
     const double globalQuality = getGlobalQuality();
     const double localQuality = getLocalQuality(localRange);
     const double localVisibilityQuality = getLocalVisibilityQuality(localVisibilityRange);
@@ -708,13 +708,45 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       s_ = -1;
     }
   }
-  void drawMultilevelPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false){
+  void drawMultilevelPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
     for(int l=nLevels_-1;l>=0;l--){
       if(isValidPatch_[l]){
         cv::Point2i corner = cv::Point2i((patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)),(patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)));
         patches_[l].drawPatch(drawImg,c+corner,stretch*pow(2,l),withBorder);
       }
     }
+  }
+  float computeAverageDifference(const MultilevelPatchFeature<n_levels,patch_size>& mlp, const int l1, const int l2) const{
+    float offset = 0.0f;
+    for(int l = l1; l <= l2; l++){
+      const float* it_patch = patches_[l].patch_;
+      const float* it_patch_in = mlp.patches_[l].patch_;
+      for(int y=0; y<patch_size; ++y){
+        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_in){
+          offset += *it_patch - *it_patch_in;
+        }
+      }
+    }
+    offset = offset/(patch_size*patch_size*(l2-l1+1));
+    float error = 0.0f;
+    for(int l = l1; l <= l2; l++){
+      const float* it_patch = patches_[l].patch_;
+      const float* it_patch_in = mlp.patches_[l].patch_;
+      for(int y=0; y<patch_size; ++y){
+        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_in){
+          error += std::pow(*it_patch - *it_patch_in - offset,2);
+        }
+      }
+    }
+    error = error/(patch_size*patch_size*(l2-l1+1));
+    return std::sqrt(error);
+  }
+  float computeAverageDifferenceReprojection(const ImagePyramid<n_levels>& pyr, const int l1, const int l2) const{
+    MultilevelPatchFeature<n_levels,patch_size> mlpReprojected;
+    mlpReprojected.set_c(get_c());
+    mlpReprojected.set_affineTransfrom(get_affineTransform());
+    extractMultilevelPatchFromImage(mlpReprojected,pyr,l2,false,true);
+    return computeAverageDifference(mlpReprojected,l1,l2);
   }
 };
 

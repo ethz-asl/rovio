@@ -120,7 +120,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     depthTypeInt_ = 1;
     depthMap_.setType(depthTypeInt_);
     activeFeature_ = 0;
-    activeCamera_ = 0;
+    activeCameraCounter_ = 0;
     for(unsigned int i=0;i<nCam;i++){
       qVM_[i].setIdentity();
       MrMV_[i].setZero();
@@ -141,7 +141,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   DepthMap depthMap_;
   int depthTypeInt_;
   int activeFeature_;
-  int activeCamera_;
+  int activeCameraCounter_;
 };
 
 template<unsigned int nMax, int nLevels, int patchSize, int nCam>
@@ -212,7 +212,7 @@ class State: public LWF::State<
   V3D get_IrIV(const int camID = 0) const{
     return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
   }
-  double get_depth(const int i){
+  double get_depth(const int i) const{
     double d, d_p, p_d, p_d_p;
     this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
     return d;

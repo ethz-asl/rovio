@@ -72,6 +72,15 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMV",init_.state_.template get<mtState::_aux>().MrMV_[camID]);
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qVM",init_.state_.template get<mtState::_aux>().qVM_[camID]);
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(0));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(1));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(2));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().w());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().x());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().y());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().z());
+      doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMV",init_.state_.template get<mtState::_vep>(camID));
+      doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qVM",init_.state_.template get<mtState::_vea>(camID));
     }
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
@@ -89,6 +98,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
+    boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
     reset(0.0);
   }
   void refreshProperties(){

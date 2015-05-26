@@ -120,9 +120,9 @@ class RovioScene{
         if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].camID_ == camID){
           state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
           const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
-          if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
-          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
+          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-sigma,d_far,d_p,p_d,p_d_p);
+          if(state.template get<mtState::_aux>().depthMap_.type_ == DepthMap::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+sigma,d_near,d_p,p_d,p_d_p);
           const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
           LWF::NormalVectorElement corner[4];
           Eigen::Vector3d cornerVec[4];
