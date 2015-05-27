@@ -94,7 +94,7 @@ class ImagePyramid{
  public:
   ImagePyramid(){};
   ~ImagePyramid(){};
-  cv::Mat imgs_[n_levels];  /**<Array, containing the pyramid images.*/
+  cv::Mat imgs_[n_levels]; /**<Array, containing the pyramid images.*/
   cv::Point2f centers_[n_levels]; /**<Array, containing the image center coordinates (in pixel), defined in an
                                       image centered coordinate system of the image at level 0.*/
 
@@ -130,6 +130,8 @@ class ImagePyramid{
   }
 };
 
+/** \brief @todo.
+ */
 struct PixelCorners{
   cv::Point2f corners_[2];
   cv::Point2f& operator[](unsigned int i){
@@ -140,6 +142,8 @@ struct PixelCorners{
   };
 };
 
+/** \brief @todo.
+ */
 struct BearingCorners{
   Eigen::Vector2d corners_[2];
   Eigen::Vector2d& operator[](unsigned int i){
@@ -150,22 +154,31 @@ struct BearingCorners{
   };
 };
 
+/** \brief %Patch with selectable size.
+ *
+ *   @tparam size - Edge length of the patch in pixels. Value must be a multiple of 2!
+ */
 template<int size>
 class Patch {
  public:
-  float patch_[size*size] __attribute__ ((aligned (16)));
-  float patchWithBorder_[(size+2)*(size+2)] __attribute__ ((aligned (16)));
-  float dx_[size*size] __attribute__ ((aligned (16)));
-  float dy_[size*size] __attribute__ ((aligned (16)));
-  Eigen::Matrix3f H_;
-  float s_;
-  bool validGradientParameters_;
+  float patch_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the patch.*/
+  float patchWithBorder_[(size+2)*(size+2)] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the expanded patch.
+                                                                                 This expanded patch is necessary for the intensity gradient calculation.*/
+  float dx_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in x-direction for each patch pixel.*/
+  float dy_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in y-direction for each patch pixel.*/
+  Eigen::Matrix3f H_;                                   /**<Hessian matrix of the patch (Necessary for the inverse compositional patch alignment).*/
+  float s_;                                             /**<Shi-Tomasi corner score (smaller eigenvalue of H).*/
+  bool validGradientParameters_;                        /**<True, if gradient parameters (%Patch gradients, Hessian, Shi-Thomasi Score) have been computed.
+                                                            \see computeGradientParameters()*/
   Patch(){
     static_assert(size%2==0,"Patch size must be a multiple of 2");
     validGradientParameters_ = false;
     s_ = 0.0;
   }
   ~Patch(){}
+
+  /** \brief Computes the gradient parameters of the patch (patch gradients, hessian, shi-tomasi score).
+   */
   void computeGradientParameters(){
     H_.setZero();
     const int refStep = size+2;
@@ -191,6 +204,10 @@ class Patch {
     s_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
     validGradientParameters_ = true;
   }
+
+  /** \brief Sets the patch ( patch_ ) intensity values from the intensity values of the
+   *         expanded patch ( patchWithBorder_ ).
+   */
   void extractPatchFromPatchWithBorder(){
     float* it_patch = patch_;
     float* it_patchWithBorder;
@@ -200,14 +217,37 @@ class Patch {
         it_patch[x] = it_patchWithBorder[x];
     }
   }
+
+  /** \brief Returns the Shi-Tomasi Score.
+   *
+   *   Computes the gradient parameters (patch gradients, hessian, shi-tomasi score)  and returns the Shi-Tomasi
+   *   Score.
+   *   @return Shi-Tomasi Score ( smaller eigenvalue of the Hessian Patch::H_ ).
+   */
   float getScore(){
     if(!validGradientParameters_) computeGradientParameters();
     return s_;
   }
+
+  /** \brief Returns the Hessian Matrix ( Patch::H_ ).
+   *
+   *   Computes the gradient parameters (patch gradients, hessian, shi-tomasi score)  and returns the Hessian Matrix
+   *   ( Patch::H_ ).
+   *   @return Hessian Matrix Patch::H_ .
+   */
   Eigen::Matrix3f getHessian(){
     if(!validGradientParameters_) computeGradientParameters();
     return H_;
   }
+
+  /** \brief Draws the patch into an image.
+   *
+   *   @param drawImg    - Image in which the patch should be drawn.
+   *   @param c          - Pixel coordinates of the left upper patch corner.
+   *   @param stretch    - %Patch drawing magnification factor.
+   *   @param withBorder - Draw either the patch Patch::patch_  (withBorder = false) or the expanded patch
+   *                       Patch::patchWithBorder_ (withBorder = true) .
+   */
   void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false){
     const int refStep = drawImg.step.p[0];
     uint8_t* img_ptr;
@@ -229,6 +269,15 @@ class Patch {
   }
 };
 
+/** \brief Checks if a patch at a specific image location is still within the image.
+   *
+   *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+   *   @param img        - Reference Image.
+   *   @param c          - Center pixel coordinates of the patch.
+   *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+   *                       of Patch::patchWithBorder_ (withBorder = true).
+   *   @return true if the patch is completely located within the image.
+   */
 template<int size>
 bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const bool withBorder = false){
   const int halfpatch_size = size/2+(int)withBorder;
@@ -239,6 +288,16 @@ bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2
   }
 }
 
+/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+ *
+ *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+ *   @param img        - Reference Image.
+ *   @param c          - Center pixel coordinates of the patch in the reference image.
+ *   @param aff        - Affine warping matrix.
+ *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+ *                       of Patch::patchWithBorder_ (withBorder = true).
+ *   @return true if the patch is completely located within the reference image.
+ */
 template<int size>
 bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
   const int halfpatch_size = size/2+(int)withBorder;
@@ -258,6 +317,16 @@ bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::
   return true;
 }
 
+/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+ *
+ *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+ *   @param img        - Reference Image.
+ *   @param c          - Center pixel coordinates of the patch in the reference image.
+ *   @param aff        - Affine warping matrix.
+ *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+ *                       of Patch::patchWithBorder_ (withBorder = true).
+ *   @return true if the patch is completely located within the reference image.
+ */
 template<int size>
 void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c, const bool withBorder = true){
   assert(isPatchInFrame(patch,img,c,withBorder));
@@ -297,6 +366,16 @@ void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point
   }
 }
 
+/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+ *
+ *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+ *   @param img        - Reference Image.
+ *   @param c          - Center pixel coordinates of the patch in the reference image.
+ *   @param aff        - Affine warping matrix.
+ *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+ *                       of Patch::patchWithBorder_ (withBorder = true).
+ *   @return true if the patch is completely located within the reference image.
+ */
 template<int size>
 void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
   assert(isWarpedPatchInFrame(patch,img,c,aff,withBorder));
