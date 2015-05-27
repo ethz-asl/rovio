@@ -130,7 +130,7 @@ class ImagePyramid{
   }
 };
 
-/** \brief @todo.
+/** \brief Pixel coordinates of the midpoints of the patch edges.
  */
 struct PixelCorners{
   cv::Point2f corners_[2];
@@ -142,7 +142,10 @@ struct PixelCorners{
   };
 };
 
-/** \brief @todo.
+/** \brief Vectors, pointing from the feature bearing vector to the
+ *         bearing vectors of the midpoints of the corresponding patch edges.
+ *
+ *         \see PixelCorners
  */
 struct BearingCorners{
   Eigen::Vector2d corners_[2];
@@ -269,9 +272,10 @@ class Patch {
   }
 };
 
-/** \brief Checks if a patch at a specific image location is still within the image.
+/** \brief Checks if a patch at a specific image location is still within the reference image.
    *
-   *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+   *   Note: Patch is assumed to be aligned with the image edges (patch is not warped).
+   *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
    *   @param img        - Reference Image.
    *   @param c          - Center pixel coordinates of the patch.
    *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
@@ -288,15 +292,16 @@ bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2
   }
 }
 
-/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+/** \brief Checks if the warped patch is still within the reference image (image in which the patch is warped).
  *
- *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+ *   Note: The warped patch is most likely not aligned with the image edges.
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the patch in the reference image.
- *   @param aff        - Affine warping matrix.
+ *   @param aff        - Affine warping matrix (from the previous image into the reference image).
  *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
  *                       of Patch::patchWithBorder_ (withBorder = true).
- *   @return true if the patch is completely located within the reference image.
+ *   @return true if the warped patch is completely located within the reference image.
  */
 template<int size>
 bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
@@ -317,15 +322,15 @@ bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::
   return true;
 }
 
-/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+/** \brief Extracts a patch from an image.
  *
- *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
+ *   Note: The patch will be aligned with the image edges (patch is not warped).
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
+ *   @param patch      - %Patch object, which will hold the patch data. See class Patch.
  *   @param img        - Reference Image.
- *   @param c          - Center pixel coordinates of the patch in the reference image.
- *   @param aff        - Affine warping matrix.
- *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
- *                       of Patch::patchWithBorder_ (withBorder = true).
- *   @return true if the patch is completely located within the reference image.
+ *   @param c          - Center pixel coordinates of the patch in the reference image (subpixel coordinates possible).
+ *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
+ *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_) and the patch data of the expanded patch (Patch::patchWithBorder_).
  */
 template<int size>
 void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c, const bool withBorder = true){
@@ -366,15 +371,16 @@ void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point
   }
 }
 
-/** \brief Checks if the warped patch is still within the image. @todo more detailed description.
+/** \brief Extracts a warped patch from an image.
  *
- *   @tparam size      - Edge length of the patch in pixels ( Must be a multiple of 2, see class Patch ).
- *   @param img        - Reference Image.
- *   @param c          - Center pixel coordinates of the patch in the reference image.
- *   @param aff        - Affine warping matrix.
- *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
- *                       of Patch::patchWithBorder_ (withBorder = true).
- *   @return true if the patch is completely located within the reference image.
+ *   Note: The patch will most likely not be aligned with the image edges (patch is warped).
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
+ *   @param patch      - %Patch object, which will hold the patch data. See class Patch.
+ *   @param img        - Reference Image (image from which the warped patch should be extracted).
+ *   @param c          - Center pixel coordinates of the warped patch in the reference image (subpixel coordinates possible).
+ *   @param aff        - Affine warping matrix (from the previous image into the reference image).
+ *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
+ *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_) and the patch data of the expanded patch (Patch::patchWithBorder_).
  */
 template<int size>
 void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
@@ -417,22 +423,25 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
   }
 }
 
+/** \brief Class, handling feature coordinates.
+ */
 class FeatureCoordinates{
  public:
-  int camID_;
-  mutable cv::Point2f c_;
-  mutable bool valid_c_;
-  mutable LWF::NormalVectorElement nor_;
-  mutable bool valid_nor_;
-  const Camera* mpCameras_;
-  double sigma1_;
-  double sigma2_;
-  double sigmaAngle_;
+  int camID_; /**<%Camera ID. @todo check this.*/
+  mutable cv::Point2f c_;  /**<Pixel coordinates of the feature.*/
+  mutable bool valid_c_;  /**<Bool, indicating if the current feature pixel coordinates \ref c_ are valid.*/
+  mutable LWF::NormalVectorElement nor_;  /**<Bearing vector, belonging to the feature.*/
+  mutable bool valid_nor_;  /**<Bool, indicating if the current bearing vector \ref nor_ is valid.*/
+  const Camera* mpCameras_;  /**<Pointer to the associated camera object.*/
+  double sigma1_;  /**<Standard deviation in the direction of the major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
+  double sigma2_;  /**<Standard deviation in the direction of the semi-major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
+  double sigmaAngle_; /**<Angle between the x-axis and the major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
   Eigen::EigenSolver<Eigen::Matrix2d> es_;
-  bool isLinkedToState_;
-  int* mpCamID_;
-  LWF::NormalVectorElement* mpNor_;
-  double depth_;
+  bool isLinkedToState_;  /**<Specifies, if the feature is currently part of the filter state. @todo check this.*/
+  int* mpCamID_;  /**<@todo ?*/
+  LWF::NormalVectorElement* mpNor_;  /**<@todo ?*/
+  double depth_;  /**<Estimated feature depth (along the bearing vector).*/
+
   FeatureCoordinates(){
     mpCameras_ == nullptr;
     resetCoordinates();
@@ -444,6 +453,11 @@ class FeatureCoordinates{
     camID_ = 0;
     isLinkedToState_ = false;
   }
+
+  /** \brief Resets the feature coordinates.
+   *
+   *  Note, that the actual feature coordinates (\ref c_ and \ref nor_) are not deleted. They are just set invalid.
+   */
   void resetCoordinates(){
     valid_c_ = false;
     valid_nor_ = false;
@@ -451,24 +465,48 @@ class FeatureCoordinates{
     sigma2_ = 0.0;
     sigmaAngle_ = 0.0;
   }
+
+  /** \brief Links the feature with the filter state.
+   *
+   *   @param mpCamID - @todo ?
+   *   @param mpNor   - @todo ?
+   */
   void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor){
     mpCamID_ = mpCamID;
     mpNor_ = mpNor;
     isLinkedToState_ = true;
   }
+
+  /** \brief Sets the feature depth \ref depth_.
+   *
+   *   @param depth - Depth along the corresponding bearing vector \ref nor_.
+   */
   void setDepth(const double& depth){
     depth_ = depth;
   }
+
+  /** \brief @todo ?.
+   */
   void toState(){
-    assert(isLinkedToState_);
+    assert(isLinkedToState_);  /**<@todo check this.*/
     *mpCamID_ = camID_;
     *mpNor_ = get_nor();
   }
+
+  /** \brief @todo ?.
+   */
   void fromState(){
-    assert(isLinkedToState_);
+    assert(isLinkedToState_);  /**<@todo check this.*/
     camID_ = *mpCamID_;
     set_nor(*mpNor_);
   }
+
+  /** \brief Get the feature pixel coordinates \ref c_.
+   *
+   *  Note: If there are no valid feature pixel coordinates \ref c_ available, the pixel coordinates are computed from the
+   *        bearing vector \ref nor_ (if valid).
+   *  @return the valid feature pixel coordinates \ref c_.
+   */
   const cv::Point2f& get_c() const{
     if(!valid_c_){
       if(valid_nor_ && mpCameras_[camID_].bearingToPixel(nor_,c_)){
@@ -479,6 +517,13 @@ class FeatureCoordinates{
     }
     return c_;
   }
+
+  /** \brief Get the feature's bearing vector \ref nor_.
+   *
+   *  Note: If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
+   *        feature pixel coordinates \ref c_ (if valid).
+   *  @return the valid bearing vector \ref nor_.
+   */
   const LWF::NormalVectorElement& get_nor() const{
     if(!valid_nor_){
       if(valid_c_ && mpCameras_[camID_].pixelToBearing(c_,nor_)){
@@ -489,6 +534,12 @@ class FeatureCoordinates{
     }
     return nor_;
   }
+
+  /** \brief Get an appropriate bearing vector \ref nor_ located in an other camera frame, pointing to the same landmark.
+   *
+   *  @param otherCamID - Other camera ID.
+   *  @return the appropriate bearing vector \ref nor_ of the camera frame with ID \ref otherCamID.
+   */
   LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
     const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
     const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
@@ -496,19 +547,41 @@ class FeatureCoordinates{
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     return LWF::NormalVectorElement(DrDP);
   }
+
+  /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).
+   *
+   *  Note: The bearing vector nor_ is set invalid (valid_nor_ = false).
+   *  @param c - Feature pixel coordinates.
+   */
   void set_c(const cv::Point2f& c){
     c_ = c;
     valid_c_ = true;
     valid_nor_ = false;
   }
+
+  /** \brief Sets the feature's bearing vector \ref nor_ and declares it valid (\ref valid_nor_ = true).
+   *
+   *  Note: The feature pixel coordinates are set invalid (\ref valid_c_ = false).
+   *  @param nor - Bearing vector.
+   */
   void set_nor(const LWF::NormalVectorElement& nor){
     nor_ = nor;
     valid_nor_ = true;
     valid_c_ = false;
   }
+
+  /** \brief Checks if the feature coordinates can be associated with a landmark in front of the camera.
+   *   @return true, if the feature coordinates can be associated with a landmark in front of the camera.
+   */
   bool isInFront() const{
     return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
   }
+
+  /** \brief Sets the feature coordinates standard deviation values \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_
+   *          from a 2x2 covariance matrix.
+   *
+   *  @param cov - Covariance matrix (2x2).
+   */
   void setSigmaFromCov(const Eigen::Matrix2d& cov){
     es_.compute(cov);
     sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real());
@@ -523,10 +596,17 @@ class FeatureCoordinates{
   }
 };
 
+/** \brief Draws a point at given feature coordinates.
+ *
+ *  @param drawImg - Image in which the feature should be drawn.
+ *  @param C       - Feature coordinates object. See class FeatureCoordinates.
+ *  @param color   - Color of the point, which should be drawn at the feature pixel coordinates.
+ */
 static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color){
   cv::Size size(2,2);
   cv::ellipse(drawImg,C.get_c(),size,0,0,360,color,-1,8,0);
 }
+
 static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
   drawPoint(drawImg,C,color);
   cv::ellipse(drawImg,C.get_c(),cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
@@ -537,6 +617,21 @@ static void drawLine(cv::Mat& drawImg, FeatureCoordinates& C1, FeatureCoordinate
 static void drawText(cv::Mat& drawImg, FeatureCoordinates& C, const std::string& s, const cv::Scalar& color){
   cv::putText(drawImg,s,C.get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 template<int n_levels,int patch_size>
 class MultilevelPatchFeature: public FeatureCoordinates{
