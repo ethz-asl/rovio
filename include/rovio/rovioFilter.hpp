@@ -61,16 +61,27 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtPrediction mtPrediction;
   typedef typename Base::mtState mtState;
-  rovio::Camera camera_;
-  std::string cameraCalibrationFile_;
+  rovio::Camera cameras_[mtState::nCam_]; // TODO IMG
+  std::string cameraCalibrationFile_[mtState::nCam_];
   RovioFilter(){
-    std::get<0>(mUpdates_).setCamera(&camera_);
-    cameraCalibrationFile_ = "calib.yaml";
-    stringRegister_.registerScalar("cameraCalibrationFile",cameraCalibrationFile_);
-    boolRegister_.registerScalar("doVECalibration",init_.state_.template get<mtState::_aux>().doVECalibration_);
-    intRegister_.registerScalar("depthType",init_.state_.template get<mtState::_aux>().depthTypeInt_);
-    doubleRegister_.registerVector("MrMV",init_.state_.template get<mtState::_aux>().MrMV_);
-    doubleRegister_.registerQuaternion("qVM",init_.state_.template get<mtState::_aux>().qVM_);
+    std::get<0>(mUpdates_).setCamera(cameras_); // TODO IMG
+    boolRegister_.registerScalar("Common.doVECalibration",init_.state_.template get<mtState::_aux>().doVECalibration_);
+    intRegister_.registerScalar("Common.depthType",init_.state_.template get<mtState::_aux>().depthTypeInt_);
+    for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
+      cameraCalibrationFile_[camID] = "calib.yaml";
+      stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
+      doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMV",init_.state_.template get<mtState::_aux>().MrMV_[camID]);
+      doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qVM",init_.state_.template get<mtState::_aux>().qVM_[camID]);
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(0));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(1));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vep>(camID)(2));
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().w());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().x());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().y());
+      doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_vea>(camID).toImplementation().z());
+      doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMV",init_.state_.template get<mtState::_vep>(camID));
+      doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qVM",init_.state_.template get<mtState::_vea>(camID));
+    }
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtState::template getId<mtState::_nor>(i);
@@ -83,14 +94,17 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.template get<mtState::_nor>(i).q_.toImplementation().z());
-      std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
-      std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(i));
     }
+    std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
+    std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
+    boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
     reset(0.0);
   }
   void refreshProperties(){
-    camera_.load(cameraCalibrationFile_);
+    for(int camID = 0;camID<mtState::nCam_;camID++){
+      cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+    }
     init_.state_.template get<mtState::_aux>().depthMap_.setType(init_.state_.template get<mtState::_aux>().depthTypeInt_);
   };
   ~RovioFilter(){};
@@ -102,10 +116,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     init_.initWithAccelerometer(fMeasInit);
     reset(t);
   }
-  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM){
+  void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM, const int camID = 0){
     rot::RotationMatrixAD R(R_VM);
-    init_.state_.template get<mtState::_aux>().qVM_ = QPD(R.getPassive());
-    init_.state_.template get<mtState::_aux>().MrMV_ = -init_.state_.template get<mtState::_aux>().qVM_.inverseRotate(VrVM); // TODO: all filterstates
+    init_.state_.template get<mtState::_aux>().qVM_[camID] = QPD(R.getPassive());
+    init_.state_.template get<mtState::_aux>().MrMV_[camID] = -init_.state_.template get<mtState::_aux>().qVM_[camID].inverseRotate(VrVM); // TODO: all filterstates
   }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;

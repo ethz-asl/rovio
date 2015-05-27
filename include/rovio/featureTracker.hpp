@@ -192,12 +192,12 @@ class FeatureTrackerNode{
       }
       const double t2 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Detected " << candidates.size() << " on levels " << l1 << "-" << l2 << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
-      pruneCandidates(mlps_,candidates);
+      pruneCandidates(mlps_,candidates,0); // TODO: make option of camID
       const double t3 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
-      std::unordered_set<unsigned int> newSet = addBestCandidates(mlps_,candidates,pyr_,current_time,
+      std::unordered_set<unsigned int> newSet = addBestCandidates(mlps_,candidates,pyr_,0,current_time,
                                                                   l1,l2,max_feature_count_,nDetectionBuckets_, scoreDetectionExponent_,
-                                                                  penaltyDistance_, zeroDistancePenalty_,true,0.0);
+                                                                  penaltyDistance_, zeroDistancePenalty_,true,0.0); // TODO: make option of camID
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it = newSet.begin();it != newSet.end();++it){

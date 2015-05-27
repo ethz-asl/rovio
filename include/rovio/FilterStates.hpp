@@ -101,69 +101,80 @@ class DepthMap{
   }
 };
 
-template<unsigned int nMax, int nLevels, int patchSize>
-class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patchSize>>{
+template<unsigned int nMax, int nLevels, int patchSize, int nCam>
+class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
  public:
   StateAuxiliary(){
     MwIMest_.setZero();
     MwIMmeas_.setZero();
     wMeasCov_.setIdentity();
     for(unsigned int i=0;i<nMax;i++){
-      useInUpdate_[i] = true;
       A_red_[i].setIdentity();
       b_red_[i].setZero();
       bearingMeas_[i].setIdentity();
       bearingCorners_[i][0].setZero();
       bearingCorners_[i][1].setZero();
+      camID_[i] = 0;
     }
-    qVM_.setIdentity();
-    MrMV_.setZero();
     doVECalibration_ = true;
     depthTypeInt_ = 1;
     depthMap_.setType(depthTypeInt_);
+    activeFeature_ = 0;
+    activeCameraCounter_ = 0;
+    for(unsigned int i=0;i<nCam;i++){
+      qVM_[i].setIdentity();
+      MrMV_[i].setZero();
+    }
   };
   ~StateAuxiliary(){};
   V3D MwIMest_;
   V3D MwIMmeas_;
   M3D wMeasCov_;
-  bool useInUpdate_[nMax];
   Eigen::Matrix2d A_red_[nMax];
   Eigen::Vector2d b_red_[nMax];
   LWF::NormalVectorElement bearingMeas_[nMax];
+  int camID_[nMax];
   BearingCorners bearingCorners_[nMax];
-  QPD qVM_;
-  V3D MrMV_;
+  QPD qVM_[nCam];
+  V3D MrMV_[nCam];
   bool doVECalibration_;
-  DepthMap depthMap_; // TODO: move to state
+  DepthMap depthMap_;
   int depthTypeInt_;
+  int activeFeature_;
+  int activeCameraCounter_;
 };
 
-template<unsigned int nMax, int nLevels, int patchSize>
+template<unsigned int nMax, int nLevels, int patchSize, int nCam>
 class State: public LWF::State<
-    LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
-    LWF::TH_multiple_elements<LWF::QuaternionElement,2>,
+    LWF::TH_multiple_elements<LWF::VectorElement<3>,4>,
+    LWF::QuaternionElement,
+    LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
+    LWF::ArrayElement<LWF::QuaternionElement,nCam>,
     LWF::ArrayElement<LWF::ScalarElement,nMax>,
     LWF::ArrayElement<LWF::NormalVectorElement,nMax>,
-    StateAuxiliary<nMax,nLevels,patchSize>>{
+    StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
  public:
   typedef LWF::State<
-      LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
-      LWF::TH_multiple_elements<LWF::QuaternionElement,2>,
+      LWF::TH_multiple_elements<LWF::VectorElement<3>,4>,
+      LWF::QuaternionElement,
+      LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
+      LWF::ArrayElement<LWF::QuaternionElement,nCam>,
       LWF::ArrayElement<LWF::ScalarElement,nMax>,
       LWF::ArrayElement<LWF::NormalVectorElement,nMax>,
-      StateAuxiliary<nMax,nLevels,patchSize>> Base;
+      StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;
   using Base::D_;
   using Base::E_;
   static constexpr unsigned int nMax_ = nMax;
   static constexpr unsigned int nLevels_ = nLevels;
   static constexpr unsigned int patchSize_ = patchSize;
+  static constexpr unsigned int nCam_ = nCam;
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _vel = _pos+1;
   static constexpr unsigned int _acb = _vel+1;
   static constexpr unsigned int _gyb = _acb+1;
-  static constexpr unsigned int _vep = _gyb+1;
-  static constexpr unsigned int _att = _vep+1;
-  static constexpr unsigned int _vea = _att+1;
+  static constexpr unsigned int _att = _gyb+1;
+  static constexpr unsigned int _vep = _att+1;
+  static constexpr unsigned int _vea = _vep+1;
   static constexpr unsigned int _dep = _vea+1;
   static constexpr unsigned int _nor = _dep+1;
   static constexpr unsigned int _aux = _nor+1;
@@ -173,33 +184,38 @@ class State: public LWF::State<
     this->template getName<_vel>() = "vel";
     this->template getName<_acb>() = "acb";
     this->template getName<_gyb>() = "gyb";
-    this->template getName<_vep>() = "vep";
     this->template getName<_att>() = "att";
+    this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
     this->template getName<_dep>() = "dep";
     this->template getName<_nor>() = "nor";
     this->template getName<_aux>() = "auxiliary";
   }
   ~State(){};
-  QPD get_qVM() const{
+  QPD get_qVM(const int camID = 0) const{
     if(this->template get<_aux>().doVECalibration_){
-      return this->template get<_vea>();
+      return this->template get<_vea>(camID);
     } else {
-      return this->template get<_aux>().qVM_;
+      return this->template get<_aux>().qVM_[camID];
     }
   }
-  V3D get_MrMV() const{
+  V3D get_MrMV(const int camID = 0) const{
     if(this->template get<_aux>().doVECalibration_){
-      return this->template get<_vep>();
+      return this->template get<_vep>(camID);
     } else {
-      return this->template get<_aux>().MrMV_;
+      return this->template get<_aux>().MrMV_[camID];
     }
   }
-  QPD get_qBW() const{
-    return get_qVM()*this->template get<_att>().inverted();
+  QPD get_qVI(const int camID = 0) const{
+    return get_qVM(camID)*this->template get<_att>().inverted();
   }
-  V3D get_WrWB() const{
-    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV());
+  V3D get_IrIV(const int camID = 0) const{
+    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
+  }
+  double get_depth(const int i) const{
+    double d, d_p, p_d, p_d_p;
+    this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
+    return d;
   }
 };
 
@@ -216,20 +232,24 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
 };
 
 template<typename STATE>
-class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,7>,
+class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
+      LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
+      LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
       LWF::ArrayElement<LWF::ScalarElement,STATE::nMax_>,
       LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
  public:
-  using LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,7>,
+  using LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
+      LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
+      LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
       LWF::ArrayElement<LWF::ScalarElement,STATE::nMax_>,
       LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>::E_;
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _vel = _pos+1;
   static constexpr unsigned int _acb = _vel+1;
   static constexpr unsigned int _gyb = _acb+1;
-  static constexpr unsigned int _vep = _gyb+1;
-  static constexpr unsigned int _att = _vep+1;
-  static constexpr unsigned int _vea = _att+1;
+  static constexpr unsigned int _att = _gyb+1;
+  static constexpr unsigned int _vep = _att+1;
+  static constexpr unsigned int _vea = _vep+1;
   static constexpr unsigned int _dep = _vea+1;
   static constexpr unsigned int _nor = _dep+1;
   PredictionNoise(){
@@ -238,8 +258,8 @@ class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEl
     this->template getName<_vel>() = "vel";
     this->template getName<_acb>() = "acb";
     this->template getName<_gyb>() = "gyb";
-    this->template getName<_vep>() = "vep";
     this->template getName<_att>() = "att";
+    this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
     this->template getName<_dep>() = "dep";
     this->template getName<_nor>() = "nor";
@@ -247,16 +267,16 @@ class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEl
   ~PredictionNoise(){};
 };
 
-template<unsigned int nMax, int nLevels, int patchSize>
-class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,true>{
+template<unsigned int nMax, int nLevels, int patchSize,int nCam>
+class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true>{
  public:
-  typedef LWF::FilterState<State<nMax,nLevels,patchSize>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize>>,0,true> Base;
+  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true> Base;
   typedef typename Base::mtState mtState;
   using Base::state_;
   using Base::cov_;
   using Base::usePredictionMerge_;
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
-  cv::Mat img_; // Mainly used for drawing
+  cv::Mat img_[nCam]; // Mainly used for drawing
   cv::Mat patchDrawing_; // Mainly used for drawing
   double imgTime_;
   int imageCounter_;

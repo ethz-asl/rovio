@@ -445,6 +445,7 @@ class SceneObject{
 class Scene{
  public:
   Scene(){
+    stepScale_ = 0.5f;
     W_r_WC_ = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
     q_CW_.setIdentity();
     mMousePos_(0)  = mPersProjInfo_.width_ / 2;
@@ -595,22 +596,22 @@ class Scene{
   {
     switch (Key) {
       case 101: // UP
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * STEP_SCALE_);
+        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);
         break;
       case 103: // DOWN
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * STEP_SCALE_);
+        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);
         break;
       case 100: // LEFT
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * STEP_SCALE_);
+        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);
         break;
       case 102: // RIGHT
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * STEP_SCALE_);
+        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);
         break;
       case 104: // PAGE_UP
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * STEP_SCALE_);
+        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);
         break;
       case 105: // PAGE_DOWN
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * STEP_SCALE_);
+        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);
         break;
       default:
         break;
@@ -737,7 +738,7 @@ class Scene{
   }
   void (*mIdleFunc)();
  private:
-  static constexpr float STEP_SCALE_ = 0.5f;
+  float stepScale_;
 
   std::vector<SceneObject*> mSceneObjects_;
 
