@@ -44,7 +44,9 @@ class DepthMap{
  public:
   enum DepthType{
    REGULAR,
-   INVERSE
+   INVERSE,
+   LOG,
+   HYPERBOLIC
   } type_;
   DepthMap(const DepthType& type = REGULAR){
     setType(type);
@@ -60,6 +62,12 @@ class DepthMap{
       case 1:
         type_ = INVERSE;
         break;
+      case 2:
+        type_ = LOG;
+        break;
+      case 3:
+        type_ = HYPERBOLIC;
+        break;
       default:
         std::cout << "Invalid type for depth parametrization: " << type << std::endl;
         type_ = REGULAR;
@@ -73,6 +81,12 @@ class DepthMap{
         break;
       case INVERSE:
         mapInverse(p,d,d_p,p_d,p_d_p);
+        break;
+      case LOG:
+        mapLog(p,d,d_p,p_d,p_d_p);
+        break;
+      case HYPERBOLIC:
+        mapHyperbolic(p,d,d_p,p_d,p_d_p);
         break;
       default:
         mapRegular(p,d,d_p,p_d,p_d_p);
@@ -98,6 +112,18 @@ class DepthMap{
     d_p = -d*d;
     p_d = -p_temp*p_temp;
     p_d_p = -2*p_temp;
+  }
+  void mapLog(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    d = std::exp(p);
+    d_p = std::exp(p);
+    p_d = 1/d;
+    p_d_p = -1/pow(d,2)*d_p;
+  }
+  void mapHyperbolic(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
+    d = std::sinh(p);
+    d_p = std::cosh(p);
+    p_d = 1/std::sqrt(std::pow(d,2)+1); // p = asinh(d)
+    p_d_p = -d/std::pow(std::pow(d,2)+1,1.5)*d_p;
   }
 };
 

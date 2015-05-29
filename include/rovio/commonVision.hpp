@@ -392,11 +392,15 @@ class FeatureCoordinates{
     return nor_;
   }
   LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
-    const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
-    const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
-    const V3D CrCP = depth_*get_nor().getVec();
-    const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    return LWF::NormalVectorElement(DrDP);
+    if(camID_ != otherCamID){
+      const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
+      const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
+      const V3D CrCP = depth_*get_nor().getVec();
+      const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+      return LWF::NormalVectorElement(DrDP);
+    } else {
+      return get_nor();
+    }
   }
   void set_c(const cv::Point2f& c){
     c_ = c;
