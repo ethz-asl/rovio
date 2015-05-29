@@ -140,6 +140,8 @@ class ImagePyramid{
   }
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /** \brief Vectors, pointing from the feature image location to the midpoints of the patch edges (expressed in pixels).
  *
  *  \see BearingCorners
@@ -183,18 +185,24 @@ class Patch {
                                                                                  This expanded patch is necessary for the intensity gradient calculation.*/
   float dx_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in x-direction for each patch pixel.*/
   float dy_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in y-direction for each patch pixel.*/
-  Eigen::Matrix3f H_;                                   /**<Hessian matrix of the patch (Necessary for the inverse compositional patch alignment).*/
-  float s_;                                             /**<Shi-Tomasi corner score (smaller eigenvalue of H).*/
-  bool validGradientParameters_;                        /**<True, if gradient parameters (%Patch gradients, Hessian, Shi-Thomasi Score) have been computed.
-                                                            \see computeGradientParameters()*/
+  Eigen::Matrix3f H_;  /**<Hessian matrix of the patch (necessary for the patch alignment).*/
+  float s_;  /**<Shi-Tomasi Score (smaller eigenvalue of H_).*/
+  bool validGradientParameters_;  /**<True, if the gradient parameters (patch gradient components dx_ dy_, Hessian H_, Shi-Thomasi Score s_) have been computed.
+                                  \see computeGradientParameters()*/
+  /** \brief Constructor
+   */
   Patch(){
     static_assert(size%2==0,"Patch size must be a multiple of 2");
     validGradientParameters_ = false;
     s_ = 0.0;
   }
+  /** \brief Destructor
+   */
   ~Patch(){}
 
-  /** \brief Computes the gradient parameters of the patch (patch gradients, hessian, shi-tomasi score).
+  /** \brief Computes the gradient parameters of the patch (patch gradient components dx_ dy_, Hessian H_, Shi-Tomasi Score s_).
+   *         The expanded patch patchWithBorder_ must be set.
+   *         Sets validGradientParameters_ afterwards to true.
    */
   void computeGradientParameters(){
     H_.setZero();
@@ -222,8 +230,8 @@ class Patch {
     validGradientParameters_ = true;
   }
 
-  /** \brief Sets the patch ( patch_ ) intensity values from the intensity values of the
-   *         expanded patch ( patchWithBorder_ ).
+  /** \brief Extracts and sets the patch intensity values (patch_) from the intensity values of the
+   *         expanded patch (patchWithBorder_).
    */
   void extractPatchFromPatchWithBorder(){
     float* it_patch = patch_;
@@ -235,22 +243,21 @@ class Patch {
     }
   }
 
-  /** \brief Returns the Shi-Tomasi Score.
+  /** \brief Returns the Shi-Tomasi Score s_.
    *
-   *   Computes the gradient parameters (patch gradients, hessian, shi-tomasi score)  and returns the Shi-Tomasi
-   *   Score.
-   *   @return Shi-Tomasi Score ( smaller eigenvalue of the Hessian Patch::H_ ).
+   *   Computes and sets the gradient parameters, which are the patch gradient components dx_ dy_, the Hessian H_ and the Shi-Tomasi Score s_.
+   *   \see computeGradientParameters()
+   *   @return the Shi-Tomasi Score s_ ( smaller eigenvalue of the Hessian H_ ).
    */
   float getScore(){
     if(!validGradientParameters_) computeGradientParameters();
     return s_;
   }
 
-  /** \brief Returns the Hessian Matrix ( Patch::H_ ).
+  /** \brief Returns the Hessian Matrix H_.
    *
-   *   Computes the gradient parameters (patch gradients, hessian, shi-tomasi score)  and returns the Hessian Matrix
-   *   ( Patch::H_ ).
-   *   @return Hessian Matrix Patch::H_ .
+   *   Computes and sets the gradient parameters, which are the patch gradient components dx_ dy_, the Hessian H_ and the Shi-Tomasi Score s_.
+   *   @return the Hessian Matrix H_ .
    */
   Eigen::Matrix3f getHessian(){
     if(!validGradientParameters_) computeGradientParameters();
@@ -262,8 +269,8 @@ class Patch {
    *   @param drawImg    - Image in which the patch should be drawn.
    *   @param c          - Pixel coordinates of the left upper patch corner.
    *   @param stretch    - %Patch drawing magnification factor.
-   *   @param withBorder - Draw either the patch Patch::patch_  (withBorder = false) or the expanded patch
-   *                       Patch::patchWithBorder_ (withBorder = true) .
+   *   @param withBorder - Draw either the patch patch_ (withBorder = false) or the expanded patch
+   *                       patchWithBorder_ (withBorder = true).
    */
   void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
     const int refStep = drawImg.step.p[0];
@@ -286,15 +293,17 @@ class Patch {
   }
 };
 
-/** \brief Checks if a patch at a specific image location is still within the reference image.
+/** \brief Checks if an (aligned) patch at a specific image location is still within the reference image.
  *
- *   Note: Patch is assumed to be aligned with the image edges (patch is not warped).
- *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
+ *   Note: The patch is assumed to be aligned with the image edges (patch is not warped).
+ *   \see Patch
+ *   \see isWarpedPatchInFrame()
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2).
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the patch.
  *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
- *                       of Patch::patchWithBorder_ (withBorder = true).
- *   @return true if the patch is completely located within the image.
+ *                       of the expanded Patch::patchWithBorder_ (withBorder = true).
+ *   @return true, if the patch is completely located within the image.
  */
 template<int size>
 bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const bool withBorder = false){
@@ -306,16 +315,19 @@ bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2
   }
 }
 
-/** \brief Checks if the warped patch is still within the reference image (image in which the patch is warped).
+/** \brief Checks if a (warped) patch at a specific image location is still within the reference image.
  *
  *   Note: The warped patch is most likely not aligned with the image edges.
- *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
+ *   \see Patch
+ *   \see isPatchInFrame()
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2).
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the patch in the reference image.
  *   @param aff        - Affine warping matrix (from the previous image into the reference image).
  *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
- *                       of Patch::patchWithBorder_ (withBorder = true).
- *   @return true if the warped patch is completely located within the reference image.
+ *                       of the expanded patch Patch::patchWithBorder_ (withBorder = true).
+ *   @return true, if the warped patch is completely located within the reference image.
+ *   @todo check aff
  */
 template<int size>
 bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
@@ -336,15 +348,17 @@ bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::
   return true;
 }
 
-/** \brief Extracts a patch from an image.
+/** \brief Extracts an (aligned) patch from an image.
  *
- *   Note: The patch will be aligned with the image edges (patch is not warped).
- *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
- *   @param patch      - %Patch object, which will hold the patch data. See class Patch.
+ *   Note: The patch will be aligned with the image edges (patch not warped).
+ *   \see Patch
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2).
+ *   @param patch      - %Patch object, which will hold the patch data.
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the patch in the reference image (subpixel coordinates possible).
  *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
- *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_) and the patch data of the expanded patch (Patch::patchWithBorder_).
+ *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_)
+ *                       and the patch data of the expanded patch (Patch::patchWithBorder_).
  */
 template<int size>
 void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c, const bool withBorder = true){
@@ -385,16 +399,19 @@ void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point
   }
 }
 
-/** \brief Extracts a warped patch from an image.
+/** \brief Extracts a (warped) patch from an image.
  *
  *   Note: The patch will most likely not be aligned with the image edges (patch is warped).
- *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
- *   @param patch      - %Patch object, which will hold the patch data. See class Patch.
- *   @param img        - Reference Image (image from which the warped patch should be extracted).
+ *   \see Patch
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2).
+ *   @param patch      - %Patch object, which will hold the patch data.
+ *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the warped patch in the reference image (subpixel coordinates possible).
  *   @param aff        - Affine warping matrix (from the previous image into the reference image).
  *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
- *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_) and the patch data of the expanded patch (Patch::patchWithBorder_).
+ *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_)
+ *                       and the patch data of the expanded patch (Patch::patchWithBorder_).
+ *   @todo check aff
  */
 template<int size>
 void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
@@ -437,6 +454,8 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /** \brief Class, handling feature coordinates.
  */
 class FeatureCoordinates{
@@ -456,21 +475,26 @@ class FeatureCoordinates{
   LWF::NormalVectorElement* mpNor_;  /**<@todo ?*/
   double depth_;  /**<Estimated feature depth (along the bearing vector).*/
 
+  /** \brief Constructor
+   */
   FeatureCoordinates(){
     mpCameras_ == nullptr;
     resetCoordinates();
     camID_ = 0;
     isLinkedToState_ = false;
   }
+
+  /** \brief Constructor
+   */
   FeatureCoordinates(const Camera* mpCameras): mpCameras_(mpCameras){
     resetCoordinates();
     camID_ = 0;
     isLinkedToState_ = false;
   }
 
-  /** \brief Resets the feature coordinates.
+  /** \brief Resets the feature coordinates \ref c_, \ref nor_, \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_.
    *
-   *  Note, that the actual feature coordinates (\ref c_ and \ref nor_) are not deleted. They are just set invalid.
+   *  Note, that the values of the feature coordinates \ref c_ and \ref nor_ are not deleted. They are just set invalid.
    */
   void resetCoordinates(){
     valid_c_ = false;
@@ -480,7 +504,7 @@ class FeatureCoordinates{
     sigmaAngle_ = 0.0;
   }
 
-  /** \brief Links the feature with the filter state.
+  /** \brief Links the feature with the filter state and sets \ref isLinkedToState_ to true.
    *
    *   @param mpCamID - @todo ?
    *   @param mpNor   - @todo ?
@@ -493,7 +517,7 @@ class FeatureCoordinates{
 
   /** \brief Sets the feature depth \ref depth_.
    *
-   *   @param depth - Depth along the corresponding bearing vector \ref nor_.
+   *   @param depth - Depth along the bearing vector \ref nor_.
    */
   void setDepth(const double& depth){
     depth_ = depth;
@@ -515,10 +539,10 @@ class FeatureCoordinates{
     set_nor(*mpNor_);
   }
 
-  /** \brief Get the feature pixel coordinates \ref c_.
+  /** \brief Get the feature's pixel coordinates \ref c_.
    *
-   *  Note: If there are no valid feature pixel coordinates \ref c_ available, the pixel coordinates are computed from the
-   *        bearing vector \ref nor_ (if valid).
+   *   If there are no valid feature pixel coordinates \ref c_ available, the feature pixel coordinates are computed
+   *   from the bearing vector \ref nor_ (if valid).
    *  @return the valid feature pixel coordinates \ref c_.
    */
   const cv::Point2f& get_c() const{
@@ -534,8 +558,8 @@ class FeatureCoordinates{
 
   /** \brief Get the feature's bearing vector \ref nor_.
    *
-   *  Note: If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
-   *        feature pixel coordinates \ref c_ (if valid).
+   *  If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
+   *  feature pixel coordinates \ref c_ (if valid).
    *  @return the valid bearing vector \ref nor_.
    */
   const LWF::NormalVectorElement& get_nor() const{
@@ -553,6 +577,7 @@ class FeatureCoordinates{
    *
    *  @param otherCamID - Other camera ID.
    *  @return the appropriate bearing vector \ref nor_ of the camera frame with ID \ref otherCamID.
+   *  @todo check this
    */
   LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
     const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
@@ -565,6 +590,7 @@ class FeatureCoordinates{
   /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).
    *
    *  Note: The bearing vector nor_ is set invalid (valid_nor_ = false).
+   *  \see set_nor()
    *  @param c - Feature pixel coordinates.
    */
   void set_c(const cv::Point2f& c){
@@ -576,6 +602,7 @@ class FeatureCoordinates{
   /** \brief Sets the feature's bearing vector \ref nor_ and declares it valid (\ref valid_nor_ = true).
    *
    *  Note: The feature pixel coordinates are set invalid (\ref valid_c_ = false).
+   *  \see set_c()
    *  @param nor - Bearing vector.
    */
   void set_nor(const LWF::NormalVectorElement& nor){
@@ -585,6 +612,7 @@ class FeatureCoordinates{
   }
 
   /** \brief Checks if the feature coordinates can be associated with a landmark in front of the camera.
+   *
    *   @return true, if the feature coordinates can be associated with a landmark in front of the camera.
    */
   bool isInFront() const{
@@ -592,7 +620,7 @@ class FeatureCoordinates{
   }
 
   /** \brief Sets the feature coordinates standard deviation values \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_
-   *          from a 2x2 covariance matrix.
+   *         from a 2x2 covariance matrix.
    *
    *  @param cov - Covariance matrix (2x2).
    */
@@ -626,7 +654,8 @@ static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar&
  *  @param drawImg     - Image in which the uncertainty ellipse should be drawn.
  *  @param C           - Feature coordinates object. Contains inter alia the uncertainty data. See class FeatureCoordinates.
  *  @param color       - Color of the ellipse.
- *  @param scaleFactor - Scale Factor of the uncertainty ellipse. If set to 1, the ellipse axes lengths match the true standard deviation values.
+ *  @param scaleFactor - Scale Factor of the uncertainty ellipse. If set to 1, the ellipse axes lengths match the true
+ *                       standard deviation values.
  */
 static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
   drawPoint(drawImg,C,color);
@@ -656,12 +685,13 @@ static void drawText(cv::Mat& drawImg, FeatureCoordinates& C, const std::string&
   cv::putText(drawImg,s,C.get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief A multilevel patch feature class.
  *
  *    @tparam n_levels   - Number of pyramid levels on which the feature is defined.
  *    @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!.
- *                         Note: The patches edge length is the same for each patch, independently from the pyramid level.
+ *                         Note: The patches edge length (in pixels) is the same for each patch, independently from the pyramid level.
  */
 template<int n_levels,int patch_size>
 class MultilevelPatchFeature: public FeatureCoordinates{
@@ -675,28 +705,28 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   mutable BearingCorners bearingCorners_;  /**<Vectors, pointing from the feature's bearing vector to the bearing vectors
                                                belonging to the pixel coordinates of the midpoint of the patch edges.*/
   mutable bool valid_bearingCorners_;  /**<Specifies if the current bearing corners \ref bearingCorners_ are valid.*/
-  mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from previous frame to the current frame.*/
+  mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from previous frame to the current frame. @todo check this*/
   mutable bool valid_affineTransform_;  /**<Specifies if the affine transformation \ref affineTransform_ is valid.*/
-  int idx_;  /**<Index.*/
+  int idx_;  /**<Index. @todo ?*/
   double initTime_;  /**<@todo ?*/
   double currentTime_;  /**<@todo ?*/
-  Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the patches.*/
+  Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
   float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation, add mutable */
   int totCount_;  /**<@todo ?*/
   Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment. @todo check this*/
   Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment. @todo check this*/
   Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
 
-  FeatureCoordinates log_previous_;  /**< @todo ?*/
-  FeatureCoordinates log_prediction_;  /**< @todo ?*/
-  FeatureCoordinates log_predictionC0_;  /**< @todo ?*/
-  FeatureCoordinates log_predictionC1_;  /**< @todo ?*/
-  FeatureCoordinates log_predictionC2_;  /**< @todo ?*/
-  FeatureCoordinates log_predictionC3_;  /**< @todo ?*/
-  FeatureCoordinates log_meas_;  /**< @todo ?*/
-  FeatureCoordinates log_current_;  /**< @todo ?*/
+  FeatureCoordinates log_previous_;
+  FeatureCoordinates log_prediction_;
+  FeatureCoordinates log_predictionC0_;
+  FeatureCoordinates log_predictionC1_;
+  FeatureCoordinates log_predictionC2_;
+  FeatureCoordinates log_predictionC3_;
+  FeatureCoordinates log_meas_;
+  FeatureCoordinates log_current_;
 
-  Status status_;  /**<Feature status.*/
+  Status status_;  /**<MultilevelPatchFeature tracking and mapping status.*/
   std::map<MatchingStatus,int> cumulativeMatchingStatus_;  /**< @todo ?*/
   std::map<TrackingStatus,int> cumulativeTrackingStatus_;  /**< @todo ?*/
   int inFrameCount_;  /**< @todo ?*/
@@ -704,13 +734,20 @@ class MultilevelPatchFeature: public FeatureCoordinates{
 
   BearingCorners* mpBearingCorners_;  /**< @todo ?*/
 
+  /** Constructor
+   */
   MultilevelPatchFeature(){
     reset();
   }
 
+  /** Constructor
+   */
   MultilevelPatchFeature(const Camera* mpCameras): FeatureCoordinates(mpCameras){
     reset();
   }
+
+  /** Destructor
+   */
   ~MultilevelPatchFeature(){}
 
   /** \brief Links the MultilevelPatchFeature with a filter state.
@@ -718,6 +755,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
    * @param mpCamID            - ID of the camera object.
    * @param mpNor              - Feature bearing vector.
    * @param mpBearingCorners   - Bearing corners of the feature.
+   * @todo complete/check this
    */
   void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor, BearingCorners* mpBearingCorners){
     mpBearingCorners_ = mpBearingCorners;
@@ -739,6 +777,8 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   }
 
   /** \brief Sets the camera.
+
+   * @todo complete this
    */
   void setCamera(const Camera* mpCameras){
     mpCameras_ = mpCameras;
@@ -821,7 +861,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return bearingCorners_;
   }
 
-  /** \brief Get the affine transformation corresponding to the current \ref pixelCorners_,
+  /** \brief Get and sets the affine transformation corresponding to the current \ref pixelCorners_,
    *        assuming the patch in the previous frame was aligned with the image edges. @todo check this
    *
    * @return the affine transformation matrix \ref affineTransform_.
@@ -844,7 +884,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
    *
    * Note: The validity of the bearingCorners_ and of the affineTransform_ is set to invalid
    *       (\ref valid_bearingCorners_ = false; \ref valid_affineTransform_ = false).
-   *
+   * \see get_affineTransform()
    * @param pixelCorners
    */
   void set_pixelCorners(const PixelCorners& pixelCorners){
@@ -896,7 +936,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     status_ = Status();
   }
 
-  /** \brief How many times occured a specific \ref MatchingStatus (current status included)?
+  /** \brief How many times did a specific \ref MatchingStatus occur (current status included)?
    *
    * @param s - \ref MatchingStatus of interest.
    * @return the number of how many times the \ref MatchingStatus s occured.
@@ -914,11 +954,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return cumulativeTrackingStatus_.at(s) + (int)(status_.trackingStatus_ == s);
   }
 
-  /** \brief How many times occured a specific \ref MatchingStatus in the first n frames (current status included)? @todo check this
+  /** \brief How many times did a specific \ref MatchingStatus in the first n frames occur (current status included)?
    *
    * @param s - \ref MatchingStatus of interest.
    * @param n - \ref First n frames.
    * @return the number of how many times the \ref MatchingStatus s occured in the first n frames (current status included).
+   * @todo check this
    */
   int countMatchingStatistics(const MatchingStatus s, const int n) const{
     int c = 0;
@@ -930,11 +971,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return c + (int)(status_.matchingStatus_ == s);
   }
 
-  /** \brief How many times occured a specific \ref TrackingStatus in the first n frames (current status included)? @todo check this
+  /** \brief How many times did a specific \ref TrackingStatus in the first n frames occur (current status included)?
    *
    * @param s - \ref TrackingStatus of interest.
    * @param n - \ref First n frames.
    * @return the number of how many times the \ref TrackingStatus s occured in the first n frames (current status included).
+   * @todo check this
    */
   int countTrackingStatistics(const TrackingStatus s, const int n) const{
     int c = 0;
@@ -963,11 +1005,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   }
 
   /** \brief Get the local quality of the MultilevelPatchFeature.
-   *         How is the tracking within the local range, OUTLIER/NOTFOUND is worse than not inImage. @todo check this
+   *         How is the tracking within the local range, OUTLIER/NOTFOUND is worse than not inImage.
    *
    * @param localRange - Have only a look to the first "localRange" frames, where the feature was visible in the frame.
    * @return quality value in the range [0, 1] (ratio between tracking number and visibility number).
    *         1 means very good tracking quality.
+   * @todo check this
    */
   double getLocalQuality(const int localRange = 10) const{
     // Local quality of feature for last "inFrames"
@@ -990,11 +1033,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     }
   }
 
-  /** \brief Get the local visibility quality of the MultilevelPatchFeature. @todo check this
+  /** \brief Get the local visibility quality of the MultilevelPatchFeature.
    *
    * @param localRange - Have only a look to the first "localRange" frames.
    * @return quality value in the range [0, 1] (ratio between visibility number and localRange).
    *         1 means that the feature was always visible in the considered frames.
+   * @todo check this
    */
   double getLocalVisibilityQuality(const int localRange = 200) const{
     int countTot = 0;
@@ -1081,9 +1125,9 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   /** \brief Draws the patches of the MultilevelPatchFeature into an image.
    *
    * @param drawImg    - Image in which should be drawn.
-   * @param c          - Center pixel coordinates of the patch (on level 0 @todo check this)
+   * @param c          - Center pixel coordinates of the patch (on level 0)
    * @param stretch    - %Patch drawing magnification factor.
-   * @param withBorder - Draw either the patches Patch::patch_  (withBorder = false) or the expanded patches
+   * @param withBorder - Draw either the patches Patch::patch_ (withBorder = false) or the expanded patches
    *                     Patch::patchWithBorder_ (withBorder = true) .
    */
   void drawMultilevelPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
@@ -1194,6 +1238,8 @@ void extractMultilevelPatchFromImage(MultilevelPatchFeature<n_levels,patch_size>
   if(!doWarping) mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /** \brief Transforms pixel coordinates between two pyramid levels.
  *
  * @tparam n_levels  - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
@@ -1211,8 +1257,8 @@ cv::Point2f levelTranformCoordinates(const cv::Point2f c,const ImagePyramid<n_le
 
 /** \brief Get the raw linear align equations (A*x=b), given by the [(#pixel)x2] Matrix  A (float) and the [(#pixel)x1] vector b (float).
  *
- *         \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
- *         \see Function getLinearAlignEquationsReduced() to get an optimized linear align equations.
+ *  \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
+ *  \see Function getLinearAlignEquationsReduced() to get an optimized linear align equations.
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1312,10 +1358,10 @@ bool getLinearAlignEquations(MultilevelPatchFeature<n_levels,patch_size>& mlp, c
 /** \brief Get the reduced (optimized) linear align equations (A*x=b), given by the [2x2] Matrix A (float)
  *         and the [2x1] vector b (float).
  *
- *         \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
- *         \see Function getLinearAlignEquations() to get the raw linear align equations.
- *         \see Function getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2, const bool doWarping, Eigen::Matrix2d& A_red, Eigen::Vector2d& b_red)
- *                       to get the reduced linear align equations in __double__ precision.
+ *  \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
+ *  \see Function getLinearAlignEquations() to get the raw linear align equations.
+ *  \see Function getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2, const bool doWarping, Eigen::Matrix2d& A_red, Eigen::Vector2d& b_red)
+ *                to get the reduced linear align equations in __double__ precision.
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1378,7 +1424,7 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>&
   return success;
 }
 
-/** \brief
+/** \brief Inverse compositional 2D patch alignment (old)
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1531,7 +1577,7 @@ bool align2D_old(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePy
   return converged;
 }
 
-/** \brief
+/** \brief 2D patch alignment.
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1579,7 +1625,7 @@ bool align2D(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyrami
   return converged;
 }
 
-/** \brief
+/** \brief Execute a 2D patch alignment using only one single pyramid level (patch) of the MultilevelPatchFeature.
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1625,6 +1671,7 @@ void align2DComposed(MultilevelPatchFeature<n_levels,patch_size>& mlp, const Ima
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Class, storing and handling a set of MultilevelPatchFeature.
  *
@@ -1638,9 +1685,15 @@ class MultilevelPatchSet{
   MultilevelPatchFeature<n_levels,patch_size> features_[nMax];  /**<Array of  MultilevelPatchFeature.*/
   bool isValid_[nMax];  /**<Array, defining if there is a valid MultilevelPatchFeature at the considered array index. */
   int maxIdx_;  /**<Current maximum array/set index. Number of MultilevelPatchFeature, which have already been inserted into the set. */
+
+  /** \brief Constructor
+   */
   MultilevelPatchSet(){
     reset();
   }
+
+  /** \brief Destructor
+     */
   ~MultilevelPatchSet(){}
 
   /** \brief Resets the MultilevelPatchSet.
@@ -1867,6 +1920,8 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
   }
   return newSet;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Extract FastCorner coordinates from an Image Pyramid.
  *
