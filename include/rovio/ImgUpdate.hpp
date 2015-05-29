@@ -288,7 +288,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
     bool foundValidMeasurement = false;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
-    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> patchInTargetFrame;
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> patchInTargetFrame(mpCameras_);
     Eigen::Vector2d bearingError;
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
@@ -346,10 +346,10 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             featureCoordinates.camID_ = activeCamID;
             featureCoordinates.setSigmaFromCov(pixelOutputCov_);
             if(activeCamID==camID){
-              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(0,175,175));
+              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(0,175,175), 2.0, false);
               drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(ID),cv::Scalar(0,175,175));
             } else {
-              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(175,175,0));
+              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(175,175,0), 2.0, false);
               drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(ID),cv::Scalar(175,175,0));
             }
           }
@@ -413,7 +413,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
                       FeatureCoordinates featureCoordinates(mpCameras_);
                       featureCoordinates.set_nor(linearizationPoint.template get<mtState::_nor>(ID));
                       featureCoordinates.camID_ = camID;
-                      drawPoint(filterState.img_[camID], featureCoordinates, cv::Scalar(0,0,255));
+                      drawPoint(filterState.img_[camID], featureCoordinates, cv::Scalar(255,0,0));
                     }
                   }
                 } else {
@@ -443,35 +443,30 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
     int& activeCamCounter = filterState.state_.template get<mtState::_aux>().activeCameraCounter_;
-//    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature = &filterState.mlps_.features_[ID];
-//    mpFeature->fromState();
-//    mpFeature->setDepth(filterState.state_.get_depth(ID));
-//    const int camID = mpFeature->camID_;
-//    const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
-
-    // TODO Visualisation
-//    if(!outlierDetection.isOutlier(0)){
-//      if(mpFeature->status_.trackingStatus_ == TRACKED){
-//        drawLine(filterState.img_[camID],mpFeature->log_current_,mpFeature->log_prediction_,cv::Scalar(0,255,0));
-//        drawEllipse(filterState.img_[camID],mpFeature->log_current_,cv::Scalar(0, 255, 0));
-//        drawText(filterState.img_[camID],mpFeature->log_current_,std::to_string(mpFeature->totCount_),cv::Scalar(0,255,0));
-//      } else if(mpFeature->status_.trackingStatus_ == FAILED){
-//        drawEllipse(filterState.img_[camID],mpFeature->log_current_,cv::Scalar(0, 0, 255));
-//        drawText(filterState.img_[camID],mpFeature->log_current_,std::to_string(mpFeature->countTrackingStatistics(FAILED,trackingLocalRange_)),cv::Scalar(0,0,255));
-//      } else {
-//        drawEllipse(filterState.img_[camID],mpFeature->log_current_,cv::Scalar(0,255,255));
-//        drawText(filterState.img_[camID],mpFeature->log_current_,std::to_string(mpFeature->countTrackingStatistics(NOTTRACKED,trackingLocalVisibilityRange_)),cv::Scalar(0,255,255));
-//      }
-//    }
 
     if(isFinished){
       commonPostProcess(filterState,meas);
     } else {
+      MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> drawPatch(mpCameras_);
+      const int camID = filterState.mlps_.features_[ID].camID_;
+      const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
       if(filterState.mlps_.features_[ID].status_.trackingStatus_ == NOTTRACKED){
         filterState.mlps_.features_[ID].status_.trackingStatus_ = FAILED;
       }
+      drawPatch.set_pixelCorners(filterState.mlps_.features_[ID].get_pixelCorners());
+      drawPatch.set_nor(filterState.state_.template get<mtState::_nor>(ID));
+      drawPatch.camID_ = activeCamID;
+      if(doFrameVisualisation_ && activeCamID != camID){
+        featureLocationOutputCF_.setFeatureID(ID);
+        featureLocationOutputCF_.setOutputCameraID(activeCamID);
+        featureLocationOutputCF_.transformState(filterState.state_,featureLocationOutput_);
+        drawPatch.set_nor(featureLocationOutput_.template get<FeatureLocationOutput::_nor>());
+      }
       if(!outlierDetection.isOutlier(0)){
         filterState.mlps_.features_[ID].status_.trackingStatus_ = TRACKED;
+        if(doFrameVisualisation_) drawPatchBorder(filterState.img_[activeCamID],drawPatch,4.0,cv::Scalar(0,255,0));
+      } else {
+        if(doFrameVisualisation_) drawPatchBorder(filterState.img_[activeCamID],drawPatch,4.0,cv::Scalar(0,0,255));
       }
 
       // Remove negative feature
@@ -504,7 +499,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
-    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature;
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> testFeature(mpCameras_);
 
     // Actualize camera extrinsics
     for(int i=0;i<mtState::nCam_;i++){

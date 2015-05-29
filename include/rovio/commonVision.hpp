@@ -433,8 +433,8 @@ static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar&
   cv::Size size(2,2);
   cv::ellipse(drawImg,C.get_c(),size,0,0,360,color,-1,8,0);
 }
-static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
-  drawPoint(drawImg,C,color);
+static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0, const bool withCenterPoint = true){
+  if(withCenterPoint) drawPoint(drawImg,C,color);
   cv::ellipse(drawImg,C.get_c(),cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
 }
 static void drawLine(cv::Mat& drawImg, FeatureCoordinates& C1, FeatureCoordinates& C2, const cv::Scalar& color, int thickness = 2){
@@ -782,6 +782,23 @@ void extractMultilevelPatchFromImage(MultilevelPatchFeature<n_levels,patch_size>
     }
   }
   if(!doWarping) mlp.set_affineTransfrom(Eigen::Matrix2f::Identity());
+}
+
+template<int n_levels,int patch_size>
+static void drawPatchBorder(cv::Mat& drawImg, MultilevelPatchFeature<n_levels,patch_size>& mlp, const float s, const cv::Scalar& color){
+  const PixelCorners& pixelCorners = mlp.get_pixelCorners();
+  const cv::Point2f& center = mlp.get_c();
+  FeatureCoordinates fc1;
+  FeatureCoordinates fc2;
+  fc1.set_c(center - s*pixelCorners[0] - s*pixelCorners[1]);
+  fc2.set_c(center + s*pixelCorners[0] - s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc1.set_c(center + s*pixelCorners[0] + s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc2.set_c(center - s*pixelCorners[0] + s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc1.set_c(center - s*pixelCorners[0] - s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
 }
 
 template<int n_levels>
