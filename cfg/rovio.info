@@ -113,7 +113,7 @@ Update0
     minAbsoluteSTScore 5.0
     fastDetectionThreshold 10
     matchingPixelThreshold 0.0
-    preLinearizationMode 1 ; (0: none, 1: automatic, 2: always)
+    specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10.0;
     removeNegativeFeatureAfterUpdate true;
 }

@@ -37,7 +37,7 @@
 static constexpr unsigned int nMax_ = 25;
 static constexpr int nLevels_ = 4;
 static constexpr int patchSize_ = 8;
-static constexpr int nCam_ = 1;
+static constexpr int nCam_ = 2;
 typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
 
 #ifdef MAKE_SCENE

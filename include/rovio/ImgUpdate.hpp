@@ -156,7 +156,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   bool doFrameVisualisation_;
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
-  int preLinearizationMode_; // 0: none, 1: automatic, 2: always
+  double specialLinearizationThreshold_;
   ImgUpdate(){
     mpCameras_ = nullptr;
     initCovFeature_.setIdentity();
@@ -181,9 +181,9 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     minRelativeSTScore_ = 0.2;
     minAbsoluteSTScore_ = 0.2;
     matchingPixelThreshold_ = 4.0;
-    preLinearizationMode_ = 1;
     patchRejectionTh_ = 10.0;
     removeNegativeFeatureAfterUpdate_ = true;
+    specialLinearizationThreshold_ = 1.0/400;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -199,11 +199,11 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     doubleRegister_.registerScalar("minAbsoluteSTScore",minAbsoluteSTScore_);
     doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
     doubleRegister_.registerScalar("patchRejectionTh",patchRejectionTh_);
+    doubleRegister_.registerScalar("specialLinearizationThreshold",specialLinearizationThreshold_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
-    intRegister_.registerScalar("preLinearizationMode",preLinearizationMode_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -289,7 +289,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     bool foundValidMeasurement = false;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_>* mpFeature;
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> patchInTargetFrame;
-    Eigen::Vector2d vec2; // TODO: clean
+    Eigen::Vector2d bearingError;
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
     int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
@@ -387,22 +387,24 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             if(verbose_) std::cout << "    \033[31mNOT FOUND (matching failed)\033[0m" << std::endl;
           }
 
-          // Add as measurement, TODO: make dependent on preLinearizationMode_, allow non aligned measurements
-          filterState.difVecLin_.setZero();
-          mtState linearizationPoint = state;
-          vec2.setZero();
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
-            patchInTargetFrame.get_nor().boxMinus(featureLocationOutput_.template get<FeatureLocationOutput::_nor>(),vec2);
-            if((vec2.transpose()*featureLocationCov_.template block<2,2>(FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>(),FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>()).inverse()*vec2)(0,0) > 5.886){ // TODO: param
-              patchInTargetFrame.set_nor(featureLocationOutput_.template get<FeatureLocationOutput::_nor>());
-              if(verbose_) std::cout << "    Match too far!" << std::endl;
-            } else {
-              featureLocationOutput_.template get<FeatureLocationOutput::_nor>() = patchInTargetFrame.get_nor();
-              if(featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
+            // Compute deviation of expected
+            patchInTargetFrame.get_nor().boxMinus(featureLocationOutput_.template get<FeatureLocationOutput::_nor>(),bearingError);
+            const double weightedBearingError = (bearingError.transpose()*featureLocationCov_.template block<2,2>(FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>(),FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>()).inverse()*bearingError)(0,0);
+
+            // Determine linearization mode
+            useSpecialLinearizationPoint_ = bearingError.norm() > specialLinearizationThreshold_;
+
+            if(weightedBearingError < 5.886){ // TODO: param
+              if(useSpecialLinearizationPoint_) featureLocationOutput_.template get<FeatureLocationOutput::_nor>() = patchInTargetFrame.get_nor();
+              mtState linearizationPoint = state;
+              if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
+              if(!useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.template get<mtState::_nor>(ID).getVec().transpose() << std::endl;
+                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.template get<FeatureLocationOutput::_nor>());
                 if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
                                                   state.template get<mtState::_aux>().A_red_[ID],state.template get<mtState::_aux>().b_red_[ID])){
-                  linearizationPoint.boxMinus(state,filterState.difVecLin_);
+                  if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
                   state.template get<mtState::_aux>().bearingMeas_[ID] = patchInTargetFrame.get_nor();
                   foundValidMeasurement = true;
                   if(doFrameVisualisation_){
@@ -420,6 +422,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
               } else {
                 if(verbose_) std::cout << "    \033[31mFailed backprojection!\033[0m" << std::endl;
               }
+            } else {
+              if(verbose_) std::cout << "    Match too far!" << std::endl;
             }
           }
         }
