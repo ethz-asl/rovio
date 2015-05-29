@@ -41,7 +41,9 @@
 
 namespace rovio{
 
-/** \brief Defines the matching status of a feature.
+/** \brief Defines the matching status of a MultilevelPatchFeature.
+ *
+ *  MatchingStatus is set in the function align2DComposed().
  */
 enum MatchingStatus{
   NOTMATCHED,
@@ -49,7 +51,7 @@ enum MatchingStatus{
   FOUND
 };
 
-/** \brief Defines the tracking status of a feature.
+/** \brief Defines the tracking status of a MultilevelPatchFeature.
  */
 enum TrackingStatus{
   NOTTRACKED,
@@ -57,7 +59,7 @@ enum TrackingStatus{
   TRACKED
 };
 
-/** \brief Defines the matching and tracking status of a feature.
+/** \brief Holds the  matching status (MatchingStatus) and tracking status (TrackingStatus) of a MultilevelPatchFeature.
  */
 struct Status{
   bool inFrame_;
@@ -93,7 +95,7 @@ void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
   }
 }
 
-/** \brief Image pyramid with a selectable number of levels.
+/** \brief Image pyramid with selectable number of levels.
  *
  *   @tparam n_levels - Number of pyramid levels.
  */
@@ -138,7 +140,10 @@ class ImagePyramid{
   }
 };
 
-/** \brief Pixel coordinates of the midpoints of the patch edges.
+/** \brief Vectors, pointing from the feature image location to the midpoints of the patch edges (expressed in pixels).
+ *
+ *  \see BearingCorners
+ *  @todo check this
  */
 struct PixelCorners{
   cv::Point2f corners_[2];
@@ -151,9 +156,10 @@ struct PixelCorners{
 };
 
 /** \brief Vectors, pointing from the feature bearing vector to the
- *         bearing vectors of the midpoints of the corresponding patch edges.
+ *         bearing vectors of the midpoints of the corresponding patch edges (expressed in camera coordinates).
  *
- *         \see PixelCorners
+ *  \see PixelCorners
+ *  @todo check this
  */
 struct BearingCorners{
   Eigen::Vector2d corners_[2];
@@ -281,15 +287,15 @@ class Patch {
 };
 
 /** \brief Checks if a patch at a specific image location is still within the reference image.
-   *
-   *   Note: Patch is assumed to be aligned with the image edges (patch is not warped).
-   *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
-   *   @param img        - Reference Image.
-   *   @param c          - Center pixel coordinates of the patch.
-   *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
-   *                       of Patch::patchWithBorder_ (withBorder = true).
-   *   @return true if the patch is completely located within the image.
-   */
+ *
+ *   Note: Patch is assumed to be aligned with the image edges (patch is not warped).
+ *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2, see class Patch).
+ *   @param img        - Reference Image.
+ *   @param c          - Center pixel coordinates of the patch.
+ *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+ *                       of Patch::patchWithBorder_ (withBorder = true).
+ *   @return true if the patch is completely located within the image.
+ */
 template<int size>
 bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const bool withBorder = false){
   const int halfpatch_size = size/2+(int)withBorder;
@@ -652,11 +658,11 @@ static void drawText(cv::Mat& drawImg, FeatureCoordinates& C, const std::string&
 
 
 /** \brief A multilevel patch feature class.
-*
-*    @tparam n_levels   - Number of pyramid levels on which the feature is defined.
-*    @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!.
-*                         Note: The patches edge length is the same for each patch, independently from the pyramid level.
-*/
+ *
+ *    @tparam n_levels   - Number of pyramid levels on which the feature is defined.
+ *    @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!.
+ *                         Note: The patches edge length is the same for each patch, independently from the pyramid level.
+ */
 template<int n_levels,int patch_size>
 class MultilevelPatchFeature: public FeatureCoordinates{
  public:
@@ -1124,7 +1130,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   }
 
   /** \brief @todo ?
-  */
+   */
   float computeAverageDifferenceReprojection(const ImagePyramid<n_levels>& pyr, const int l1, const int l2) const{
     MultilevelPatchFeature<n_levels,patch_size> mlpReprojected;
     mlpReprojected.set_c(get_c());
@@ -1590,7 +1596,8 @@ bool align2DSingleLevel(MultilevelPatchFeature<n_levels,patch_size>& mlp, const 
   return align2D(mlp,pyr,l,l,doWarping);
 }
 
-/** \brief
+/** \brief Aligns a MultilevelPatchFeature to a given image pyramid and updates its matching status
+ *         (MultilevelPatchFeature::status_) and its position (MultilevelPatchFeature::c_).
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
@@ -1662,9 +1669,9 @@ class MultilevelPatchSet{
   }
 
   /** \brief Get the number of valid MultilevelPatchFeature in the set.
-    *
-    * @return the number of valid MultilevelPatchFeature in the set.
-    */
+   *
+   * @return the number of valid MultilevelPatchFeature in the set.
+   */
   int getValidCount() const{
     int count = 0;
     for(unsigned int i=0;i<nMax;i++){
@@ -1870,8 +1877,6 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
  * @param l                  - Pyramid level at which the corners should be extracted.
  * @param detectionThreshold - Detection threshold of the used cv::FastFeatureDetector.
  *                             See http://docs.opencv.org/trunk/df/d74/classcv_1_1FastFeatureDetector.html
- * @return the array/set index, where the MultilevelPatchFeature has been stored. The value -1 is returned,
- *         if the feature could not be inserted, because the maximal number of features have already been reached.
  */
 template <int n_levels>
 void detectFastCorners(const ImagePyramid<n_levels>& pyr, std::list<cv::Point2f>& candidates, int l, int detectionThreshold) {

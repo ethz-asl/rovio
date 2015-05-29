@@ -39,28 +39,34 @@
 
 namespace rovio{
 
-
+/** \brief Ros Node, executing a MultilevelPatchFeature tracking on an incoming image stream.
+ */
 class FeatureTrackerNode{
  public:
   ros::NodeHandle nh_;
-  ros::Subscriber subImu_;
-  ros::Subscriber subImg_;
-  static constexpr int nMax_ = 100;
-  static constexpr int patchSize_ = 8;
-  static constexpr int nLevels_ = 4;
+  ros::Subscriber subImu_;  /**<IMU subscriber.*/
+  ros::Subscriber subImg_;  /**<Image subscriber.*/
+  static constexpr int nMax_ = 100;  /**<Maximum number of MultilevelPatchFeature%s in a MultilevelPatchSet.*/
+  static constexpr int patchSize_ = 8;  /**<Edge length of the patches in pixels. Value must be a multiple of 2!*/
+  static constexpr int nLevels_ = 4;  /**<Total number of image pyramid levels.*/
   cv::Mat draw_image_, img_, draw_patches_;
-  unsigned int min_feature_count_, max_feature_count_;
+  unsigned int min_feature_count_;  /**<New MultilevelPatchFeature%s are added to the existing MultilevelPatchSet,
+                                        if the number of valid MultilevelPatchFeature%s in the set is smaller
+                                        than min_feature_count_.*/
+  unsigned int max_feature_count_;  /**<Maximal number of features, which are added at a time (not total). See rovio::addBestCandidates().*/
   ImagePyramid<nLevels_> pyr_;
   class MultilevelPatchSet<nLevels_,patchSize_,nMax_> mlps_;
-  static constexpr int nDetectionBuckets_ = 100;
-  static constexpr double scoreDetectionExponent_ = 0.5;
-  static constexpr double penaltyDistance_ = 20;
-  static constexpr double zeroDistancePenalty_ = nDetectionBuckets_*1.0;
-  static constexpr int l1 = 1;
-  static constexpr int l2 = 3;
-  static constexpr int detectionThreshold = 10;
-  static constexpr bool drawNotFound_ = false;
+  static constexpr int nDetectionBuckets_ = 100;  /**<See rovio::addBestCandidates().*/
+  static constexpr double scoreDetectionExponent_ = 0.5;  /**<See rovio::addBestCandidates().*/
+  static constexpr double penaltyDistance_ = 20;  /**<See rovio::addBestCandidates().*/
+  static constexpr double zeroDistancePenalty_ = nDetectionBuckets_*1.0;  /**<See rovio::addBestCandidates().*/
+  static constexpr int l1 = 1; /**<Minimal pyramid level, which should be used e.g. for corner detection and patch alignment. (l1<l2)*/
+  static constexpr int l2 = 3; /**<Maximal pyramid level, which should be used e.g. for corner detection and patch alignment. (l1<l2)*/
+  static constexpr int detectionThreshold = 10; /**<See rovio::detectFastCorners().*/
+  static constexpr bool drawNotFound_ = false;  /**<Draw MultilevelPatchFeature%s which were not found again.*/
 
+  /** \brief Constructor
+   */
   FeatureTrackerNode(ros::NodeHandle& nh): nh_(nh){
     static_assert(l2>=l1, "l2 must be larger than l1");
     subImu_ = nh_.subscribe("imuMeas", 1000, &FeatureTrackerNode::imuCallback,this);
@@ -69,16 +75,38 @@ class FeatureTrackerNode{
     max_feature_count_ = 20; // Maximal number of feature which is added at a time (not total)
     cv::namedWindow("Tracker");
   };
+
+  /** \brief Destructor.
+   */
   ~FeatureTrackerNode(){
     cv::destroyWindow("Tracker");
   }
+
+  /** \brief Empty, yet. @todo ?
+   */
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
   }
-  void imgCallback(const sensor_msgs::ImageConstPtr & img){
+
+  /** \brief Image callback, handling the tracking of MultilevelPatchFeature%s.
+   *
+   *  The sequence of the callback can be summarized as follows:
+   *  1. Extract image from message. Compute the image pyramid from the extracted image.
+   *  2. Predict the position of the valid MultilevelPatchFeature%s in the current image,
+   *     using the previous 2 image locations of these MultilevelPatchFeature%s.
+   *  3. Execute 2D patch alignment at the predicted MultilevelPatchFeature locations.
+   *     If successful the matching status of the MultilevelPatchFeature is set to FOUND and its image location is updated.
+   *  4. Prune: Check the MultilevelPatchFeature%s in the MultilevelPatchSet for their quality (MultilevelPatchFeature::isGoodFeature()).
+   *            If a bad quality of a MultilevelPatchFeature is recognized, it is set to invalid.
+   *  5. Get new features and add them to the MultilevelPatchSet, if there are too little valid MultilevelPatchFeature%s
+   *     in the MultilevelPatchSet. MultilevelPatchFeature%s which are stated invalid are replaced by new features.
+   *
+   *  @param img_msg - Image message (ros)
+   */
+  void imgCallback(const sensor_msgs::ImageConstPtr & img_msg){
     // Get image from msg
     cv_bridge::CvImagePtr cv_ptr;
     try {
-      cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::TYPE_8UC1);
+      cv_ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::TYPE_8UC1);
     } catch (cv_bridge::Exception& e) {
       ROS_ERROR("cv_bridge exception: %s", e.what());
       return;
@@ -87,7 +115,7 @@ class FeatureTrackerNode{
 
     // Timing
     static double last_time = 0.0;
-    double current_time = img->header.stamp.toSec();
+    double current_time = img_msg->header.stamp.toSec();
 
     // Pyramid
     pyr_.computeFromImage(img_,true);
@@ -162,6 +190,9 @@ class FeatureTrackerNode{
     }
 
     // Prune
+    // Check the MultilevelPatchFeature%s in the MultilevelPatchSet for their quality (isGoodFeature(...)).
+    // If a bad quality of a MultilevelPatchFeature is recognized, it is set to invalid. New MultilevelPatchFeature%s
+    // replace the array places of invalid MultilevelPatchFeature%s in the MultilevelPatchSet.
     int prune_count = 0;
     for(unsigned int i=0;i<nMax_;i++){
       if(mlps_.isValid_[i]){
@@ -174,6 +205,8 @@ class FeatureTrackerNode{
     ROS_INFO_STREAM(" Pruned " << prune_count << " features");
 
     // Extract feature patches
+    // Extract new MultilevelPatchFeature%s at the current tracked feature positions.
+    // Extracted multilevel patches are aligned with the image axes.
     for(unsigned int i=0;i<nMax_;i++){
       if(mlps_.isValid_[i]){
         if(mlps_.features_[i].status_.matchingStatus_ == FOUND && isMultilevelPatchInFrame(mlps_.features_[i],pyr_,nLevels_-1,true)){
@@ -182,7 +215,7 @@ class FeatureTrackerNode{
       }
     }
 
-    // Get new features
+    // Get new features, if there are too little valid MultilevelPatchFeature%s in the MultilevelPatchSet.
     if(mlps_.getValidCount() < min_feature_count_){
       std::list<cv::Point2f> candidates;
       ROS_INFO_STREAM(" Adding keypoints");
