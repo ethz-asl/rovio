@@ -34,8 +34,8 @@
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
-
-#include "commonVision.hpp"
+#include "rovio/Camera.hpp"
+#include "rovio/commonVision.hpp"
 
 namespace rovio{
 
@@ -57,13 +57,14 @@ class FeatureTrackerNode{
   ImagePyramid<nLevels_> pyr_;
   class MultilevelPatchSet<nLevels_,patchSize_,nMax_> mlps_;
   static constexpr int nDetectionBuckets_ = 100;  /**<See rovio::addBestCandidates().*/
-  static constexpr double scoreDetectionExponent_ = 0.5;  /**<See rovio::addBestCandidates().*/
+  static constexpr double scoreDetectionExponent_ = 0.25;  /**<See rovio::addBestCandidates().*/
   static constexpr double penaltyDistance_ = 20;  /**<See rovio::addBestCandidates().*/
-  static constexpr double zeroDistancePenalty_ = nDetectionBuckets_*1.0;  /**<See rovio::addBestCandidates().*/
+  static constexpr double zeroDistancePenalty_ = nDetectionBuckets_*100.0;  /**<See rovio::addBestCandidates(). [nDetectionBuckets_*100] is a strong penalty, thus features with a distance of less penaltyDistance_ will not be added.*/
   static constexpr int l1 = 1; /**<Minimal pyramid level, which should be used e.g. for corner detection and patch alignment. (l1<l2)*/
   static constexpr int l2 = 3; /**<Maximal pyramid level, which should be used e.g. for corner detection and patch alignment. (l1<l2)*/
   static constexpr int detectionThreshold = 10; /**<See rovio::detectFastCorners().*/
   static constexpr bool drawNotFound_ = false;  /**<Draw MultilevelPatchFeature%s which were not found again.*/
+  rovio::Camera camera_;
 
   /** \brief Constructor
    */
@@ -74,6 +75,7 @@ class FeatureTrackerNode{
     min_feature_count_ = 50;
     max_feature_count_ = 20; // Maximal number of feature which is added at a time (not total)
     cv::namedWindow("Tracker");
+    camera_.load("/home/michael/calibrations/p22035_equidist.yaml");
   };
 
   /** \brief Destructor.
@@ -142,7 +144,6 @@ class FeatureTrackerNode{
 
     // Track valid features
     const double t1 = (double) cv::getTickCount();
-    cv::Point2f c_new;
     for(unsigned int i=0;i<nMax_;i++){
       if(mlps_.isValid_[i]){
         mlps_.features_[i].log_prediction_.set_c(mlps_.features_[i].get_c());
@@ -225,15 +226,16 @@ class FeatureTrackerNode{
       }
       const double t2 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Detected " << candidates.size() << " on levels " << l1 << "-" << l2 << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
-      pruneCandidates(mlps_,candidates,0); // TODO: make option of camID
+      pruneCandidates(mlps_,candidates,0);
       const double t3 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)");
       std::unordered_set<unsigned int> newSet = addBestCandidates(mlps_,candidates,pyr_,0,current_time,
                                                                   l1,l2,max_feature_count_,nDetectionBuckets_, scoreDetectionExponent_,
-                                                                  penaltyDistance_, zeroDistancePenalty_,true,0.0); // TODO: make option of camID
+                                                                  penaltyDistance_, zeroDistancePenalty_,true,0.0);
       const double t4 = (double) cv::getTickCount();
       ROS_INFO_STREAM(" == Got " << mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)");
       for(auto it = newSet.begin();it != newSet.end();++it){
+        mlps_.features_[*it].setCamera(&camera_);
         mlps_.features_[*it].log_previous_.set_c(mlps_.features_[*it].get_c());
         mlps_.features_[*it].status_.inFrame_ = true;
         mlps_.features_[*it].status_.matchingStatus_ = FOUND;

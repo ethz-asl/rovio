@@ -146,7 +146,7 @@ class RovioNode{
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
-    for(int i=0;i<mtState::nMax_;i++){
+    for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
       testState.template get<mtState::_aux>().activeFeature_ = i;
       testState.template get<mtState::_aux>().activeCameraCounter_ = 0;
       const int camID = testState.template get<mtState::_aux>().camID_[i];

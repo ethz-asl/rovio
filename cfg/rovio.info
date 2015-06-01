@@ -6,25 +6,25 @@ Common
 }
 Camera0
 {
-	CalibrationFile /home/andreas/catkin_ws/src/rovio/cfg/p22021_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
-	qVM_x  0.0   ; 0.0085952428576699432122; 0.0083632 ; [1]-0.0172361
-	qVM_y  0.0   ; 0.0016098433991980941934; -0.00390811; [1]0.00214608
-	qVM_z  0.7071; 0.99995487558238660419; 0.712747  ; [1]-0.01682
-	qVM_w  0.7071; 0.0037117386036182226962; 0.70136   ; [1]0.999708
-	MrMV_x 0.0; 0.04175128287982616;-0.0116603 ; [m]-0.066836
-	MrMV_y -0.07; -0.009456642255429751;-0.0570516 ; [m]0.0139924
-	MrMV_z 0.035; -0.007880213417704743;-0.00124568; [m]0.00955199
+	CalibrationFile /home/michael/calibrations/p22035_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
+	qVM_x  0.0
+	qVM_y  0.0
+	qVM_z  0.7071
+	qVM_w  0.7071
+	MrMV_x 0
+	MrMV_y 0
+	MrMV_z 0
 }
 Camera1
 {
-	CalibrationFile /home/andreas/catkin_ws/src/rovio/cfg/p22021_equidist.yaml
-	qVM_x  0.0   ; 0.0085952428576699432122; 0.0083632 ; [1]-0.0172361
-	qVM_y  0.0   ; 0.0016098433991980941934; -0.00390811; [1]0.00214608
-	qVM_z  0.7071; 0.99995487558238660419; 0.712747  ; [1]-0.01682
-	qVM_w  0.7071; 0.0037117386036182226962; 0.70136   ; [1]0.999708
-	MrMV_x 0.0; 0.04175128287982616;-0.0116603 ; [m]-0.066836
-	MrMV_y 0.03; -0.009456642255429751;-0.0570516 ; [m]0.0139924
-	MrMV_z 0.035; -0.007880213417704743;-0.00124568; [m]0.00955199
+	CalibrationFile /home/michael/calibrations/p22035_equidist_cam1.yaml
+	qVM_x  0.0
+	qVM_y  0.0
+	qVM_z  0.7071
+	qVM_w  0.7071
+	MrMV_x 0
+	MrMV_y 0
+	MrMV_z 0
 }
 Init
 {
@@ -82,7 +82,7 @@ Update0
 {
     doPatchWarping true
     doFrameVisualisation true
-    useDirectMethod false
+    useDirectMethod true
     maxNumIteration 10
     startLevel 3
     endLevel 1
@@ -90,16 +90,16 @@ Update0
     MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
-        nor 1e-5 ; rad (~1/f ~ 1/400^2 = 1/160000)
+        nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
     alpha 0.001
     beta 2
     kappa 0
     updateVecNormTermination 1e-06
-    initCovFeature_0 100.0
+    initCovFeature_0 100
     initCovFeature_1 1e-5
     initCovFeature_2 1e-5
-    initDepth 0.25
+    initDepth 1.0
     startDetectionTh 0.5
     scoreDetectionExponent 0.25
     penaltyDistance 100
@@ -113,8 +113,9 @@ Update0
     minAbsoluteSTScore 5.0
     fastDetectionThreshold 10
     matchingPixelThreshold 0.0
-    preLinearizationMode 1 ; (0: none, 1: automatic, 2: always)
+    specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10.0;
+    removeNegativeFeatureAfterUpdate true;
 }
 Prediction
 {
@@ -132,12 +133,12 @@ Prediction
         gyb_0 3.8e-7
         gyb_1 3.8e-7
         gyb_2 3.8e-7
-        vep_0 1e-8
-        vep_1 1e-8
-        vep_2 1e-8
-        vep_3 1e-8
-        vep_4 1e-8
-        vep_5 1e-8
+        vep_0 1e-4
+        vep_1 1e-4
+        vep_2 1e-4
+        vep_3 1e-4
+        vep_4 1e-4
+        vep_5 1e-4
         att_0 7.6e-6 ;7.6e-7
         att_1 7.6e-6
         att_2 7.6e-6

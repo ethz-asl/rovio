@@ -580,11 +580,15 @@ class FeatureCoordinates{
    *  @todo check this
    */
   LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
-    const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
-    const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
-    const V3D CrCP = depth_*get_nor().getVec();
-    const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    return LWF::NormalVectorElement(DrDP);
+    if(camID_ != otherCamID){
+      const QPD qDC = mpCameras_[otherCamID].qCB_*mpCameras_[camID_].qCB_.inverted(); // TODO: avoid double computation
+      const V3D CrCD = mpCameras_[camID_].qCB_.rotate(V3D(mpCameras_[otherCamID].BrBC_-mpCameras_[camID_].BrBC_));
+      const V3D CrCP = depth_*get_nor().getVec();
+      const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+      return LWF::NormalVectorElement(DrDP);
+    } else {
+      return get_nor();
+    }
   }
 
   /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).
@@ -651,14 +655,15 @@ static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar&
 
 /** \brief Draws an uncertainty ellipse at given feature coordinates.
  *
- *  @param drawImg     - Image in which the uncertainty ellipse should be drawn.
- *  @param C           - Feature coordinates object. Contains inter alia the uncertainty data. See class FeatureCoordinates.
- *  @param color       - Color of the ellipse.
- *  @param scaleFactor - Scale Factor of the uncertainty ellipse. If set to 1, the ellipse axes lengths match the true
- *                       standard deviation values.
+ *  @param drawImg         - Image in which the uncertainty ellipse should be drawn.
+ *  @param C               - Feature coordinates object. Contains inter alia the uncertainty data. See class FeatureCoordinates.
+ *  @param color           - Color of the ellipse.
+ *  @param scaleFactor     - Scale Factor of the uncertainty ellipse. If set to 1, the ellipse axes lengths match the true
+ *                           standard deviation values.
+ *  @param withCenterPoint - Set to true if the center point of the ellipse should be drawn.
  */
-static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0){
-  drawPoint(drawImg,C,color);
+static void drawEllipse(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, double scaleFactor = 2.0, const bool withCenterPoint = true){
+  if(withCenterPoint) drawPoint(drawImg,C,color);
   cv::ellipse(drawImg,C.get_c(),cv::Size(std::max(static_cast<int>(scaleFactor*C.sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*C.sigma2_+0.5),1)),C.sigmaAngle_*180/M_PI,0,360,color,1,8,0);
 }
 
@@ -1253,6 +1258,32 @@ template<int n_levels>
 cv::Point2f levelTranformCoordinates(const cv::Point2f c,const ImagePyramid<n_levels>& pyr,const int l1, const int l2){
   assert(l1<n_levels && l2<n_levels);
   return (pyr.centers_[l1]-pyr.centers_[l2])*pow(0.5,l2)+c*pow(0.5,l2-l1);
+}
+
+
+/** \brief Draws the patch borders into an image.
+ *
+ * @tparam n_levels   - Total number of pyramid levels.
+ * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
+ * @param drawImg     - Image in which the patch borders should be drawn.
+ * @param s           - Scaling factor.
+ * @param color       - Line color.
+ */
+template<int n_levels,int patch_size>
+static void drawPatchBorder(cv::Mat& drawImg, MultilevelPatchFeature<n_levels,patch_size>& mlp, const float s, const cv::Scalar& color){
+  const PixelCorners& pixelCorners = mlp.get_pixelCorners();
+  const cv::Point2f& center = mlp.get_c();
+  FeatureCoordinates fc1;
+  FeatureCoordinates fc2;
+  fc1.set_c(center - s*pixelCorners[0] - s*pixelCorners[1]);
+  fc2.set_c(center + s*pixelCorners[0] - s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc1.set_c(center + s*pixelCorners[0] + s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc2.set_c(center - s*pixelCorners[0] + s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
+  fc1.set_c(center - s*pixelCorners[0] - s*pixelCorners[1]);
+  drawLine(drawImg,fc1,fc2,color,1);
 }
 
 /** \brief Get the raw linear align equations (A*x=b), given by the [(#pixel)x2] Matrix  A (float) and the [(#pixel)x1] vector b (float).
