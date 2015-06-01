@@ -145,7 +145,6 @@ class ImagePyramid{
 /** \brief Vectors, pointing from the feature image location to the midpoints of the patch edges (expressed in pixels).
  *
  *  \see BearingCorners
- *  @todo check this
  */
 struct PixelCorners{
   cv::Point2f corners_[2];
@@ -157,11 +156,10 @@ struct PixelCorners{
   };
 };
 
-/** \brief Vectors, pointing from the feature bearing vector to the
- *         bearing vectors of the midpoints of the corresponding patch edges (expressed in camera coordinates).
+/** \brief Difference (see boxminus for bearing vectors) between feature bearing vector and bearing vectors
+ *  of the midpoints of the corresponding patch edges.
  *
  *  \see PixelCorners
- *  @todo check this
  */
 struct BearingCorners{
   Eigen::Vector2d corners_[2];
@@ -323,11 +321,10 @@ bool isPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2
  *   @tparam size      - Edge length of the patch in pixels (must be a multiple of 2).
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the patch in the reference image.
- *   @param aff        - Affine warping matrix (from the previous image into the reference image).
+ *   @param aff        - Affine warping matrix (from the warped patch into the current image).
  *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
  *                       of the expanded patch Patch::patchWithBorder_ (withBorder = true).
  *   @return true, if the warped patch is completely located within the reference image.
- *   @todo check aff
  */
 template<int size>
 bool isWarpedPatchInFrame(const Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff,const bool withBorder = false){
@@ -407,11 +404,10 @@ void extractPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point
  *   @param patch      - %Patch object, which will hold the patch data.
  *   @param img        - Reference Image.
  *   @param c          - Center pixel coordinates of the warped patch in the reference image (subpixel coordinates possible).
- *   @param aff        - Affine warping matrix (from the previous image into the reference image).
+ *   @param aff        - Affine warping matrix (from the warped patch into the current image).
  *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
  *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_)
  *                       and the patch data of the expanded patch (Patch::patchWithBorder_).
- *   @todo check aff
  */
 template<int size>
 void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& aff, const bool withBorder = true){
@@ -460,28 +456,28 @@ void extractWarpedPatchFromImage(Patch<size>& patch,const cv::Mat& img,const cv:
  */
 class FeatureCoordinates{
  public:
-  int camID_; /**<%Camera ID. @todo check this.*/
+  int camID_; /**<%Camera ID.*/
   mutable cv::Point2f c_;  /**<Pixel coordinates of the feature.*/
   mutable bool valid_c_;  /**<Bool, indicating if the current feature pixel coordinates \ref c_ are valid.*/
   mutable LWF::NormalVectorElement nor_;  /**<Bearing vector, belonging to the feature.*/
   mutable bool valid_nor_;  /**<Bool, indicating if the current bearing vector \ref nor_ is valid.*/
   const Camera* mpCameras_;  /**<Pointer to the associated camera object.*/
-  double sigma1_;  /**<Standard deviation in the direction of the major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
-  double sigma2_;  /**<Standard deviation in the direction of the semi-major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
-  double sigmaAngle_; /**<Angle between the x-axis and the major axis of the uncertainty ellipse belonging to \ref c_. @todo check this*/
+  double sigma1_;  /**<Standard deviation in the direction of the major axis of the uncertainty ellipse belonging to \ref c_.*/
+  double sigma2_;  /**<Standard deviation in the direction of the semi-major axis of the uncertainty ellipse belonging to \ref c_.*/
+  double sigmaAngle_; /**<Angle between the x-axis and the major axis of the uncertainty ellipse belonging to \ref c_.*/
   Eigen::EigenSolver<Eigen::Matrix2d> es_;
-  bool isLinkedToState_;  /**<Specifies, if the feature is currently part of the filter state. @todo check this.*/
-  int* mpCamID_;  /**<@todo ?*/
-  LWF::NormalVectorElement* mpNor_;  /**<@todo ?*/
+  int* mpCamID_;  /**<Pointer to filter state variable.*/
+  LWF::NormalVectorElement* mpNor_;  /**<Pointer to filter state variable.*/
   double depth_;  /**<Estimated feature depth (along the bearing vector).*/
 
   /** \brief Constructor
    */
   FeatureCoordinates(){
-    mpCameras_ == nullptr;
+    mpCameras_ = nullptr;
+    mpCamID_ = nullptr;
+    mpNor_ = nullptr;
     resetCoordinates();
     camID_ = 0;
-    isLinkedToState_ = false;
   }
 
   /** \brief Constructor
@@ -489,7 +485,6 @@ class FeatureCoordinates{
   FeatureCoordinates(const Camera* mpCameras): mpCameras_(mpCameras){
     resetCoordinates();
     camID_ = 0;
-    isLinkedToState_ = false;
   }
 
   /** \brief Resets the feature coordinates \ref c_, \ref nor_, \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_.
@@ -504,15 +499,14 @@ class FeatureCoordinates{
     sigmaAngle_ = 0.0;
   }
 
-  /** \brief Links the feature with the filter state and sets \ref isLinkedToState_ to true.
+  /** \brief Links the feature with the filter state.
    *
-   *   @param mpCamID - @todo ?
-   *   @param mpNor   - @todo ?
+   *   @param mpCamID - Pointer to camID in filter state.
+   *   @param mpNor   - Pointer to bearing vector in filter state.
    */
   void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor){
     mpCamID_ = mpCamID;
     mpNor_ = mpNor;
-    isLinkedToState_ = true;
   }
 
   /** \brief Sets the feature depth \ref depth_.
@@ -523,18 +517,16 @@ class FeatureCoordinates{
     depth_ = depth;
   }
 
-  /** \brief @todo ?.
+  /** \brief Write the linked variable into the filter state.
    */
   void toState(){
-    assert(isLinkedToState_);  /**<@todo check this.*/
     *mpCamID_ = camID_;
     *mpNor_ = get_nor();
   }
 
-  /** \brief @todo ?.
+  /** \brief Reads the linked variable from the filter state.
    */
   void fromState(){
-    assert(isLinkedToState_);  /**<@todo check this.*/
     camID_ = *mpCamID_;
     set_nor(*mpNor_);
   }
@@ -577,7 +569,6 @@ class FeatureCoordinates{
    *
    *  @param otherCamID - Other camera ID.
    *  @return the appropriate bearing vector \ref nor_ of the camera frame with ID \ref otherCamID.
-   *  @todo check this
    */
   LWF::NormalVectorElement get_nor_other(const int otherCamID) const{
     if(camID_ != otherCamID){
@@ -710,16 +701,16 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   mutable BearingCorners bearingCorners_;  /**<Vectors, pointing from the feature's bearing vector to the bearing vectors
                                                belonging to the pixel coordinates of the midpoint of the patch edges.*/
   mutable bool valid_bearingCorners_;  /**<Specifies if the current bearing corners \ref bearingCorners_ are valid.*/
-  mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from previous frame to the current frame. @todo check this*/
+  mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from current patch to the current frame. */
   mutable bool valid_affineTransform_;  /**<Specifies if the affine transformation \ref affineTransform_ is valid.*/
-  int idx_;  /**<Index. @todo ?*/
-  double initTime_;  /**<@todo ?*/
-  double currentTime_;  /**<@todo ?*/
+  int idx_;  /**<Feature ID.*/
+  double initTime_;  /**<Time of feature initialization.*/
+  double currentTime_;  /**<Time of last featutre measurement.*/
   Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
   float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation, add mutable */
-  int totCount_;  /**<@todo ?*/
-  Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment. @todo check this*/
-  Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment. @todo check this*/
+  int totCount_;  /**<Number of images which have passed since feature initialization.*/
+  Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
+  Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
   Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
 
   FeatureCoordinates log_previous_;
@@ -732,12 +723,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   FeatureCoordinates log_current_;
 
   Status status_;  /**<MultilevelPatchFeature tracking and mapping status.*/
-  std::map<MatchingStatus,int> cumulativeMatchingStatus_;  /**< @todo ?*/
-  std::map<TrackingStatus,int> cumulativeTrackingStatus_;  /**< @todo ?*/
-  int inFrameCount_;  /**< @todo ?*/
-  std::map<double,Status> statistics_;  /**< @todo ?*/
+  std::map<MatchingStatus,int> cumulativeMatchingStatus_;  /**< Count for specific matching status.*/
+  std::map<TrackingStatus,int> cumulativeTrackingStatus_;  /**< Count for specific tracking status.*/
+  int inFrameCount_;  /**<How many times was the feature visible in a frame.*/
+  std::map<double,Status> statistics_;  /**< Accumulation of status (index is the time)*/
 
-  BearingCorners* mpBearingCorners_;  /**< @todo ?*/
+  BearingCorners* mpBearingCorners_;  /**<Pointer to variable of filter state*/
 
   /** Constructor
    */
@@ -757,24 +748,23 @@ class MultilevelPatchFeature: public FeatureCoordinates{
 
   /** \brief Links the MultilevelPatchFeature with a filter state.
    *
-   * @param mpCamID            - ID of the camera object.
-   * @param mpNor              - Feature bearing vector.
-   * @param mpBearingCorners   - Bearing corners of the feature.
-   * @todo complete/check this
+   * @param mpCamID            - Pointer to camera ID in filter state.
+   * @param mpNor              - Pointer to bearing vector in filter state.
+   * @param mpBearingCorners   - Pointer to bearing corners in filter state.
    */
   void linkToState(int* mpCamID, LWF::NormalVectorElement* mpNor, BearingCorners* mpBearingCorners){
     mpBearingCorners_ = mpBearingCorners;
     FeatureCoordinates::linkToState(mpCamID,mpNor);
   }
 
-  /** \brief @todo ?
+  /** \brief Write the linked variable into the filter state.
    */
   void toState(){
     FeatureCoordinates::toState();
     *mpBearingCorners_ = get_bearingCorners();
   }
 
-  /** \brief @todo ?
+  /** \brief Reads the linked variable from the filter state.
    */
   void fromState(){
     FeatureCoordinates::fromState();
@@ -783,7 +773,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
 
   /** \brief Sets the camera.
 
-   * @todo complete this
+   * Sets the pointer to the camera array
    */
   void setCamera(const Camera* mpCameras){
     mpCameras_ = mpCameras;
@@ -791,7 +781,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
 
   /** \brief Resets the MultilevelPatchFeature.
    *
-   * @param idx - @todo ?
+   * @param idx - feature ID
    * @initTime  - Time at initialization.
    */
   void reset(const int idx = -1, const double initTime = 0.0){
@@ -866,8 +856,8 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return bearingCorners_;
   }
 
-  /** \brief Get and sets the affine transformation corresponding to the current \ref pixelCorners_,
-   *        assuming the patch in the previous frame was aligned with the image edges. @todo check this
+  /** \brief Get the affine transformation of the current patch, if not available computes it from the
+   *  current pixelCorners or bearingCorners.
    *
    * @return the affine transformation matrix \ref affineTransform_.
    */
@@ -916,8 +906,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
    *
    * Note: The validity of the pixelCorners_ and of the bearingCorners_ is set to invalid
    *       (\ref valid_pixelCorners_ = false; \ref bearingCorners_ = false).
-   * @param affineTransform - Affine transformation matrix from the previous frame into the current frame, assuming the
-   *                          patch was aligned with the image edges in the previous frame. @todo check this.
+   * @param affineTransform - Affine transformation matrix between patch and current image.
    */
   void set_affineTransfrom(const Eigen::Matrix2f& affineTransform){
     affineTransform_ = affineTransform;
@@ -959,12 +948,11 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return cumulativeTrackingStatus_.at(s) + (int)(status_.trackingStatus_ == s);
   }
 
-  /** \brief How many times did a specific \ref MatchingStatus in the first n frames occur (current status included)?
+  /** \brief How many times did a specific \ref MatchingStatus in the last n frames occur (current status included)?
    *
    * @param s - \ref MatchingStatus of interest.
-   * @param n - \ref First n frames.
-   * @return the number of how many times the \ref MatchingStatus s occured in the first n frames (current status included).
-   * @todo check this
+   * @param n - \ref Last n frames.
+   * @return the number of how many times the \ref MatchingStatus hass occured in the last n frames (current status included).
    */
   int countMatchingStatistics(const MatchingStatus s, const int n) const{
     int c = 0;
@@ -976,12 +964,11 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return c + (int)(status_.matchingStatus_ == s);
   }
 
-  /** \brief How many times did a specific \ref TrackingStatus in the first n frames occur (current status included)?
+  /** \brief How many times did a specific \ref TrackingStatus in the last n frames occur (current status included)?
    *
    * @param s - \ref TrackingStatus of interest.
-   * @param n - \ref First n frames.
-   * @return the number of how many times the \ref TrackingStatus s occured in the first n frames (current status included).
-   * @todo check this
+   * @param n - \ref Last n frames.
+   * @return the number of how many times the \ref TrackingStatus has occured in the last n frames (current status included).
    */
   int countTrackingStatistics(const TrackingStatus s, const int n) const{
     int c = 0;
@@ -993,29 +980,28 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return c + (int)(status_.trackingStatus_ == s);
   }
 
-  /** \brief @todo ?
+  /** \brief Returns the total count of frames since feature initialization (including the current).
    *
-   * @return ?
+   * @return Total count of frames
    */
   int countTot() const{
     return totCount_+1;
   }
 
-  /** \brief @todo ?
+  /** \brief Returns the count of frames since feature initialization where the feature was in the frame (including the current).
    *
-   * @return ?
+   * @return In frame count
    */
   int countTotInFrame() const{
     return inFrameCount_+(int)(status_.inFrame_);
   }
 
   /** \brief Get the local quality of the MultilevelPatchFeature.
-   *         How is the tracking within the local range, OUTLIER/NOTFOUND is worse than not inImage.
+   *         How is the tracking within the local range, OUTLIER/NOTFOUND is worse than not in image.
    *
-   * @param localRange - Have only a look to the first "localRange" frames, where the feature was visible in the frame.
+   * @param localRange - Have only a look at the last "localRange" frames, where the feature was visible in the frame.
    * @return quality value in the range [0, 1] (ratio between tracking number and visibility number).
    *         1 means very good tracking quality.
-   * @todo check this
    */
   double getLocalQuality(const int localRange = 10) const{
     // Local quality of feature for last "inFrames"
@@ -1040,10 +1026,9 @@ class MultilevelPatchFeature: public FeatureCoordinates{
 
   /** \brief Get the local visibility quality of the MultilevelPatchFeature.
    *
-   * @param localRange - Have only a look to the first "localRange" frames.
+   * @param localRange - Have only a look at the last "localRange" frames.
    * @return quality value in the range [0, 1] (ratio between visibility number and localRange).
    *         1 means that the feature was always visible in the considered frames.
-   * @todo check this
    */
   double getLocalVisibilityQuality(const int localRange = 200) const{
     int countTot = 0;
@@ -1057,10 +1042,14 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return static_cast<double>(countInFrame)/static_cast<double>(countTot);
   }
 
-  /** \brief How was the overall tracking of the feature. @todo check this
+  /** \brief How was the overall tracking of the feature. What is the tracking ratio of the feature, whereby the maximal value
+   * is only obtained if a minimum of "frameCountRef" frames has passed since initialization (punishes feature with low feature
+   * count)
    *
-   * @param frameCountRef - @todo
-   * @return @todo
+   * @param frameCountRef - Minimum of frames for maximal quality
+   * @return quality value in the range [0, 1] (tracking ratio of feature).
+   *         1 means that the feature was always tracked
+   *         gets further penalized if a feature ha not a minimum of "frameCountRef" frames
    */
   double getGlobalQuality(const int frameCountRef = 100) const{
     const double trackingRatio = static_cast<double>(countTrackingStatistics(TRACKED))/static_cast<double>(countTot());
@@ -1068,12 +1057,14 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   }
 
 
-  /** \brief Is the current feature a good feature. @todo complete
+  /** \brief Is the current feature a good feature. Combines different quality criteria for deciding if it is a good feature.
+   * The product of local quality and visibility quality is compared with a threshold. This threshold depends on the global
+   * quality (lower if the global quality is good).
    *
-   * @param localRange           -
-   * @param localVisibilityRange -
-   * @param upper                -
-   * @param lower                -
+   * @param localRange           local range for local quality
+   * @param localVisibilityRange local range for visibility quality
+   * @param upper                if the global quality is bad (0) than the combination of local and visibility quality must be above this
+   * @param lower                if the global quality is very good (1) than the combination of local and visibility quality must be above this
    * @return
    */
   bool isGoodFeature(const int localRange = 10, const int localVisibilityRange = 100, const double upper = 0.8, const double lower = 0.1) const{
@@ -1178,7 +1169,13 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     return std::sqrt(error);
   }
 
-  /** \brief @todo ?
+  /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patch extracted from the reference image
+   *         for an specific pyramid level interval.
+   *
+   * @param pyr        - Image pyramid of reference image
+   * @param l1         - Start pyramid level (l1<l2)
+   * @param l2         - End pyramid level (l1<l2)
+   * @return the RMSE value for the patches in the set pyramid level interval.
    */
   float computeAverageDifferenceReprojection(const ImagePyramid<n_levels>& pyr, const int l1, const int l2) const{
     MultilevelPatchFeature<n_levels,patch_size> mlpReprojected;
@@ -1293,16 +1290,14 @@ static void drawPatchBorder(cv::Mat& drawImg, MultilevelPatchFeature<n_levels,pa
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l1          - ... (l1<l2)
- * @param l2          - ... (l1<l2)
- * @param doWarping   -
- * @param A           -
- * @param b           -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l1          - Start pyramid level (l1<l2)
+ * @param l2          - End pyramid level (l1<l2)
+ * @param doWarping   - Should warping be considered
+ * @param A           - Jacobian of the pixel intensities w.r.t. to pixel coordinates
+ * @param b           - Intensity errors
  * @return true, if successful.
- *
- * @todo check and complete this
  */
 template<int n_levels,int patch_size>
 bool getLinearAlignEquations(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2,
@@ -1386,7 +1381,7 @@ bool getLinearAlignEquations(MultilevelPatchFeature<n_levels,patch_size>& mlp, c
 }
 
 
-/** \brief Get the reduced (optimized) linear align equations (A*x=b), given by the [2x2] Matrix A (float)
+/** \brief Get the reduced (QR-decomposition) linear align equations (A*x=b), given by the [2x2] Matrix A (float)
  *         and the [2x1] vector b (float).
  *
  *  \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
@@ -1396,16 +1391,14 @@ bool getLinearAlignEquations(MultilevelPatchFeature<n_levels,patch_size>& mlp, c
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l1          - ... (l1<l2)
- * @param l2          - ... (l1<l2)
- * @param doWarping   -
- * @param A_red       -
- * @param b_red       -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l1          - Start pyramid level (l1<l2)
+ * @param l2          - End pyramid level (l1<l2)
+ * @param doWarping   - Should warping be considered
+ * @param A_red       - Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates
+ * @param b_red       - Reduced intensity errors
  * @return true, if successful.
- *
- * @todo check and complete this
  */
 template<int n_levels,int patch_size>
 bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2,
@@ -1421,7 +1414,7 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>&
   return success;
 }
 
-/** \brief Get the reduced (optimized) linear align equations (A*x=b), given by the [2x2] Matrix A (double)
+/** \brief Get the reduced (QR-decomposition) linear align equations (A*x=b), given by the [2x2] Matrix A (double)
  *         and the [2x1] vector b (double).
  *
  *         \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.
@@ -1431,16 +1424,14 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>&
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l1          - ... (l1<l2)
- * @param l2          - ... (l1<l2)
- * @param doWarping   -
- * @param A_red       -
- * @param b_red       -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l1          - Start pyramid level (l1<l2)
+ * @param l2          - End pyramid level (l1<l2)
+ * @param doWarping   - Should warping be considered
+ * @param A_red       - Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates
+ * @param b_red       - Reduced intensity errors
  * @return true, if successful.
- *
- * @todo check and complete this
  */
 template<int n_levels,int patch_size>
 bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr, const int l1, const int l2,
@@ -1459,16 +1450,14 @@ bool getLinearAlignEquationsReduced(MultilevelPatchFeature<n_levels,patch_size>&
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l1          - ... (l1<l2)
- * @param l2          - ... (l1<l2)
- * @param doWarping   -
- * @param maxIter     -
- * @param minPixUpd   -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l1          - Start pyramid level (l1<l2)
+ * @param l2          - End pyramid level (l1<l2)
+ * @param doWarping   - Should warping be considered
+ * @param maxIter     - Maximal number of iterations
+ * @param minPixUpd   - Termination condition on absolute pixel update
  * @return true, if alignment converged!
- *
- * @todo check and complete this
  */
 template<int n_levels,int patch_size>
 bool align2D_old(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,
@@ -1612,16 +1601,14 @@ bool align2D_old(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePy
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l1          - ... (l1<l2)
- * @param l2          - ... (l1<l2)
- * @param doWarping   -
- * @param maxIter     -
- * @param minPixUpd   -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l1          - Start pyramid level (l1<l2)
+ * @param l2          - End pyramid level (l1<l2)
+ * @param doWarping   - Should warping be considered
+ * @param maxIter     - Maximal number of iterations
+ * @param minPixUpd   - Termination condition on absolute pixel update
  * @return true, if alignment converged!
- *
- * @todo check and complete this
  */
 template<int n_levels,int patch_size>
 bool align2D(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,
@@ -1660,10 +1647,10 @@ bool align2D(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyrami
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param l           -
- * @param doWarping   -
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param l           - Pyramid level which is used for the alignement
+ * @param doWarping   - Should warping be considered
  * @return true, if alignment converged!
  *
  * @todo check and complete this
@@ -1678,14 +1665,12 @@ bool align2DSingleLevel(MultilevelPatchFeature<n_levels,patch_size>& mlp, const 
  *
  * @tparam n_levels   - Total number of pyramid levels. Note : The value of l1 and l2 has to be smaller then n_levels!
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
- * @param mlp         - \ref MultilevelPatchFeature ....
- * @param pyr         -
- * @param start_level -
- * @param end_level   -
- * @param num_seq     -
- * @param doWarping   -
- *
- * @todo check and complete this
+ * @param mlp         - \ref MultilevelPatchFeature, which contains the patches.
+ * @param pyr         - Considered image pyramid.
+ * @param start_level - Starting pyramid level for alignment
+ * @param end_level   - Ending pyramif level for alignment (should be smaller than start_level)
+ * @param num_seq     - On how many levels should the alignment be carried out synchroneously @todo: correct algorithm
+ * @param doWarping   - Should warping be considered
  */
 template<int n_levels,int patch_size>
 void align2DComposed(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){
@@ -1834,12 +1819,11 @@ class MultilevelPatchSet{
  *                                 A small scoreDetectionExponent forces more candidate features into high buckets.
  * @param penaltyDistance        - If a candidate feature has a smaller distance to an existing feature in the mlpSet, it is punished (shifted in an lower bucket) dependent of its actual distance to the existing feature.
  * @param zeroDistancePenalty    - A candidate feature in a specific bucket is shifted zeroDistancePenalty-buckets back to a lower bucket if it has zero distance to an existing feature in the mlpSet.
- * @param requireMax             -
+ * @param requireMax             - Should the adding of maxN be enforced?
  * @param minScore               - Shi-Tomasi Score threshold for the best (highest Shi-Tomasi Score) MultilevelPatchFeature extracted from the candidates list.
  *                                 If the best MultilevelPatchFeature has a Shi-Tomasi Score less than or equal this threshold, the function aborts and returns an empty map.
  *
  * @return an unordered_set, holding the indizes of the MultilevelPatchSet, at which the new MultilevelPatchFeature%s have been added (from the candidates list).
- * @todo describe parameter requireMax
  */
 // TODO: work more on bearing vectors (in general)
 template<int n_levels,int patch_size,int nMax>
@@ -1985,7 +1969,6 @@ void detectFastCorners(const ImagePyramid<n_levels>& pyr, std::list<cv::Point2f>
  * @param mlpSet             - MultilevelPatchSet, containing the existing MultilevelPatchFeature%s .
  * @param candidates         - List of extracted corner coordinates/candidates (defined on pyramid level 0).
  * @param candidateID        - Camera ID, in which the candidates have been extracted.
- * @todo Why t2 = patch_size*patch_size and not t2 = patch_size²+patch_size² = 2*patch_size²
  */
 template<int n_levels,int patch_size,int nMax>
 void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int candidateID){ // TODO: add corner motion dependency
