@@ -245,7 +245,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   bool doVECalibration_;  /**<Do Camera-IMU extrinsic parameter calibration?*/
   DepthMap depthMap_;
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
-  int activeFeature_;  /**<@todo Camera ID?*/
+  int activeFeature_;  /**<@todo %Camera ID?*/
   int activeCameraCounter_;  /**<@todo*/
 };
 
@@ -366,12 +366,12 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief @todo
+/** \brief Class, holding the prediction measurement of the filter.
  */
 class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{
  public:
-  static constexpr unsigned int _acc = 0;  /**<@todo*/
-  static constexpr unsigned int _gyr = _acc+1;   /**<@todo*/
+  static constexpr unsigned int _acc = 0;  /**<Index: Acceleration @todo check*/
+  static constexpr unsigned int _gyr = _acc+1;   /**<Index: Angular Velocity @todo check*/
   /** \brief Constructor
    */
   PredictionMeas(){

@@ -1689,7 +1689,7 @@ void align2DComposed(MultilevelPatchFeature<n_levels,patch_size>& mlp, const Ima
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief Class, storing and handling a set of MultilevelPatchFeature.
+/** \brief Class, storing and handling a set of MultilevelPatchFeature%s.
  *
  * @tparam n_levels   - Total number of pyramid levels for each MultilevelPatchFeature in the set.
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!

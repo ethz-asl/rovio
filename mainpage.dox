@@ -1,8 +1,26 @@
 /*! \mainpage Documentation
  *
  * \section intro_sec Introduction
- *  This is the introduction.
+ *   ROVIO is a visual-inertial odometry framework which, by directly using pixel
+ *   intensity errors of image patches, achieves accurate tracking
+ *   performance while exhibiting a very high level of robustness.
  *
+ *   After detection, the tracking of the multilevel patch features is
+ *   closely coupled to the underlying extended Kalman filter (EKF)
+ *   by directly using the intensity errors as innovation term during
+ *   the update step.  A purely robocentric approach is followed,
+ *   where the location of 3D landmarks are always estimated
+ *   with respect to the current camera pose. Furthermore, the landmark 
+ *   positions are decomposed into a bearing vector and
+ *   a distance parametrization whereby a minimal
+ *   representation of differences on a corresponding σ-Algebra is employed
+ *   in order to achieve better consistency and to improve the
+ *   computational performance. 
+ *   
+ *   Due to the robocentric, inverse-
+ *   distance (selectable) landmark parametrization, the framework does not
+ *   require any initialization procedure, leading to a truly power-
+ *   up-and-go state estimation system. 
  *
  *
  * 

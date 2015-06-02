@@ -42,7 +42,7 @@ namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
-/** \brief @todo
+/** \brief Class, defining the innovation.
  */
 template<typename STATE>
 class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
@@ -183,7 +183,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool doFrameVisualisation_;
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
-  double specialLinearizationThreshold_; /**<If
+  double specialLinearizationThreshold_;
 
   /** \brief Constructor.
    *
