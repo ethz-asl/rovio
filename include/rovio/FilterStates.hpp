@@ -245,7 +245,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   bool doVECalibration_;  /**<Do Camera-IMU extrinsic parameter calibration?*/
   DepthMap depthMap_;
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
-  int activeFeature_;  /**<@todo*/
+  int activeFeature_;  /**<@todo Camera ID?*/
   int activeCameraCounter_;  /**<@todo*/
 };
 
@@ -276,7 +276,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int nMax_ = nMax;
   static constexpr unsigned int nLevels_ = nLevels;
   static constexpr unsigned int patchSize_ = patchSize;
-  static constexpr unsigned int nCam_ = nCam;
+  static constexpr unsigned int nCam_ = nCam;   /**<Total number of cameras. @todo check this*/
   static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
   static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the of the IMU-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/

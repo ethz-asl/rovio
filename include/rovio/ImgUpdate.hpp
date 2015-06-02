@@ -42,6 +42,8 @@ namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
+/** \brief @todo
+ */
 template<typename STATE>
 class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
  public:
@@ -54,6 +56,11 @@ class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
   };
   ~ImgInnovation(){};
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/** \brief Class, holding the image pyramids of the different cameras. @todo complete
+ */
 template<typename STATE>
 class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<STATE>>{
  public:
@@ -77,6 +84,11 @@ class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<S
   bool isValidPyr_[STATE::nCam_];
   double imgTime_;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**  \brief @todo
+ */
 template<typename STATE>
 class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
  public:
@@ -88,6 +100,11 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
   };
   ~ImgUpdateMeas(){};
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**  \brief @todo
+ */
 template<typename STATE>
 class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
  public:
@@ -100,16 +117,26 @@ class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
   };
   ~ImgUpdateNoise(){};
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/** \brief Outlier Detection.
+ */
 template<typename STATE>
 class ImgOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ImgInnovation<STATE>::template getId<ImgInnovation<STATE>::_nor>(),2>>{
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/** \brief Class, holding image update routines for the filter.
+ */
+template<typename STATE>
 template<typename FILTERSTATE>
 class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
-                                    ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
+ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
   typedef LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
-                      ImgOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
+      ImgOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
   using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
@@ -152,11 +179,17 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
   double matchingPixelThreshold_;
   double patchRejectionTh_;
   bool doPatchWarping_;
-  bool useDirectMethod_;
+  bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
+                              If false, the reprojection error is used for the innovation term. @todo check this*/
   bool doFrameVisualisation_;
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
-  double specialLinearizationThreshold_;
+  double specialLinearizationThreshold_; /**<If
+
+  /** \brief Constructor.
+   *
+   *   Loads and sets the needed parameters.
+   */
   ImgUpdate(){
     mpCameras_ = nullptr;
     initCovFeature_.setIdentity();
@@ -214,18 +247,39 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(1,1));
     useImprovedJacobian_ = false; // TODO: adapt/test
   };
+
+  /** \brief Destructor
+   */
   ~ImgUpdate(){};
+
+  /** \brief @todo
+   */
   void refreshProperties(){
     useSpecialLinearizationPoint_ = true; // TODO: make dependent
   };
+
+  /** \brief @todo
+   */
   void setCamera(Camera* mpCameras){
     mpCameras_ = mpCameras;
     pixelOutputCF_.setCamera(mpCameras);
     pixelOutputFromNorCF_.setCamera(mpCameras);
   }
+
+  /** \brief Sets the innovation term.
+   *
+   *  \note If \ref useDirectMethod_ is set true, the innovation term is based directly on pixel intensity errors.
+   *  \note If \ref useDirectMethod_ is set false, the reprojection error is used for the innovation term.
+   *  @param mtInnovation - Class, holding innovation data.
+   *  @param state        - Filter %State.
+   *  @param meas         - Not Used.
+   *  @param noise        - Additive discrete Gaussian noise.
+   *  @param dt           - Not used.
+   *  @todo check this
+   */
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
-    const int& ID = state.template get<mtState::_aux>().activeFeature_;
-    const int& camID = state.template get<mtState::_aux>().camID_[ID];
+    const int& ID = state.template get<mtState::_aux>().activeFeature_;  // Feature ID
+    const int& camID = state.template get<mtState::_aux>().camID_[ID];   // Camera ID of the feature.
     const int& activeCamCounter = state.template get<mtState::_aux>().activeCameraCounter_;
     const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
     if(verbose_){
@@ -241,6 +295,17 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       y.template get<mtInnovation::_nor>() += noise.template get<mtNoise::_nor>();
     }
   }
+
+  /** \brief Computes the Jacobian for the update step of the filter.
+   *
+   *  \note If \ref useDirectMethod_ is set true, the jacobian is set w.r.t. the intensity errors.
+   *  \note If \ref useDirectMethod_ is set false, the jacobian is set w.r.t. the reprojection error.
+   *  @param F     - Jacobian for the update step of the filter.
+   *  @param state - Filter state.
+   *  @param meas  - Not used.
+   *  @param dt    - Not used.
+   *  @todo check this
+   */
   void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     const int& ID = state.template get<mtState::_aux>().activeFeature_;
     const int& camID = state.template get<mtState::_aux>().camID_[ID];
@@ -258,14 +323,25 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       F = -state.template get<mtState::_aux>().A_red_[ID]*c_J*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
     } else {
       F = state.template get<mtState::_aux>().bearingMeas_[ID].getN().transpose()
-            *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureLocationOutput_.template get<FeatureLocationOutput::_nor>(),state.template get<mtState::_aux>().bearingMeas_[ID])
-            *featureLocationOutput_.template get<FeatureLocationOutput::_nor>().getM()*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
+                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureLocationOutput_.template get<FeatureLocationOutput::_nor>(),state.template get<mtState::_aux>().bearingMeas_[ID])
+      *featureLocationOutput_.template get<FeatureLocationOutput::_nor>().getM()*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
     }
   }
+
+  /** \brief @todo
+   */
   void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     G.setZero();
     G.template block<2,2>(mtInnovation::template getId<mtInnovation::_nor>(),mtNoise::template getId<mtNoise::_nor>()) = Eigen::Matrix2d::Identity();
   }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** \brief Prepares the filter state for the update.
+   *
+   *   @param filterState - Filter state.
+   *   @param meas        - Update measurement.
+   */
   void commonPreProcess(mtFilterState& filterState, const mtMeas& meas){
     assert(filterState.t_ == meas.template get<mtMeas::_aux>().imgTime_);
     for(int i=0;i<mtState::nCam_;i++){
@@ -281,6 +357,21 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
 
     // TODO sort feature by covariance and use more accurate ones first
   }
+
+  /** \brief Pre-Processing for the image update.
+   *
+   *  Summary:
+   *  1. Searches a valid MultilevelPatchFeature from the filter state.
+   *  2. Transforms the MultilevelPatchFeature into the target frame.
+   *  3. Executes a 2D patch alignment in the target frame. If unsuccessful go back to step 1.
+   *  4. If bearing error between aligned patch and estimated patch too large, alter linearization point.
+   *     Bearing vector in the state is directly altered to the new aligned position.
+   *
+   *  @param filterState - Filter state.
+   *  @param meas        - Update measurement.
+   *  @param isFinished  - True, if process has finished.
+   *  @todo check and complete.
+   */
   void preProcess(mtFilterState& filterState, const mtMeas& meas, bool& isFinished){
     if(isFinished){ // gets called if this is the first call
       commonPreProcess(filterState,meas);
@@ -292,7 +383,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     Eigen::Vector2d bearingError;
     typename mtFilterState::mtState& state = filterState.state_;
     typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
-    int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
+    int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;   // ID of the current updated feature!!! Initially set to 0.
     int& activeCamCounter = filterState.state_.template get<mtState::_aux>().activeCameraCounter_;
 
     // Actualize camera extrinsics
@@ -303,10 +394,10 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     while(ID < mtState::nMax_ && foundValidMeasurement == false){
       if(filterState.mlps_.isValid_[ID]){
         // Data handling stuff
-        mpFeature = &filterState.mlps_.features_[ID];
-        mpFeature->fromState();
-        mpFeature->setDepth(state.get_depth(ID));
-        const int camID = mpFeature->camID_;
+        mpFeature = &filterState.mlps_.features_[ID];  // Set the feature pointer.
+        mpFeature->fromState();                        // Read the linked variable from the filter state.
+        mpFeature->setDepth(state.get_depth(ID));      // Depth value.
+        const int camID = mpFeature->camID_;           // Camera ID of the feature.
         if(activeCamCounter==0){
           mpFeature->increaseStatistics(filterState.t_);
           if(verbose_){
@@ -403,7 +494,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.template get<mtState::_nor>(ID).getVec().transpose() << std::endl;
                 if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.template get<FeatureLocationOutput::_nor>());
                 if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
-                                                  state.template get<mtState::_aux>().A_red_[ID],state.template get<mtState::_aux>().b_red_[ID])){
+                                                                       state.template get<mtState::_aux>().A_red_[ID],state.template get<mtState::_aux>().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
                   state.template get<mtState::_aux>().bearingMeas_[ID] = patchInTargetFrame.get_nor();
                   foundValidMeasurement = true;
@@ -435,13 +526,26 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           ID++;
         }
       }
-    }
+    }  // while end
     if(ID >= mtState::nMax_){
       isFinished = true;
     }
   };
+
+  /** \brief Post-Processing for the image update.
+   *
+   *  Summary:
+   *  1. Some drawing tasks.
+   *  2. Removal of features with negative depth.
+   *
+   *  @param filterState      - Filter state.
+   *  @param meas             - Update measurement.
+   *  @param outlierDetection - Outlier detection.
+   *  @param isFinished       - True, if process has finished.
+   *  @todo check and complete.
+   */
   void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
-    int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;
+    int& ID = filterState.state_.template get<mtState::_aux>().activeFeature_;  // Get the ID of the updated feature.
     int& activeCamCounter = filterState.state_.template get<mtState::_aux>().activeCameraCounter_;
 
     if(isFinished){
@@ -475,8 +579,8 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
           if(filterState.mlps_.isValid_[i]){
             if(filterState.state_.template get<mtState::_dep>(i) < 1e-8){
               if(verbose_) std::cout << "    \033[33mRemoved feature " << i << " with invalid depth " << filterState.state_.get_depth(i) << "!\033[0m" << std::endl;
-                filterState.mlps_.isValid_[i] = false;
-                filterState.removeFeature(i);
+              filterState.mlps_.isValid_[i] = false;
+              filterState.removeFeature(i);
             }
           }
         }
@@ -489,6 +593,18 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
     }
   };
+
+  /** \brief Final Post-Processing step for the image update.
+   *
+   *  Summary:
+   *  1. For each feature in the state: Extract patches and compute Shi-Tomasi Score.
+   *  2. Removal of bad features from the state.
+   *  3. Get new features and add them to the state.
+   *
+   *  @param filterState      - Filter state.
+   *  @param meas             - Update measurement.
+   *  @todo check and complete.
+   */
   void commonPostProcess(mtFilterState& filterState, const mtMeas& meas){
     // Temps
     float averageScore;
@@ -507,10 +623,11 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
     }
 
     countTracked = 0;
+    // For all features in the state.
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
         mpFeature = &filterState.mlps_.features_[i];
-        mpFeature->fromState(); // Has to be done for every valid feature
+        mpFeature->fromState();                       // Has to be done for every valid feature.
         mpFeature->setDepth(state.get_depth(i));
         const int camID = mpFeature->camID_;
         if(mpFeature->status_.inFrame_){
@@ -525,7 +642,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
             countTracked++;
           }
 
-          // Extract feature patches
+          // Extract feature patches and update Shi-Tomasi score.
           if(mpFeature->status_.trackingStatus_ == TRACKED){
             if(isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false)){
               testFeature.set_c(mpFeature->get_c());
@@ -542,7 +659,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
     }
 
-    // Remove bad feature
+    // Remove bad feature.
     averageScore = filterState.mlps_.getAverageScore(); // TODO improve
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
@@ -563,7 +680,7 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       if(filterState.mlps_.isValid_[featureIndex]){
         mpFeature = &filterState.mlps_.features_[featureIndex];
         if(mpFeature->status_.trackingStatus_ != TRACKED &&
-          !mpFeature->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*removalFactor,trackingLowerBound_*removalFactor)){ // TODO: improve
+            !mpFeature->isGoodFeature(trackingLocalRange_,trackingLocalVisibilityRange_,trackingUpperBound_*removalFactor,trackingLowerBound_*removalFactor)){ // TODO: improve
           filterState.mlps_.isValid_[featureIndex] = false;
           filterState.removeFeature(featureIndex);
         }
@@ -624,6 +741,11 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       }
     }
   }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** \brief @todo
+   */
   void drawVirtualHorizon(mtFilterState& filterState, const int camID = 0){
     typename mtFilterState::mtState& state = filterState.state_;
     cv::rectangle(filterState.img_[camID],cv::Point2f(0,0),cv::Point2f(82,92),cv::Scalar(50,50,50),-1,8,0);

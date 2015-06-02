@@ -59,8 +59,8 @@ class RovioNode{
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
-  ros::Publisher pubPcl_;
-  ros::Publisher pubURays_;
+  ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
+  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
 
   typedef FILTER mtFilter;
   mtFilter* mpFilter_;
@@ -89,6 +89,8 @@ class RovioNode{
   AttitudeToYprCF::mtInputCovMat attitudeOutputCov_;
   AttitudeToYprCF::mtOutputCovMat yprOutputCov_;
 
+  /** \brief Constructor
+   */
   RovioNode(ros::NodeHandle& nh,FILTER* mpFilter): nh_(nh), mpFilter_(mpFilter){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
@@ -102,8 +104,6 @@ class RovioNode{
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("/rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("/rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("/rovio/urays", 1 );
-
-
 
 //    // p21012_equidist_190215
 //    Eigen::Matrix3d R_VM;
@@ -129,11 +129,17 @@ class RovioNode{
     poseMsgSeq_ = 1;
     isInitialized_ = false;
   }
+
+  /** \brief Destructor
+   */
   ~RovioNode(){}
+
+  /** \brief Tests the functionality of the rovio node.
+   */
   void makeTest(){
     mtState testState = mpFilter_->init_.state_;
     unsigned int s = 2;
-    testState.setRandom(s); // TODO: debug with   doVECalibration = false and depthType = 0
+    testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
@@ -172,6 +178,9 @@ class RovioNode{
     featureLocationOutputCFTest.setOutputCameraID(0);
     featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
   }
+
+  /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.
+   */
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
     predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);
     predictionMeas_.template get<mtPredictionMeas::_gyr>() = Eigen::Vector3d(imu_msg->angular_velocity.x,imu_msg->angular_velocity.y,imu_msg->angular_velocity.z);
@@ -184,12 +193,28 @@ class RovioNode{
       isInitialized_ = true;
     }
   }
+
+  /** \brief Image callback for the camera with ID 0
+   *
+   *  @param img - Image message.
+   */
   void imgCallback0(const sensor_msgs::ImageConstPtr & img){
     imgCallback(img,0);
   }
+
+  /** \brief Image callback for the camera with ID 1
+   *
+   * @param img - Image message.
+   */
   void imgCallback1(const sensor_msgs::ImageConstPtr & img){
     if(mtState::nCam_ > 1) imgCallback(img,1); //TODO generalize
   }
+
+  /** \brief Image callback. Adds images (as update measurements) to the filter.
+   *
+   *   @param img   - Image message.
+   *   @param camID - Camera ID.
+   */
   void imgCallback(const sensor_msgs::ImageConstPtr & img, const int camID = 0){
     // Get image from msg
     cv_bridge::CvImagePtr cv_ptr;
@@ -224,13 +249,20 @@ class RovioNode{
       }
     }
   }
+
+  /** \brief Executes the update step of the filter and publishes updated data. @todo check this
+   *
+   *   @param updateTime   - Update Time.
+   */
   void updateAndPublish(const double& updateTime){
     if(isInitialized_){
+
+      // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
       int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
-      mpFilter_->updateSafe(&updateTime); // TODO: continue inly if actually updates
+      mpFilter_->updateSafe(&updateTime); // TODO: continue only if actually updates
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -245,15 +277,19 @@ class RovioNode{
           cv::waitKey(5);
         }
       }
+
+      // Obtain the save filter state.
       mtFilterState& filterState = mpFilter_->safe_;
       mtState& state = mpFilter_->safe_.state_;
       typename mtFilterState::mtFilterCovMat& cov = mpFilter_->safe_.cov_;
       cameraOutputCF_.transformState(state,output_);
       cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
+      // Get the position and orientation.
       Eigen::Vector3d IrIV = output_.template get<mtOutput::_pos>();
       rot::RotationQuaternionPD qVI = output_.template get<mtOutput::_att>();
 
+      // Send camera pose message.
       poseMsg_.header.seq = poseMsgSeq_;
       poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
       poseMsg_.pose.position.x = IrIV(0);
@@ -265,6 +301,7 @@ class RovioNode{
       poseMsg_.pose.orientation.z = qVI.z();
       pubPose_.publish(poseMsg_);
 
+      // Send camera pose.
       tf::StampedTransform tf_transform_v;
       tf_transform_v.frame_id_ = "world";
       tf_transform_v.child_frame_id_ = "camera";
@@ -273,6 +310,7 @@ class RovioNode{
       tf_transform_v.setRotation(tf::Quaternion(qVI.x(),qVI.y(),qVI.z(),qVI.w()));
       tb_.sendTransform(tf_transform_v);
 
+      // Send IMU pose.
       tf::StampedTransform tf_transform;
       tf_transform.frame_id_ = "world";
       tf_transform.child_frame_id_ = "imu";
@@ -283,6 +321,7 @@ class RovioNode{
       tf_transform.setRotation(tf::Quaternion(qMI.x(),qMI.y(),qMI.z(),qMI.w()));
       tb_.sendTransform(tf_transform);
 
+      // Send IMU pose message.
       transformMsg_.header = poseMsg_.header;
       transformMsg_.transform.translation.x = IrIM(0);
       transformMsg_.transform.translation.y = IrIM(1);
@@ -293,16 +332,13 @@ class RovioNode{
       transformMsg_.transform.rotation.w = qMI.w();
       pubTransform_.publish(transformMsg_);
 
-      rovioOutputMsg_.header.seq = poseMsgSeq_;
-      rovioOutputMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+      // Odometry
       odometryMsg_.header.seq = poseMsgSeq_;
       odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-
-      // Odometry
-      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);
+      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // IrIV
       odometryMsg_.pose.pose.position.y = output_.template get<mtOutput::_pos>()(1);
       odometryMsg_.pose.pose.position.z = output_.template get<mtOutput::_pos>()(2);
-      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();
+      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qVI
       odometryMsg_.pose.pose.orientation.x = output_.template get<mtOutput::_att>().x();
       odometryMsg_.pose.pose.orientation.y = output_.template get<mtOutput::_att>().y();
       odometryMsg_.pose.pose.orientation.z = output_.template get<mtOutput::_att>().z();
@@ -315,10 +351,10 @@ class RovioNode{
           odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
         }
       }
-      odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);
+      odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);      // VvV
       odometryMsg_.twist.twist.linear.y = output_.template get<mtOutput::_vel>()(1);
       odometryMsg_.twist.twist.linear.z = output_.template get<mtOutput::_vel>()(2);
-      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);
+      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // VwIV
       odometryMsg_.twist.twist.angular.y = output_.template get<mtOutput::_ror>()(1);
       odometryMsg_.twist.twist.angular.z = output_.template get<mtOutput::_ror>()(2);
       for(unsigned int i=0;i<6;i++){
@@ -330,11 +366,15 @@ class RovioNode{
           odometryMsg_.twist.covariance[j+6*i] = outputCov_(ind1,ind2);
         }
       }
-      rovioOutputMsg_.odometry = odometryMsg_;
+
       attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.template get<mtOutput::_att>();
       attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
       attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
       attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
+
+      rovioOutputMsg_.header.seq = poseMsgSeq_;
+      rovioOutputMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+      rovioOutputMsg_.odometry = odometryMsg_;
       rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
       rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
       rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);

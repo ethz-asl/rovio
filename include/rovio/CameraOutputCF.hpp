@@ -61,9 +61,9 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
   ~CameraOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // IrIV = IrIM + qIM*(MrMV)
+    // VwIV = qVM*MwIM
     // VvV = qVM*(MvM + MwIM x MrMV)
     // qVI = qVM*qIM^T
-    // VwIV = qVM*MwIM
     output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(input.get_MrMV(camID_));
     output.template get<mtOutput::_ror>() = input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
     output.template get<mtOutput::_vel>() =

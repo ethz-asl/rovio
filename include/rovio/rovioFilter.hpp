@@ -63,6 +63,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   typedef typename Base::mtState mtState;
   rovio::Camera cameras_[mtState::nCam_]; // TODO IMG
   std::string cameraCalibrationFile_[mtState::nCam_];
+
+  /** \brief Constructor. Initializes the filter.
+   */
   RovioFilter(){
     std::get<0>(mUpdates_).setCamera(cameras_); // TODO IMG
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.template get<mtState::_aux>().doVECalibration_);
@@ -101,21 +104,36 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
     reset(0.0);
   }
+
+  /** \brief @todo
+   */
   void refreshProperties(){
     for(int camID = 0;camID<mtState::nCam_;camID++){
       cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
     }
     init_.state_.template get<mtState::_aux>().depthMap_.setType(init_.state_.template get<mtState::_aux>().depthTypeInt_);
   };
+
+  /** \brief Destructor
+   */
   ~RovioFilter(){};
 //  void resetToImuPose(V3D IrIM, QPD qMI, double t = 0.0){
 //    init_.state_.initWithImuPose(IrIM,qMI);
 //    reset(t);
 //  }
+
+  /** \brief Resets the filter with an accelerometer measurement.
+   *
+   *  @param fMeasInit - Accelerometer measurement.
+   *  @param t         - Current time. @todo check this
+   */
   void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
     init_.initWithAccelerometer(fMeasInit);
     reset(t);
   }
+
+  /** \brief Sets the transformation between IMU and Camera.
+   */
   void setExtrinsics(const Eigen::Matrix3d& R_VM, const Eigen::Vector3d& VrVM, const int camID = 0){
     rot::RotationMatrixAD R(R_VM);
     init_.state_.template get<mtState::_aux>().qVM_[camID] = QPD(R.getPassive());
