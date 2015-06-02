@@ -130,7 +130,6 @@ class ImgOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ImgInnovati
 
 /** \brief Class, holding image update routines for the filter.
  */
-template<typename STATE>
 template<typename FILTERSTATE>
 class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
 ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
