@@ -107,8 +107,8 @@ class RovioScene{
     const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
 
     for(unsigned int camID=0;camID<mtState::nCam_;camID++){
-      mpSensor_[camID]->W_r_WB_ = state.get_WrWV(camID).template cast<float>();
-      mpSensor_[camID]->q_BW_ = state.get_qVW(camID);
+      mpSensor_[camID]->W_r_WB_ = state.get_WrWC(camID).template cast<float>();
+      mpSensor_[camID]->q_BW_ = state.get_qCW(camID);
 
       std::vector<Eigen::Vector3f> points;
       std::vector<Eigen::Vector3f> lines;

@@ -68,8 +68,8 @@ class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
   }
   ~PixelOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // MrMV = MrMV
-    // qVM = qVM
+    // MrMC = MrMC
+    // qCM = qCM
     cv::Point2f c;
     const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
     mpCameras_[camID].bearingToPixel(input.template get<mtInput::_nor>(ID_),c);
@@ -106,8 +106,8 @@ class PixelOutputFromNorCF:public LWF::CoordinateTransform<FeatureLocationOutput
   }
   ~PixelOutputFromNorCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // MrMV = MrMV
-    // qVM = qVM
+    // MrMC = MrMC
+    // qCM = qCM
     cv::Point2f c;
     mpCameras_[camID_].bearingToPixel(input.template get<mtInput::_nor>(),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);

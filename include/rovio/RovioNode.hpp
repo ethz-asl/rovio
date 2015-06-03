@@ -106,20 +106,20 @@ class RovioNode{
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("/rovio/urays", 1 );
 
 //    // p21012_equidist_190215
-//    Eigen::Matrix3d R_VM;
-//    R_VM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
+//    Eigen::Matrix3d R_CM;
+//    R_CM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
 //            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
 //            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
-//    Eigen::Vector3d VrVM;
-//    VrVM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
+//    Eigen::Vector3d CrCM;
+//    CrCM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
 //    // p21012_radtan_190215 (false)
-//    Eigen::Matrix3d R_VM;
-//    R_VM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
+//    Eigen::Matrix3d R_CM;
+//    R_CM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
 //            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
 //            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
-//    Eigen::Vector3d VrVM;
-//    VrVM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
-//    mpFilter_->mPrediction_.setExtrinsics(R_VM,VrVM);
+//    Eigen::Vector3d CrCM;
+//    CrCM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
+//    mpFilter_->mPrediction_.setExtrinsics(R_CM,CrCM);
 
     poseMsg_.header.frame_id = "/world";
     rovioOutputMsg_.header.frame_id = "/world";
@@ -286,19 +286,19 @@ class RovioNode{
       cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
       // Get the position and orientation.
-      Eigen::Vector3d WrWV = output_.template get<mtOutput::_pos>();
-      rot::RotationQuaternionPD qVW = output_.template get<mtOutput::_att>();
+      Eigen::Vector3d WrWC = output_.template get<mtOutput::_pos>();
+      rot::RotationQuaternionPD qCW = output_.template get<mtOutput::_att>();
 
       // Send camera pose message.
       poseMsg_.header.seq = poseMsgSeq_;
       poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      poseMsg_.pose.position.x = WrWV(0);
-      poseMsg_.pose.position.y = WrWV(1);
-      poseMsg_.pose.position.z = WrWV(2);
-      poseMsg_.pose.orientation.w = qVW.w();
-      poseMsg_.pose.orientation.x = qVW.x();
-      poseMsg_.pose.orientation.y = qVW.y();
-      poseMsg_.pose.orientation.z = qVW.z();
+      poseMsg_.pose.position.x = WrWC(0);
+      poseMsg_.pose.position.y = WrWC(1);
+      poseMsg_.pose.position.z = WrWC(2);
+      poseMsg_.pose.orientation.w = qCW.w();
+      poseMsg_.pose.orientation.x = qCW.x();
+      poseMsg_.pose.orientation.y = qCW.y();
+      poseMsg_.pose.orientation.z = qCW.z();
       pubPose_.publish(poseMsg_);
 
       // Send camera pose.
@@ -306,8 +306,8 @@ class RovioNode{
       tf_transform_v.frame_id_ = "world";
       tf_transform_v.child_frame_id_ = "camera";
       tf_transform_v.stamp_ = ros::Time(mpFilter_->safe_.t_);
-      tf_transform_v.setOrigin(tf::Vector3(WrWV(0),WrWV(1),WrWV(2)));
-      tf_transform_v.setRotation(tf::Quaternion(qVW.x(),qVW.y(),qVW.z(),qVW.w()));
+      tf_transform_v.setOrigin(tf::Vector3(WrWC(0),WrWC(1),WrWC(2)));
+      tf_transform_v.setRotation(tf::Quaternion(qCW.x(),qCW.y(),qCW.z(),qCW.w()));
       tb_.sendTransform(tf_transform_v);
 
       // Send IMU pose.
@@ -335,10 +335,10 @@ class RovioNode{
       // Odometry
       odometryMsg_.header.seq = poseMsgSeq_;
       odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // WrWV
+      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // WrWC
       odometryMsg_.pose.pose.position.y = output_.template get<mtOutput::_pos>()(1);
       odometryMsg_.pose.pose.position.z = output_.template get<mtOutput::_pos>()(2);
-      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qVW
+      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qCW
       odometryMsg_.pose.pose.orientation.x = output_.template get<mtOutput::_att>().x();
       odometryMsg_.pose.pose.orientation.y = output_.template get<mtOutput::_att>().y();
       odometryMsg_.pose.pose.orientation.z = output_.template get<mtOutput::_att>().z();
@@ -351,10 +351,10 @@ class RovioNode{
           odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
         }
       }
-      odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);      // VvV
+      odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);      // CvC
       odometryMsg_.twist.twist.linear.y = output_.template get<mtOutput::_vel>()(1);
       odometryMsg_.twist.twist.linear.z = output_.template get<mtOutput::_vel>()(2);
-      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // VwWV
+      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // CwWC
       odometryMsg_.twist.twist.angular.y = output_.template get<mtOutput::_ror>()(1);
       odometryMsg_.twist.twist.angular.z = output_.template get<mtOutput::_ror>()(2);
       for(unsigned int i=0;i<6;i++){

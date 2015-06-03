@@ -222,8 +222,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     activeFeature_ = 0;
     activeCameraCounter_ = 0;
     for(unsigned int i=0;i<nCam;i++){
-      qVM_[i].setIdentity();
-      MrMV_[i].setZero();
+      qCM_[i].setIdentity();
+      MrMC_[i].setZero();
     }
   };
 
@@ -239,8 +239,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   LWF::NormalVectorElement bearingMeas_[nMax];  /**<@todo*/
   int camID_[nMax];  /**<%Camera ID*/
   BearingCorners bearingCorners_[nMax];
-  QPD qVM_[nCam];  /**<Quaternion Array: IMU coordinates to camera coordinates.*/
-  V3D MrMV_[nCam];  /**<Position Vector Array: Vectors pointing from IMU to the camera frame, expressed in the IMU frame.*/
+  QPD qCM_[nCam];  /**<Quaternion Array: IMU coordinates to camera coordinates.*/
+  V3D MrMC_[nCam];  /**<Position Vector Array: Vectors pointing from IMU to the camera frame, expressed in the IMU frame.*/
   bool doVECalibration_;  /**<Do Camera-IMU extrinsic parameter calibration?*/
   DepthMap depthMap_;
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
@@ -361,48 +361,48 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
 
   //////
 
-  /** \brief Get the quaternion qVM, expressing the IMU-Frame in Camera-Coordinates (IMU Coordinates->%Camera Coordinates).
+  /** \brief Get the quaternion qCM, expressing the IMU-Frame in Camera-Coordinates (IMU Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return the quaternion qVM (IMU Coordinates->%Camera Coordinates).
+   *  @return the quaternion qCM (IMU Coordinates->%Camera Coordinates).
    */
-  QPD get_qVM(const int camID = 0) const{
+  QPD get_qCM(const int camID = 0) const{
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vea>(camID);
     } else {
-      return this->template get<_aux>().qVM_[camID];
+      return this->template get<_aux>().qCM_[camID];
     }
   }
 
   /** \brief Get the position vector pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates (IMU->%Camera, expressed in IMU).
    *
    *  @param camID - %Camera ID
-   *  @return the position vector MrMV (IMU->%Camera, expressed in IMU).
+   *  @return the position vector MrMC (IMU->%Camera, expressed in IMU).
    */
-  V3D get_MrMV(const int camID = 0) const{
+  V3D get_MrMC(const int camID = 0) const{
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vep>(camID);
     } else {
-      return this->template get<_aux>().MrMV_[camID];
+      return this->template get<_aux>().MrMC_[camID];
     }
   }
 
   /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @param camID - %Camera ID
-   *  @return the position vector WrWV (World->%Camera, expressed in World).
+   *  @return the position vector WrWC (World->%Camera, expressed in World).
    */
-  V3D get_WrWV(const int camID = 0) const{
-    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
+  V3D get_WrWC(const int camID = 0) const{
+    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMC(camID));
   }
 
-  /** \brief Get the quaternion qVW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
+  /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return the quaternion qVW (World Coordinates->%Camera Coordinates).
+   *  @return the quaternion qCW (World Coordinates->%Camera Coordinates).
    */
-  QPD get_qVW(const int camID = 0) const{
-    return get_qVM(camID)*this->template get<_att>().inverted();
+  QPD get_qCW(const int camID = 0) const{
+    return get_qCM(camID)*this->template get<_att>().inverted();
   }
 
   /** \brief Get the depth value of a specific feature.

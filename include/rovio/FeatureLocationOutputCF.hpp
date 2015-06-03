@@ -71,8 +71,8 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
     // d_out = ||DrDP||
     // nor_out = DrDP/d_out
     const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    const QPD qDC = input.get_qVM(outputCamID_)*input.get_qVM(camID).inverted(); // TODO: avoid double computation
-    const V3D CrCD = input.get_qVM(camID).rotate(V3D(input.get_MrMV(outputCamID_)-input.get_MrMV(camID)));
+    const QPD qDC = input.get_qCM(outputCamID_)*input.get_qCM(camID).inverted(); // TODO: avoid double computation
+    const V3D CrCD = input.get_qCM(camID).rotate(V3D(input.get_MrMC(outputCamID_)-input.get_MrMC(camID)));
     const V3D CrCP = input.get_depth(ID_)*input.template get<mtInput::_nor>(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     output.template get<mtOutput::_nor>().setFromVector(DrDP);
@@ -83,8 +83,8 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
     double d, d_p, p_d, p_d_p;
     input.template get<mtInput::_aux>().depthMap_.map(input.template get<mtInput::_dep>(ID_),d,d_p,p_d,p_d_p);
     const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    const QPD qDC = input.get_qVM(outputCamID_)*input.get_qVM(camID).inverted(); // TODO: avoid double computation
-    const V3D CrCD = input.get_qVM(camID).rotate(V3D(input.get_MrMV(outputCamID_)-input.get_MrMV(camID)));
+    const QPD qDC = input.get_qCM(outputCamID_)*input.get_qCM(camID).inverted(); // TODO: avoid double computation
+    const V3D CrCD = input.get_qCM(camID).rotate(V3D(input.get_MrMC(outputCamID_)-input.get_MrMC(camID)));
     const V3D CrCP = d*input.template get<mtInput::_nor>(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     const double d_out = DrDP.norm();
@@ -99,8 +99,8 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
     const Eigen::Matrix<double,3,3> J_qDC_qDB = Eigen::Matrix3d::Identity();
     const Eigen::Matrix<double,3,3> J_qDC_qCB = -MPD(qDC).matrix();
     const Eigen::Matrix<double,3,3> J_CrCD_qCB = gSM(CrCD);
-    const Eigen::Matrix<double,3,3> J_CrCD_BrBC = -MPD(input.get_qVM(camID)).matrix();
-    const Eigen::Matrix<double,3,3> J_CrCD_BrBD = MPD(input.get_qVM(camID)).matrix();
+    const Eigen::Matrix<double,3,3> J_CrCD_BrBC = -MPD(input.get_qCM(camID)).matrix();
+    const Eigen::Matrix<double,3,3> J_CrCD_BrBD = MPD(input.get_qCM(camID)).matrix();
 
     const Eigen::Matrix<double,3,1> J_CrCP_d = input.template get<mtInput::_nor>(ID_).getVec()*d_p;
     const Eigen::Matrix<double,3,2> J_CrCP_nor = d*input.template get<mtInput::_nor>(ID_).getM();
