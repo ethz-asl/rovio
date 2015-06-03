@@ -60,14 +60,14 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
   };
   ~CameraOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // IrIV = IrIM + qIM*(MrMV)
-    // VwIV = qVM*MwIM
-    // VvV = qVM*(MvM + MwIM x MrMV)
-    // qVI = qVM*qIM^T
+    // WrWV = WrWM + qWM*(MrMV)
+    // VwWV = qVM*MwWM
+    // VvV = qVM*(MvM + MwWM x MrMV)
+    // qVW = qVM*qWM^T
     output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(input.get_MrMV(camID_));
-    output.template get<mtOutput::_ror>() = input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
+    output.template get<mtOutput::_ror>() = input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwWMmeas_-input.template get<mtInput::_gyb>()));
     output.template get<mtOutput::_vel>() =
-        input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV(camID_)));
+        input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwWMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV(camID_)));
     output.template get<mtOutput::_att>() = input.get_qVM(camID_)*input.template get<mtInput::_att>().inverted();
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
@@ -85,11 +85,11 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
       J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_vep>(camID_)) =
           MPD(input.template get<mtInput::_att>()).matrix();
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vep>(camID_)) =
-          MPD(input.get_qVM(camID_)).matrix()*gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
+          MPD(input.get_qVM(camID_)).matrix()*gSM(V3D(input.template get<mtInput::_aux>().MwWMmeas_-input.template get<mtInput::_gyb>()));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_vea>(camID_)) =
-          gSM(input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>())));
+          gSM(input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwWMmeas_-input.template get<mtInput::_gyb>())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vea>(camID_)) =
-          gSM(input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV())));
+          gSM(input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwWMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_vea>(camID_)) =
           M3D::Identity();
     }

@@ -205,8 +205,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   /** \brief Constructor
    */
   StateAuxiliary(){
-    MwIMest_.setZero();
-    MwIMmeas_.setZero();
+    MwWMest_.setZero();
+    MwWMmeas_.setZero();
     wMeasCov_.setIdentity();
     for(unsigned int i=0;i<nMax;i++){
       A_red_[i].setIdentity();
@@ -231,8 +231,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
    */
   ~StateAuxiliary(){};
 
-  V3D MwIMest_;  /**<@todo*/
-  V3D MwIMmeas_;  /**<@todo*/
+  V3D MwWMest_;  /**<@todo*/
+  V3D MwWMmeas_;  /**<@todo*/
   M3D wMeasCov_;  /**<@todo*/
   Eigen::Matrix2d A_red_[nMax];  /**<Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   Eigen::Vector2d b_red_[nMax];  /**<Reduced intensity errors, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
@@ -390,18 +390,18 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @param camID - %Camera ID
-   *  @return the position vector IrIV (World->%Camera, expressed in World).
+   *  @return the position vector WrWV (World->%Camera, expressed in World).
    */
-  V3D get_IrIV(const int camID = 0) const{
+  V3D get_WrWV(const int camID = 0) const{
     return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMV(camID));
   }
 
-  /** \brief Get the quaternion qVI, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
+  /** \brief Get the quaternion qVW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return the quaternion qVI (World Coordinates->%Camera Coordinates).
+   *  @return the quaternion qVW (World Coordinates->%Camera Coordinates).
    */
-  QPD get_qVI(const int camID = 0) const{
+  QPD get_qVW(const int camID = 0) const{
     return get_qVM(camID)*this->template get<_att>().inverted();
   }
 
@@ -512,12 +512,12 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
    *
-   *  @param IrIM - Position Vector, pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.
-   *  @param qMI  - Quaternion, expressing World-Frame in IMU-Coordinates (IMU->World)
+   *  @param WrWM - Position Vector, pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.
+   *  @param qMW  - Quaternion, expressing World-Frame in IMU-Coordinates (World Coordinates->IMU Coordinates)
    */
-  void initWithImuPose(V3D IrIM, QPD qMI){
-    state_.template get<mtState::_pos>() = qMI.rotate(IrIM);
-    state_.template get<mtState::_att>() = qMI.inverted();
+  void initWithImuPose(V3D WrWM, QPD qMW){
+    state_.template get<mtState::_pos>() = qMW.rotate(WrWM);
+    state_.template get<mtState::_att>() = qMW.inverted();
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the Acceleration-Vector.

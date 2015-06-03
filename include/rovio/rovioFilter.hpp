@@ -117,8 +117,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   /** \brief Destructor
    */
   ~RovioFilter(){};
-//  void resetToImuPose(V3D IrIM, QPD qMI, double t = 0.0){
-//    init_.state_.initWithImuPose(IrIM,qMI);
+//  void resetToImuPose(V3D WrWM, QPD qMW, double t = 0.0){
+//    init_.state_.initWithImuPose(WrWM,qMW);
 //    reset(t);
 //  }
 

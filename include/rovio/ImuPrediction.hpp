@@ -72,9 +72,9 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   };
   ~ImuPrediction(){};
   void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{ // TODO: implement without noise for speed
-    output.template get<mtState::_aux>().MwIMmeas_ = meas.template get<mtMeas::_gyr>();
-    output.template get<mtState::_aux>().MwIMest_ = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
-    const V3D imuRor = output.template get<mtState::_aux>().MwIMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
+    output.template get<mtState::_aux>().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
+    output.template get<mtState::_aux>().MwWMest_ = meas.template get<mtMeas::_gyr>()-state.template get<mtState::_gyb>();
+    const V3D imuRor = output.template get<mtState::_aux>().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
     const V3D dOmega = dt*imuRor;
     QPD dQ = dQ.exponentialMap(-dOmega);
     double d, d_p, p_d, p_d_p;

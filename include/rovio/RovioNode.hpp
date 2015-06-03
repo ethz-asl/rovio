@@ -286,19 +286,19 @@ class RovioNode{
       cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
       // Get the position and orientation.
-      Eigen::Vector3d IrIV = output_.template get<mtOutput::_pos>();
-      rot::RotationQuaternionPD qVI = output_.template get<mtOutput::_att>();
+      Eigen::Vector3d WrWV = output_.template get<mtOutput::_pos>();
+      rot::RotationQuaternionPD qVW = output_.template get<mtOutput::_att>();
 
       // Send camera pose message.
       poseMsg_.header.seq = poseMsgSeq_;
       poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      poseMsg_.pose.position.x = IrIV(0);
-      poseMsg_.pose.position.y = IrIV(1);
-      poseMsg_.pose.position.z = IrIV(2);
-      poseMsg_.pose.orientation.w = qVI.w();
-      poseMsg_.pose.orientation.x = qVI.x();
-      poseMsg_.pose.orientation.y = qVI.y();
-      poseMsg_.pose.orientation.z = qVI.z();
+      poseMsg_.pose.position.x = WrWV(0);
+      poseMsg_.pose.position.y = WrWV(1);
+      poseMsg_.pose.position.z = WrWV(2);
+      poseMsg_.pose.orientation.w = qVW.w();
+      poseMsg_.pose.orientation.x = qVW.x();
+      poseMsg_.pose.orientation.y = qVW.y();
+      poseMsg_.pose.orientation.z = qVW.z();
       pubPose_.publish(poseMsg_);
 
       // Send camera pose.
@@ -306,8 +306,8 @@ class RovioNode{
       tf_transform_v.frame_id_ = "world";
       tf_transform_v.child_frame_id_ = "camera";
       tf_transform_v.stamp_ = ros::Time(mpFilter_->safe_.t_);
-      tf_transform_v.setOrigin(tf::Vector3(IrIV(0),IrIV(1),IrIV(2)));
-      tf_transform_v.setRotation(tf::Quaternion(qVI.x(),qVI.y(),qVI.z(),qVI.w()));
+      tf_transform_v.setOrigin(tf::Vector3(WrWV(0),WrWV(1),WrWV(2)));
+      tf_transform_v.setRotation(tf::Quaternion(qVW.x(),qVW.y(),qVW.z(),qVW.w()));
       tb_.sendTransform(tf_transform_v);
 
       // Send IMU pose.
@@ -315,30 +315,30 @@ class RovioNode{
       tf_transform.frame_id_ = "world";
       tf_transform.child_frame_id_ = "imu";
       tf_transform.stamp_ = ros::Time(mpFilter_->safe_.t_);
-      Eigen::Vector3d IrIM = state.template get<mtState::_pos>();
-      rot::RotationQuaternionPD qMI = state.template get<mtState::_att>().inverted();
-      tf_transform.setOrigin(tf::Vector3(IrIM(0),IrIM(1),IrIM(2)));
-      tf_transform.setRotation(tf::Quaternion(qMI.x(),qMI.y(),qMI.z(),qMI.w()));
+      Eigen::Vector3d WrWM = state.template get<mtState::_pos>();
+      rot::RotationQuaternionPD qMW = state.template get<mtState::_att>().inverted();
+      tf_transform.setOrigin(tf::Vector3(WrWM(0),WrWM(1),WrWM(2)));
+      tf_transform.setRotation(tf::Quaternion(qMW.x(),qMW.y(),qMW.z(),qMW.w()));
       tb_.sendTransform(tf_transform);
 
       // Send IMU pose message.
       transformMsg_.header = poseMsg_.header;
-      transformMsg_.transform.translation.x = IrIM(0);
-      transformMsg_.transform.translation.y = IrIM(1);
-      transformMsg_.transform.translation.z = IrIM(2);
-      transformMsg_.transform.rotation.x = qMI.x();
-      transformMsg_.transform.rotation.y = qMI.y();
-      transformMsg_.transform.rotation.z = qMI.z();
-      transformMsg_.transform.rotation.w = qMI.w();
+      transformMsg_.transform.translation.x = WrWM(0);
+      transformMsg_.transform.translation.y = WrWM(1);
+      transformMsg_.transform.translation.z = WrWM(2);
+      transformMsg_.transform.rotation.x = qMW.x();
+      transformMsg_.transform.rotation.y = qMW.y();
+      transformMsg_.transform.rotation.z = qMW.z();
+      transformMsg_.transform.rotation.w = qMW.w();
       pubTransform_.publish(transformMsg_);
 
       // Odometry
       odometryMsg_.header.seq = poseMsgSeq_;
       odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // IrIV
+      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // WrWV
       odometryMsg_.pose.pose.position.y = output_.template get<mtOutput::_pos>()(1);
       odometryMsg_.pose.pose.position.z = output_.template get<mtOutput::_pos>()(2);
-      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qVI
+      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qVW
       odometryMsg_.pose.pose.orientation.x = output_.template get<mtOutput::_att>().x();
       odometryMsg_.pose.pose.orientation.y = output_.template get<mtOutput::_att>().y();
       odometryMsg_.pose.pose.orientation.z = output_.template get<mtOutput::_att>().z();
@@ -354,7 +354,7 @@ class RovioNode{
       odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);      // VvV
       odometryMsg_.twist.twist.linear.y = output_.template get<mtOutput::_vel>()(1);
       odometryMsg_.twist.twist.linear.z = output_.template get<mtOutput::_vel>()(2);
-      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // VwIV
+      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // VwWV
       odometryMsg_.twist.twist.angular.y = output_.template get<mtOutput::_ror>()(1);
       odometryMsg_.twist.twist.angular.z = output_.template get<mtOutput::_ror>()(2);
       for(unsigned int i=0;i<6;i++){
