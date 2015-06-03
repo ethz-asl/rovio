@@ -39,7 +39,6 @@
 namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
-
 /** \brief Class , allowing the computation of some depth parameterization values.
  */
 class DepthMap{
@@ -350,15 +349,14 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     return this->template get<_att>();
   }
 
-  /** \brief Get the normal vector element belonging to a specific feature i.
+  /** \brief Get the bearing vector belonging to a specific feature i.
    *
-   *  \note The bearing vector can be received by the member function LWF::NormalVectorElement::getVec().
    *  @param i - Feature Index
-   *  @return the normal vector element (bearing vector) of feature i.
+   *  @return the bearing vector of feature i.
    *  @todo check this!
    */
-  LWF::NormalVectorElement get_CfP(const int i) const{
-    return this->template get<_nor>(i);
+  V3D get_CfP(const int i) const{
+    return this->template get<_nor>(i).getVec();
   }
 
   //////

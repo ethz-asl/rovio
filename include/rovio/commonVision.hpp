@@ -1998,6 +1998,70 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/** \brief Get the depth value from the triangulation of two bearing vectors.
+ *
+ *  @param C1fP    - Bearing vector in the reference frame C1 (unit length!).
+ *  @param C2fP    - Bearing vector in another frame C2 (unit length!).
+ *  @param C2rC2C1 - Position vector, pointing from C2 to C1, expressed in cooridantes of C2.
+ *  @param qC2C1   - Quaternion, expressing the orientation of C1 in the C2.
+ *  @param d       - Triangulated depth value along the bearing vector C1fP.
+ *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
+ */
+bool getDepthFromTriangulation(const V3D& C1fP, const V3D& C2fP, const V3D& C2rC2C1, const QPD& qC2C1, double* d)
+{
+  Eigen::Matrix<double,3,2> B;
+  B <<  qC2C1.rotate(C1fP), C2fP;
+  const Eigen::Matrix2d BtB = B.transpose() * B;
+  if(BtB.determinant() < 0.000001)
+    return false;                      // Projection rays almost parallel.
+  const Eigen::Vector2d dv = - BtB.inverse() * B.transpose() * C2rC2C1;
+  *d = fabs(dv[0]);
+  return true;
+}
+
+/** \brief Get the depth uncertainty tau of a triangulated depth value.
+ *
+ *  Consider a bearing vector C1fP in a reference frame and a bearing vector C2fP in a partner frame have been used
+ *  to triangulate a depth value d (along the bearing vector C1fP). Let's call the so gained 3D landmark position P.
+ *  In order to get depth uncertainty value of d (along the bearing vector C1fP), a constant pixel error
+ *  of the detection of C2fP can be projected to the ray of C1fP (to the side which is farther to the reference frame).
+ *  Let's call 3D point corresponding to the maximal pixel error P_plus.
+ *  The depth uncertainty tau is then defined as \f$tau=|(P\_plus - P)|\f$.
+ *
+ *  @param C1fP           - Bearing vector in the reference frame (unit length!).
+ *  @param C2fP           - Bearing vector in another frame (unit length!).
+ *  @param C2rC2C1        - Position vector, pointing from C2 to C1, expressed in cooridantes of C2.
+ *  @param d              - Triangulated depth value along the bearing vector C1fP.
+ *  @param px_error_angle - Angle between the bearing vector C2fP and the bearing vector corresponding to the maximal
+ *                          pixel error. <br>
+ *                          Compute it as: <br>
+ *                           \f$px\_error\_angle = 2 \cdot \arctan{\frac{px\_error}{2 \cdot fx}}\f$ <br>
+ *                          ,where px_error is the assumed pixel error (e.g. 1 pixel) and
+ *                          fx the focal length (expressed in pixel) of the camera belonging to C2fP.
+ * @return the depth uncertainty value \f$tau=|(P\_plus - P)|\f$.
+ */
+float getDepthUncertaintyTau(const V3D& C1fP, const V3D& C1rC1C2, const float d, const float px_error_angle)
+{
+  float t_0 = C1rC1C2(0);
+  float t_1 = C1rC1C2(1);
+  float t_2 = C1rC1C2(2);
+  float a_0 = C1fP(0) * d - t_0;
+  float a_1 = C1fP(1) * d - t_1;
+  float a_2 = C1fP(2) * d - t_2;
+  float t_norm = std::sqrt(t_0 * t_0 + t_1 * t_1 + t_2 * t_2);
+  float a_norm = std::sqrt(a_0 * a_0 + a_1 * a_1 + a_2 * a_2);
+  float alpha = std::acos((C1fP(0) * t_0 + C1fP(1) * t_1 + C1fP(2) * t_2) / t_norm);
+  float beta = std::acos(( a_0 * (-t_0) + a_1 * (-t_1) + a_2 * (-t_2) ) / (t_norm * a_norm));
+  float beta_plus = beta + px_error_angle;
+  float gamma_plus = M_PI - alpha - beta_plus;                             // Triangle angles sum to PI.
+  float d_plus = t_norm * std::sin(beta_plus) / std::sin(gamma_plus);      // Law of sines.
+  return (d_plus - d);                                                     // Tau.
+}
+
+
+
 }
 
 
