@@ -728,17 +728,63 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         filterState.mlps_.features_[i].log_previous_ = static_cast<FeatureCoordinates>(filterState.mlps_.features_[i]);
       }
     }
-    if (doFrameVisualisation_){
-      drawVirtualHorizon(filterState,0);
-      drawVirtualHorizon(filterState,1);
+
+    // Extract more features for backend
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    const double t1_be = (double) cv::getTickCount();
+    std::cout << "-----------------------------------------------------------" << std::endl;
+
+    const int nFeatures = 300;                 // Maximal number of best features.
+    const int penaltyDistance = 20;            // Features are punished (strength inter alia dependent of zeroDistancePenalty),
+                                               // if smaller distance to existing feature.
+    const float scoreDetectionExponent = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
+    const int zeroDistancePenalty = nDetectionBuckets_;
+
+    // Extract a set of corner candidates for the backend.
+    std::list<cv::Point2f> candidates_be;
+    for(int l=endLevel_; l<=startLevel_; l++) {
+      detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_be, l, fastDetectionThreshold_);
     }
 
-    if(verbose_){
-      for(int i=0;i<mtState::nCam_;i++){
-        std::cout << filterState.state_.get_qCM(i) << std::endl;
-        std::cout << filterState.state_.get_MrMC(i).transpose() << std::endl;
+    std::cout << "Backend Feature Extraction: Extracted " << candidates_be.size() << " features candidates." << std::endl;
+
+    // Prune Candidates (needed if mlps not empty)
+    //    for(unsigned int camID=0;camID<mtState::nCam_;camID++){
+    //      pruneCandidates(filterState.mlps_,candidates,searchCamID);
+    //    }
+
+    // Extract the best corner candidates and create a mlps out of them.
+    MultilevelPatchSet<mtFilterState::mtState::nLevels_,mtFilterState::mtState::patchSize_,nFeatures> mlps_be;
+    std::unordered_set<unsigned int> idx_set_be;
+    idx_set_be = addBestCandidates(mlps_be, candidates_be, meas.template get<mtMeas::_aux>().pyr_[searchCamID],
+                                   searchCamID, filterState.t_, endLevel_, startLevel_, nFeatures, nDetectionBuckets_,
+                                   scoreDetectionExponent, penaltyDistance, zeroDistancePenalty, false, 0.0);
+
+    std::cout << "Backend Feature Extraction: Chosen " << mlps_be.getValidCount() << " features from the candidates list." << std::endl;
+
+    // Draw the features of the extracted multilevel patch set.
+    if (doFrameVisualisation_){
+      for(auto it = idx_set_be.begin();it != idx_set_be.end();++it){
+        FeatureCoordinates featureCoordinates;
+        featureCoordinates.set_c(mlps_be.features_[*it].c_);
+        drawPoint(filterState.img_[searchCamID],  featureCoordinates, cv::Scalar(255,0,0));
       }
     }
+
+    const double t2_be = (double) cv::getTickCount();
+    std::cout<<"Backend feature Extraction: Took "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    if (doFrameVisualisation_){
+          drawVirtualHorizon(filterState,0);
+          drawVirtualHorizon(filterState,1);
+        }
+        if(verbose_){
+          for(int i=0;i<mtState::nCam_;i++){
+            std::cout << filterState.state_.get_qCM(i) << std::endl;
+            std::cout << filterState.state_.get_MrMC(i).transpose() << std::endl;
+          }
+        }
+
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

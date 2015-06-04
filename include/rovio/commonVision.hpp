@@ -1805,20 +1805,20 @@ class MultilevelPatchSet{
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
  * @tparam nMax       - Maximum number of MultilevelPatchFeature%s in the MultilevelPatchSet.
  *
- * @param mlpSet                 - MultilevelPatchSet which should be expanded with the best MultilevelPatchFeature%s from the candidates list.
- * @param candidates             - List of candidate feature coordinates.
+ * @param mlpSet                 - MultilevelPatchSet which should be expanded/filled with the best MultilevelPatchFeature%s from the candidates list.
+ * @param candidates             - List of candidate feature coordinates (not altered during execution).
  * @param pyr                    - Image pyramid used to extract the MultilevelPatchFeature%s from the candidates list.
  * @param camID                  - %Camera ID
  * @param initTime               - Current time (time at which the MultilevelPatchFeature%s are created from the candidates list).
  * @param l1                     - Start pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
  * @param l2                     - End pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
- * @param maxN                   - Maximal number of feature which is added at a time (not total).
+ * @param maxN                   - Maximal number of features which are added.
  * @param nDetectionBuckets      - Number of buckets.
  * @param scoreDetectionExponent - Choose it between [0 1]. 1 : Candidate features are sorted linearly into the buckets, depending on their Shi-Tomasi score.
  *                                                          0 : All candidate features are filled into the highest bucket.
  *                                 A small scoreDetectionExponent forces more candidate features into high buckets.
- * @param penaltyDistance        - If a candidate feature has a smaller distance to an existing feature in the mlpSet, it is punished (shifted in an lower bucket) dependent of its actual distance to the existing feature.
- * @param zeroDistancePenalty    - A candidate feature in a specific bucket is shifted zeroDistancePenalty-buckets back to a lower bucket if it has zero distance to an existing feature in the mlpSet.
+ * @param penaltyDistance        - If a candidate feature has a smaller distance to an existing feature in the mlpSet, it is punished (shifted into an lower bucket) dependent of its actual distance to the existing feature and the parameter zeroDistancePenalty.
+ * @param zeroDistancePenalty    - A candidate feature in a specific bucket is shifted zeroDistancePenalty-buckets back to a lower bucket if it has zero distance to an existing feature in the mlpSet. If it has "penaltyDistance"-Distance, it is not shifted.
  * @param requireMax             - Should the adding of maxN be enforced?
  * @param minScore               - Shi-Tomasi Score threshold for the best (highest Shi-Tomasi Score) MultilevelPatchFeature extracted from the candidates list.
  *                                 If the best MultilevelPatchFeature has a Shi-Tomasi Score less than or equal this threshold, the function aborts and returns an empty map.
@@ -1852,7 +1852,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
     return newSet;
   }
 
-  // Make buckets and fill based on score
+  // Make buckets and fill based on score.
   std::vector<std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>> buckets(nDetectionBuckets,std::unordered_set<MultilevelPatchFeature<n_levels,patch_size>*>());
   unsigned int newBucketID;
   float relScore;
@@ -1865,7 +1865,7 @@ std::unordered_set<unsigned int> addBestCandidates(MultilevelPatchSet<n_levels,p
     }
   }
 
-  // Move buckets based on current features
+  // Move buckets based on current features.
   double d2;
   double t2 = pow(penaltyDistance,2);
   bool doDelete;
