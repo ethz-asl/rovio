@@ -103,7 +103,7 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**  \brief @todo
+/**  \brief Class holding the update noise. @todo complete
  */
 template<typename STATE>
 class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
@@ -277,7 +277,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @todo check this
    */
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
-    const int& ID = state.template get<mtState::_aux>().activeFeature_;  // Feature ID
+    const int& ID = state.template get<mtState::_aux>().activeFeature_;  // Feature ID.
     const int& camID = state.template get<mtState::_aux>().camID_[ID];   // Camera ID of the feature.
     const int& activeCamCounter = state.template get<mtState::_aux>().activeCameraCounter_;
     const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
@@ -789,7 +789,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** \brief @todo
+  /** \brief Draws a virtual horizon into the current image of the camera with ID camID
+   *
+   *  @param filterState - Filter state.
+   *  @param camID       - ID of the camera, in which image the horizon should be drawn.
    */
   void drawVirtualHorizon(mtFilterState& filterState, const int camID = 0){
     typename mtFilterState::mtState& state = filterState.state_;
