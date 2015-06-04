@@ -47,6 +47,10 @@
 
 namespace rovio {
 
+/** \brief Class, defining the Rovio Node
+ *
+ *  @tparam FILTER  - \ref rovio::RovioFilter
+ */
 template<typename FILTER>
 class RovioNode{
  public:
@@ -250,7 +254,7 @@ class RovioNode{
     }
   }
 
-  /** \brief Executes the update step of the filter and publishes updated data. @todo check this
+  /** \brief Executes the update step of the filter and publishes the updated data. @todo check this
    *
    *   @param updateTime   - Update Time.
    */

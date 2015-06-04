@@ -198,7 +198,14 @@ class DepthMap{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief Class , defining the auxiliary state of the filter.
+/** \brief Class, defining the auxiliary state of the filter.
+ *
+ *  \see State
+ *
+ *  @tparam nMax      - Maximal number of considered features in the filter state.
+ *  @tparam nLevels   - Total number of pyramid levels considered.
+ *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
+ *  @tparam nCam      - Used total number of cameras.
  */
 template<unsigned int nMax, int nLevels, int patchSize, int nCam>
 class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
@@ -245,13 +252,18 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   bool doVECalibration_;  /**<Do Camera-IMU extrinsic parameter calibration?*/
   DepthMap depthMap_;
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
-  int activeFeature_;  /**<@todo %Camera ID?*/
+  int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<@todo*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief @todo
+/** \brief Filter State.
+ *
+ *  @tparam nMax      - Maximal number of considered features in the filter state.
+ *  @tparam nLevels   - Total number of pyramid levels considered.
+ *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
+ *  @tparam nCam      - Used total number of cameras.
  */
 template<unsigned int nMax, int nLevels, int patchSize, int nCam>
 class State: public LWF::State<
@@ -270,13 +282,13 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
       LWF::ArrayElement<LWF::QuaternionElement,nCam>,
       LWF::ArrayElement<LWF::ScalarElement,nMax>,
       LWF::ArrayElement<LWF::NormalVectorElement,nMax>,
-      StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;
+      StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;  /**<State definition.*/
   using Base::D_;
   using Base::E_;
   static constexpr unsigned int nMax_ = nMax;
   static constexpr unsigned int nLevels_ = nLevels;
   static constexpr unsigned int patchSize_ = patchSize;
-  static constexpr unsigned int nCam_ = nCam;   /**<Total number of cameras. @todo check this*/
+  static constexpr unsigned int nCam_ = nCam;   /**<Total number of cameras.*/
   static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
   static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the of the IMU-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/
@@ -284,7 +296,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int _att = _gyb+1;  /**<Idx. Quaternion qWM: IMU coordinates to World coordinates.*/
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
-  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Depth Parameters @todo complete*/
+  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Depth Parameter*/
   static constexpr unsigned int _nor = _dep+1;  /**<Idx. Bearing Vectors expressed in the Camera frame*/
   static constexpr unsigned int _aux = _nor+1;  /**<Idx. Auxiliary state.*/
 
@@ -367,6 +379,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Class, holding the prediction measurement of the filter.
+ *  @todo check this
  */
 class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{
  public:
@@ -386,7 +399,11 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief @todo
+/** \brief Class, holding the prediction noise for the state members.
+ *
+ *  \see State
+ *  @tparam STATE - Filter State
+ *  @todo complete
  */
 template<typename STATE>
 class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
@@ -432,7 +449,13 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief @todo
+/** \brief Class defining the overall filter state (state, prediction measurement, noise).
+ *
+ *  @tparam nMax      - Maximal number of considered features in the filter state.
+ *  @tparam nLevels   - Total number of pyramid levels considered.
+ *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
+ *  @tparam nCam      - Used total number of cameras.
+ *  @todo check this
  */
 template<unsigned int nMax, int nLevels, int patchSize,int nCam>
 class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true>{
@@ -443,10 +466,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<@todo*/
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
-  cv::Mat img_[nCam]; // Mainly used for drawing
-  cv::Mat patchDrawing_; // Mainly used for drawing
-  double imgTime_;  /**<@todo*/
-  int imageCounter_;  /**<@todo*/
+  cv::Mat img_[nCam];     /**<Mainly used for drawing*/
+  cv::Mat patchDrawing_;  /**<Mainly used for drawing*/
+  double imgTime_;        /**<@todo*/
+  int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps. @todo check this*/
 
   /** \brief Constructor
    */
@@ -480,7 +503,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     }
   }
 
-  /** \brief Initializes the a specific feature state.
+  /** \brief Initializes a specific feature in the filter state.
    *
    *  Note that a bearing vector is described with only 2 parameters.
    *  @param i       - Feature index.
@@ -488,9 +511,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @param d       - Depth value.
    *  @param initCov - Initialization 3x3 Covariance-Matrix.
    *
-   *                     [ Cov(d,d)      Cov(d,nor_1)      Cov(d,nor_2)
-   *                       Cov(nor_1,d)  Cov(nor_1,nor_1)  Cov(nor_1,nor_2)
-   *                       Cov(nor_2,d)  Cov(nor_2,nor_1)  Cov(nor_2,nor_2) ]
+   *                   [ Cov(d,d)      Cov(d,nor_1)      Cov(d,nor_2)
+   *                     Cov(nor_1,d)  Cov(nor_1,nor_1)  Cov(nor_1,nor_2)
+   *                     Cov(nor_2,d)  Cov(nor_2,nor_1)  Cov(nor_2,nor_2) ]
+   *
    *  @todo Complete/Correct
    */
   void initializeFeatureState(unsigned int i, V3D n, double d,const Eigen::Matrix<double,3,3>& initCov){

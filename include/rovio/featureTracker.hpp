@@ -84,7 +84,7 @@ class FeatureTrackerNode{
     cv::destroyWindow("Tracker");
   }
 
-  /** \brief Empty, yet. @todo ?
+  /** \brief Empty, yet.
    */
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
   }
