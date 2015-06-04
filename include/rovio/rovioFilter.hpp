@@ -41,7 +41,10 @@
 namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
-
+/** \brief Class, defining the Rovio Filter.
+ *
+ *  @tparam FILTERSTATE - \ref rovio::FilterState
+ */
 template<typename FILTERSTATE>
 class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>>{
  public:
@@ -105,7 +108,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     reset(0.0);
   }
 
-  /** \brief @todo
+  /** \brief Reloads the camera calibration for all cameras and resets the depth map type.
    */
   void refreshProperties(){
     for(int camID = 0;camID<mtState::nCam_;camID++){
@@ -133,6 +136,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   }
 
   /** \brief Sets the transformation between IMU and Camera.
+   *
+   *  @param R_VM  -  Rotation matrix, expressing the orientation of the IMU  in Camera Cooridinates (IMU Coordinates -> Camera Coordinates).
+   *  @param VrVM  -  Vector, pointing from the camera frame to the IMU frame, expressed in IMU Coordinates.
+   *  @param camID -  ID of the considered camera.
    */
   void setExtrinsics(const Eigen::Matrix3d& R_CM, const Eigen::Vector3d& CrCM, const int camID = 0){
     rot::RotationMatrixAD R(R_CM);

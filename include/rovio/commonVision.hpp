@@ -1805,14 +1805,14 @@ class MultilevelPatchSet{
  * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
  * @tparam nMax       - Maximum number of MultilevelPatchFeature%s in the MultilevelPatchSet.
  *
- * @param mlpSet                 - MultilevelPatchSet which should be expanded with the best MultilevelPatchFeature%s from the candidates list.
+ * @param mlpSet                 - MultilevelPatchSet which should be expanded/filled with the best MultilevelPatchFeature%s from the candidates list.
  * @param candidates             - List of candidate feature coordinates.
  * @param pyr                    - Image pyramid used to extract the MultilevelPatchFeature%s from the candidates list.
  * @param camID                  - %Camera ID
  * @param initTime               - Current time (time at which the MultilevelPatchFeature%s are created from the candidates list).
  * @param l1                     - Start pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
  * @param l2                     - End pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
- * @param maxN                   - Maximal number of feature which is added at a time (not total).
+ * @param maxN                   - Maximal number of features which should be added to the mlpSet.
  * @param nDetectionBuckets      - Number of buckets.
  * @param scoreDetectionExponent - Choose it between [0 1]. 1 : Candidate features are sorted linearly into the buckets, depending on their Shi-Tomasi score.
  *                                                          0 : All candidate features are filled into the highest bucket.
