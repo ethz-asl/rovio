@@ -48,6 +48,8 @@ class YprOutput: public LWF::State<LWF::VectorElement<3>>{
   YprOutput(){
   }
   ~YprOutput(){};
+
+
 };
 
 class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput,true>{
