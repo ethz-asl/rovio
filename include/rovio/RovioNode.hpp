@@ -147,9 +147,9 @@ class RovioNode{
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
-    testState.template get<mtState::_aux>().camID_[0] = mtState::nCam_-1;
+    testState.aux().camID_[0] = mtState::nCam_-1;
     for(int i=0;i<mtState::nMax_;i++){
-      testState.template get<mtState::_aux>().bearingMeas_[i].setRandom(s);
+      testState.aux().bearingMeas_[i].setRandom(s);
     }
 
     // Prediction
@@ -157,15 +157,15 @@ class RovioNode{
 
     // Update
     for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
-      testState.template get<mtState::_aux>().activeFeature_ = i;
-      testState.template get<mtState::_aux>().activeCameraCounter_ = 0;
-      const int camID = testState.template get<mtState::_aux>().camID_[i];
-      int activeCamID = (testState.template get<mtState::_aux>().activeCameraCounter_ + camID)%mtState::nCam_;
+      testState.aux().activeFeature_ = i;
+      testState.aux().activeCameraCounter_ = 0;
+      const int camID = testState.aux().camID_[i];
+      int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
       std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setFeatureID(i);
       std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
       std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
-      testState.template get<mtState::_aux>().activeCameraCounter_ = mtState::nCam_-1;
-      activeCamID = (testState.template get<mtState::_aux>().activeCameraCounter_ + camID)%mtState::nCam_;
+      testState.aux().activeCameraCounter_ = mtState::nCam_-1;
+      activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
       std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
       std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
     }
@@ -290,8 +290,8 @@ class RovioNode{
       cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
       // Get the position and orientation.
-      Eigen::Vector3d WrWC = output_.template get<mtOutput::_pos>();
-      rot::RotationQuaternionPD qCW = output_.template get<mtOutput::_att>();
+      Eigen::Vector3d WrWC = output_.WrWC();
+      rot::RotationQuaternionPD qCW = output_.qCW();
 
       // Send camera pose message.
       poseMsg_.header.seq = poseMsgSeq_;
@@ -319,8 +319,8 @@ class RovioNode{
       tf_transform.frame_id_ = "world";
       tf_transform.child_frame_id_ = "imu";
       tf_transform.stamp_ = ros::Time(mpFilter_->safe_.t_);
-      Eigen::Vector3d WrWM = state.template get<mtState::_pos>();
-      rot::RotationQuaternionPD qMW = state.template get<mtState::_att>().inverted();
+      Eigen::Vector3d WrWM = state.WrWM();
+      rot::RotationQuaternionPD qMW = state.qWM().inverted();
       tf_transform.setOrigin(tf::Vector3(WrWM(0),WrWM(1),WrWM(2)));
       tf_transform.setRotation(tf::Quaternion(qMW.x(),qMW.y(),qMW.z(),qMW.w()));
       tb_.sendTransform(tf_transform);
@@ -339,13 +339,13 @@ class RovioNode{
       // Odometry
       odometryMsg_.header.seq = poseMsgSeq_;
       odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-      odometryMsg_.pose.pose.position.x = output_.template get<mtOutput::_pos>()(0);      // WrWC
-      odometryMsg_.pose.pose.position.y = output_.template get<mtOutput::_pos>()(1);
-      odometryMsg_.pose.pose.position.z = output_.template get<mtOutput::_pos>()(2);
-      odometryMsg_.pose.pose.orientation.w = output_.template get<mtOutput::_att>().w();  // qCW
-      odometryMsg_.pose.pose.orientation.x = output_.template get<mtOutput::_att>().x();
-      odometryMsg_.pose.pose.orientation.y = output_.template get<mtOutput::_att>().y();
-      odometryMsg_.pose.pose.orientation.z = output_.template get<mtOutput::_att>().z();
+      odometryMsg_.pose.pose.position.x = output_.WrWC()(0);
+      odometryMsg_.pose.pose.position.y = output_.WrWC()(1);
+      odometryMsg_.pose.pose.position.z = output_.WrWC()(2);
+      odometryMsg_.pose.pose.orientation.w = output_.qCW().w();
+      odometryMsg_.pose.pose.orientation.x = output_.qCW().x();
+      odometryMsg_.pose.pose.orientation.y = output_.qCW().y();
+      odometryMsg_.pose.pose.orientation.z = output_.qCW().z();
       for(unsigned int i=0;i<6;i++){
         unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
         if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
@@ -355,12 +355,12 @@ class RovioNode{
           odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
         }
       }
-      odometryMsg_.twist.twist.linear.x = output_.template get<mtOutput::_vel>()(0);      // CvC
-      odometryMsg_.twist.twist.linear.y = output_.template get<mtOutput::_vel>()(1);
-      odometryMsg_.twist.twist.linear.z = output_.template get<mtOutput::_vel>()(2);
-      odometryMsg_.twist.twist.angular.x = output_.template get<mtOutput::_ror>()(0);     // CwWC
-      odometryMsg_.twist.twist.angular.y = output_.template get<mtOutput::_ror>()(1);
-      odometryMsg_.twist.twist.angular.z = output_.template get<mtOutput::_ror>()(2);
+      odometryMsg_.twist.twist.linear.x = output_.CvC()(0);
+      odometryMsg_.twist.twist.linear.y = output_.CvC()(1);
+      odometryMsg_.twist.twist.linear.z = output_.CvC()(2);
+      odometryMsg_.twist.twist.angular.x = output_.CwWC()(0);
+      odometryMsg_.twist.twist.angular.y = output_.CwWC()(1);
+      odometryMsg_.twist.twist.angular.z = output_.CwWC()(2);
       for(unsigned int i=0;i<6;i++){
         unsigned int ind1 = mtOutput::template getId<mtOutput::_vel>()+i;
         if(i>=3) ind1 = mtOutput::template getId<mtOutput::_ror>()+i-3;
@@ -371,7 +371,7 @@ class RovioNode{
         }
       }
 
-      attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.template get<mtOutput::_att>();
+      attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.qCW();
       attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
       attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
       attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
@@ -387,27 +387,27 @@ class RovioNode{
       rovioOutputMsg_.ypr_odometry_sigma.z = yprOutputCov_(2,2);
 
       // IMU biases
-      rovioOutputMsg_.acc_bias.x = state.template get<mtState::_acb>()(0);
-      rovioOutputMsg_.acc_bias.y = state.template get<mtState::_acb>()(1);
-      rovioOutputMsg_.acc_bias.z = state.template get<mtState::_acb>()(2);
+      rovioOutputMsg_.acc_bias.x = state.acb()(0);
+      rovioOutputMsg_.acc_bias.y = state.acb()(1);
+      rovioOutputMsg_.acc_bias.z = state.acb()(2);
       rovioOutputMsg_.acc_bias_sigma.x = cov(mtState::template getId<mtState::_acb>()+0,mtState::template getId<mtState::_acb>()+0);
       rovioOutputMsg_.acc_bias_sigma.y = cov(mtState::template getId<mtState::_acb>()+1,mtState::template getId<mtState::_acb>()+1);
       rovioOutputMsg_.acc_bias_sigma.z = cov(mtState::template getId<mtState::_acb>()+2,mtState::template getId<mtState::_acb>()+2);
-      rovioOutputMsg_.gyr_bias.x = state.template get<mtState::_gyb>()(0);
-      rovioOutputMsg_.gyr_bias.y = state.template get<mtState::_gyb>()(1);
-      rovioOutputMsg_.gyr_bias.z = state.template get<mtState::_gyb>()(2);
+      rovioOutputMsg_.gyr_bias.x = state.gyb()(0);
+      rovioOutputMsg_.gyr_bias.y = state.gyb()(1);
+      rovioOutputMsg_.gyr_bias.z = state.gyb()(2);
       rovioOutputMsg_.gyr_bias_sigma.x = cov(mtState::template getId<mtState::_gyb>()+0,mtState::template getId<mtState::_gyb>()+0);
       rovioOutputMsg_.gyr_bias_sigma.y = cov(mtState::template getId<mtState::_gyb>()+1,mtState::template getId<mtState::_gyb>()+1);
       rovioOutputMsg_.gyr_bias_sigma.z = cov(mtState::template getId<mtState::_gyb>()+2,mtState::template getId<mtState::_gyb>()+2);
 
       // Extrinsics
-      rovioOutputMsg_.extrinsics.pose.position.x = state.template get<mtState::_vep>(0)(0);
-      rovioOutputMsg_.extrinsics.pose.position.y = state.template get<mtState::_vep>(0)(1);
-      rovioOutputMsg_.extrinsics.pose.position.z = state.template get<mtState::_vep>(0)(2);
-      rovioOutputMsg_.extrinsics.pose.orientation.w = state.template get<mtState::_vea>(0).w();
-      rovioOutputMsg_.extrinsics.pose.orientation.x = state.template get<mtState::_vea>(0).x();
-      rovioOutputMsg_.extrinsics.pose.orientation.y = state.template get<mtState::_vea>(0).y();
-      rovioOutputMsg_.extrinsics.pose.orientation.z = state.template get<mtState::_vea>(0).z();
+      rovioOutputMsg_.extrinsics.pose.position.x = state.MrMC(0)(0);
+      rovioOutputMsg_.extrinsics.pose.position.y = state.MrMC(0)(1);
+      rovioOutputMsg_.extrinsics.pose.position.z = state.MrMC(0)(2);
+      rovioOutputMsg_.extrinsics.pose.orientation.w = state.qCM(0).w();
+      rovioOutputMsg_.extrinsics.pose.orientation.x = state.qCM(0).x();
+      rovioOutputMsg_.extrinsics.pose.orientation.y = state.qCM(0).y();
+      rovioOutputMsg_.extrinsics.pose.orientation.z = state.qCM(0).z();
       for(unsigned int i=0;i<6;i++){
         unsigned int ind1 = mtState::template getId<mtState::_vep>(0)+i;
         if(i>=3) ind1 = mtState::template getId<mtState::_vea>(0)+i-3;
@@ -417,7 +417,7 @@ class RovioNode{
           rovioOutputMsg_.extrinsics.covariance[j+6*i] = cov(ind1,ind2);
         }
       }
-      attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.template get<mtState::_vea>(0);
+      attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.qCM(0);
       attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(0),mtState::template getId<mtState::_vea>(0));
       attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
       attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
@@ -502,12 +502,12 @@ class RovioNode{
     	  if(filterState.mlps_.isValid_[i]){
 
     	    // Get 3D feature coordinates.
-    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+    		  state.aux().depthMap_.map(filterState.state_.dep(i),d,d_p,p_d,p_d_p);
     		  const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-20*sigma,d_far,d_p,p_d,p_d_p);
+    		  state.aux().depthMap_.map(filterState.state_.dep(i)-20*sigma,d_far,d_p,p_d,p_d_p);
     		  if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
-    		  state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+20*sigma,d_near,d_p,p_d,p_d_p);
-    		  const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+    		  state.aux().depthMap_.map(filterState.state_.dep(i)+20*sigma,d_near,d_p,p_d,p_d_p);
+    		  const LWF::NormalVectorElement middle = filterState.state_.CfP(i);
     		  const Eigen::Vector3f pos = middle.getVec().cast<float>()*d;
     		  const Eigen::Vector3f pos_far = middle.getVec().cast<float>()*d_far;
     		  const Eigen::Vector3f pos_near = middle.getVec().cast<float>()*d_near;

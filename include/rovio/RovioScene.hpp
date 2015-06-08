@@ -118,18 +118,18 @@ class RovioScene{
       const double stretchFactor = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-1)/(filterState.mlps_.features_[0].warpDistance_*2.0);
       for(unsigned int i=0;i<mtState::nMax_;i++){
         if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].camID_ == camID){
-          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i),d,d_p,p_d,p_d_p);
+          state.aux().depthMap_.map(filterState.state_.dep(i),d,d_p,p_d,p_d_p);
           const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)-sigma,d_far,d_p,p_d,p_d_p);
-          if(state.template get<mtState::_aux>().depthMap_.type_ == DepthMap::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
-          state.template get<mtState::_aux>().depthMap_.map(filterState.state_.template get<mtState::_dep>(i)+sigma,d_near,d_p,p_d,p_d_p);
-          const LWF::NormalVectorElement middle = filterState.state_.template get<mtState::_nor>(i);
+          state.aux().depthMap_.map(filterState.state_.dep(i)-sigma,d_far,d_p,p_d,p_d_p);
+          if(state.aux().depthMap_.type_ == DepthMap::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+          state.aux().depthMap_.map(filterState.state_.dep(i)+sigma,d_near,d_p,p_d,p_d_p);
+          const LWF::NormalVectorElement middle = filterState.state_.CfP(i);
           LWF::NormalVectorElement corner[4];
           Eigen::Vector3d cornerVec[4];
           const BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){
-              const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][0]+(2*y-1)*filterState.state_.template get<mtState::_aux>().bearingCorners_[i][1]); // TODO: factor 4
+              const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.aux().bearingCorners_[i][0]+(2*y-1)*filterState.state_.aux().bearingCorners_[i][1]); // TODO: factor 4
               middle.boxPlus(dif,corner[y*2+x]);
               cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
             }

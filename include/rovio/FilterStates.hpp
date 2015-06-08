@@ -320,9 +320,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   ~State(){};
 
   //@{
-  /** \brief Get the position vector pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates (World->IMU, expressed in World).
+  /** \brief Get/Set the position vector pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates (World->IMU, expressed in World).
    *
-   *  @return the position vector WrWM (World->IMU, expressed in World).
+   *  @return a reference to the position vector WrWM (World->IMU, expressed in World).
    */
   inline V3D& WrWM(){
     return this->template get<_pos>();
@@ -333,9 +333,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
+  /** \brief Get/Set the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
    *
-   *  @return the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
+   *  @return a reference to the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
    */
   inline V3D& MvM(){
     return this->template get<_vel>();
@@ -346,9 +346,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the Additive bias on accelerometer acb.
+  /** \brief Get/Set the Additive bias on accelerometer acb.
    *
-   *  @return additive bias on accelerometer acb.
+   *  @return a reference to the additive bias on accelerometer acb.
    */
   inline V3D& acb(){
     return this->template get<_acb>();
@@ -359,9 +359,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the additive bias on gyroscope gyb.
+  /** \brief Get/Set the additive bias on gyroscope gyb.
     *
-    *  @return additive bias on gyroscope gyb.
+    *  @return a reference to the additive bias on gyroscope gyb.
     */
   inline V3D& gyb(){
     return this->template get<_gyb>();
@@ -372,9 +372,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the quaternion qWM, expressing the  IMU-Frame in World-Coordinates (IMU Coordinates->World Coordinates).
+  /** \brief Get/Set the quaternion qWM, expressing the  IMU-Frame in World-Coordinates (IMU Coordinates->World Coordinates).
    *
-   *  @return the quaternion qWM (IMU Coordinates->World Coordinates).
+   *  @return a reference to the quaternion qWM (IMU Coordinates->World Coordinates).
    */
   inline QPD& qWM(){
     return this->template get<_att>();
@@ -385,25 +385,25 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the bearing vector belonging to a specific feature i.
+  /** \brief Get/Set the bearing vector (NormalVectorElement) belonging to a specific feature i.
    *
    *  @param i - Feature Index
-   *  @return the bearing vector of feature i.
+   *  @return a reference to the bearing vector (NormalVectorElement) of feature i.
    *  @todo check this!
    */
-  inline V3D& CfP(const int i = 0){
-    return this->template get<_nor>(i).getVec();
+  inline LWF::NormalVectorElement& CfP(const int i = 0){
+    return this->template get<_nor>(i);
   }
-  inline const V3D& CfP(const int i = 0) const{
-    return this->template get<_nor>(i).getVec();
+  inline const LWF::NormalVectorElement& CfP(const int i = 0) const{
+    return this->template get<_nor>(i);
   }
   //@}
 
   //@{
-  /** \brief Get the quaternion qCM, expressing the IMU-Frame in Camera-Coordinates (IMU Coordinates->%Camera Coordinates).
+  /** \brief Get/Set the quaternion qCM, expressing the IMU-Frame in Camera-Coordinates (IMU Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return the quaternion qCM (IMU Coordinates->%Camera Coordinates).
+   *  @return a reference to the quaternion qCM (IMU Coordinates->%Camera Coordinates).
    */
   inline QPD& qCM(const int camID = 0){
     if(this->template get<_aux>().doVECalibration_){
@@ -422,10 +422,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the position vector pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates (IMU->%Camera, expressed in IMU).
+  /** \brief Get/Set the position vector pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates (IMU->%Camera, expressed in IMU).
    *
    *  @param camID - %Camera ID
-   *  @return the position vector MrMC (IMU->%Camera, expressed in IMU).
+   *  @return a reference to the position vector MrMC (IMU->%Camera, expressed in IMU).
    */
   inline V3D& MrMC(const int camID = 0){
     if(this->template get<_aux>().doVECalibration_){
@@ -444,10 +444,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
+  /** \brief Get/Set the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @param camID - %Camera ID
-   *  @return the position vector WrWC (World->%Camera, expressed in World).
+   *  @return a reference to the position vector WrWC (World->%Camera, expressed in World).
    */
   inline V3D& WrWC(const int camID = 0){
     return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
@@ -458,10 +458,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
+  /** \brief Get/Set the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return the quaternion qCW (World Coordinates->%Camera Coordinates).
+   *  @return a reference to the quaternion qCW (World Coordinates->%Camera Coordinates).
    */
   inline QPD& qCW(const int camID = 0){
     return qCM(camID)*this->template get<_att>().inverted();
@@ -472,15 +472,46 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
+  /** \brief Get/Set the depth parameter of a specific feature i.
+   *
+   *  \note The depth parameter can be either defined as regular depth, inverse depth, logarithmic depth or hyperbolic depth.
+   *        The kind of the depth encoding depends on the defined DepthMap.
+   *
+   *  @param i - Feature Index
+   *  @return a reference to depth parameter of the feature.
+   */
+  inline double& dep(const int i){
+    return this->template get<_dep>(i);
+  }
+  inline const double& dep(const int i) const{
+    return this->template get<_dep>(i);
+  }
+  //@}
+
+  //@{
   /** \brief Get the depth value of a specific feature.
    *
    *  @param i - Feature Index
-   *  @return depth value d of the feature.
+   *  @return the depth value d of the feature.
    */
   double get_depth(const int i) const{
     double d, d_p, p_d, p_d_p;
     this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
     return d;
+  }
+  //@}
+
+  //@{
+  /** \brief Get the auxiliary state.
+   *
+   *  \see StateAuxiliary;
+   *  @return a reference to the auxiliary state.
+   */
+  inline StateAuxiliary<nMax,nLevels,patchSize,nCam>& aux(){
+    return this->template get<_aux>();
+  }
+  inline const StateAuxiliary<nMax,nLevels,patchSize,nCam>& aux() const{
+    return this->template get<_aux>();
   }
   //@}
 
@@ -595,8 +626,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @param qMW  - Quaternion, expressing World-Frame in IMU-Coordinates (World Coordinates->IMU Coordinates)
    */
   void initWithImuPose(V3D WrWM, QPD qMW){
-    state_.template get<mtState::_pos>() = qMW.rotate(WrWM);
-    state_.template get<mtState::_att>() = qMW.inverted();
+    state_.WrWM() = qMW.rotate(WrWM);   //Todo: Why do we initialize "_pos" with MrWM? Should we not initialize it with WrWM?
+    state_.qWM()  = qMW.inverted();
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the Acceleration-Vector.
@@ -607,9 +638,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   void initWithAccelerometer(const V3D& fMeasInit){
     V3D unitZ(0,0,1);
     if(fMeasInit.norm()>1e-6){
-      state_.template get<mtState::_att>().setFromVectors(unitZ,fMeasInit);
+      state_.qWM().setFromVectors(unitZ,fMeasInit);
     } else {
-      state_.template get<mtState::_att>().setIdentity();
+      state_.qWM().setIdentity();
     }
   }
 
@@ -628,8 +659,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @todo Complete/Correct
    */
   void initializeFeatureState(unsigned int i, V3D n, double d,const Eigen::Matrix<double,3,3>& initCov){
-    state_.template get<mtState::_dep>(i) = d;
-    state_.template get<mtState::_nor>(i).setFromVector(n);
+    state_.dep(i) = d;
+    state_.CfP(i).setFromVector(n);
     cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_dep>(i)).setZero();
     cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_dep>(i),0).setZero();
     cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_nor>(i)).setZero();
@@ -645,8 +676,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @param i       - Feature index.
    */
   void removeFeature(unsigned int i){
-    state_.template get<mtState::_dep>(i) = 1.0;
-    state_.template get<mtState::_nor>(i).setIdentity();
+    state_.dep(i) = 1.0;
+    state_.CfP(i).setIdentity();
     cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_dep>(i)).setZero();
     cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_dep>(i),0).setZero();
     cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_nor>(i)).setZero();
