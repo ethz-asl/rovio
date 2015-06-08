@@ -319,104 +319,159 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    */
   ~State(){};
 
-  // New
-
+  //@{
   /** \brief Get the position vector pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates (World->IMU, expressed in World).
    *
    *  @return the position vector WrWM (World->IMU, expressed in World).
    */
-  V3D get_WrWM() const{
+  inline V3D& WrWM(){
     return this->template get<_pos>();
   }
+  inline const V3D& WrWM() const{
+    return this->template get<_pos>();
+  }
+  //@}
 
+  //@{
   /** \brief Get the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
    *
    *  @return the absolute velocity vector of the IMU-Frame MvM, expressed in IMU-Coordinates.
    */
-  V3D get_MvM() const{
+  inline V3D& MvM(){
     return this->template get<_vel>();
   }
+  inline const V3D& MvM() const{
+    return this->template get<_vel>();
+  }
+  //@}
 
+  //@{
   /** \brief Get the Additive bias on accelerometer acb.
    *
    *  @return additive bias on accelerometer acb.
    */
-  V3D get_acb() const{
+  inline V3D& acb(){
     return this->template get<_acb>();
   }
+  inline const V3D& acb() const{
+    return this->template get<_acb>();
+  }
+  //@}
 
+  //@{
   /** \brief Get the additive bias on gyroscope gyb.
-   *
-   *  @return additive bias on gyroscope gyb.
-   */
-  V3D get_gyb() const{
+    *
+    *  @return additive bias on gyroscope gyb.
+    */
+  inline V3D& gyb(){
     return this->template get<_gyb>();
   }
+  inline const V3D& gyb() const{
+    return this->template get<_gyb>();
+  }
+  //@}
 
+  //@{
   /** \brief Get the quaternion qWM, expressing the  IMU-Frame in World-Coordinates (IMU Coordinates->World Coordinates).
    *
    *  @return the quaternion qWM (IMU Coordinates->World Coordinates).
    */
-  QPD get_qWM() const{
+  inline QPD& qWM(){
     return this->template get<_att>();
   }
+  inline const QPD& qWM() const{
+    return this->template get<_att>();
+  }
+  //@}
 
+  //@{
   /** \brief Get the bearing vector belonging to a specific feature i.
    *
    *  @param i - Feature Index
    *  @return the bearing vector of feature i.
    *  @todo check this!
    */
-  V3D get_CfP(const int i) const{
+  inline V3D& CfP(const int i = 0){
     return this->template get<_nor>(i).getVec();
   }
+  inline const V3D& CfP(const int i = 0) const{
+    return this->template get<_nor>(i).getVec();
+  }
+  //@}
 
-  //////
-
+  //@{
   /** \brief Get the quaternion qCM, expressing the IMU-Frame in Camera-Coordinates (IMU Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
    *  @return the quaternion qCM (IMU Coordinates->%Camera Coordinates).
    */
-  QPD get_qCM(const int camID = 0) const{
+  inline QPD& qCM(const int camID = 0){
+    if(this->template get<_aux>().doVECalibration_){
+          return this->template get<_vea>(camID);
+        } else {
+          return this->template get<_aux>().qCM_[camID];
+        }
+  }
+  inline const QPD& qCM(const int camID = 0) const{
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vea>(camID);
     } else {
       return this->template get<_aux>().qCM_[camID];
     }
   }
+  //@}
 
+  //@{
   /** \brief Get the position vector pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates (IMU->%Camera, expressed in IMU).
    *
    *  @param camID - %Camera ID
    *  @return the position vector MrMC (IMU->%Camera, expressed in IMU).
    */
-  V3D get_MrMC(const int camID = 0) const{
+  inline V3D& MrMC(const int camID = 0){
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vep>(camID);
     } else {
       return this->template get<_aux>().MrMC_[camID];
     }
   }
+  inline const V3D& MrMC(const int camID = 0) const{
+    if(this->template get<_aux>().doVECalibration_){
+      return this->template get<_vep>(camID);
+    } else {
+      return this->template get<_aux>().MrMC_[camID];
+    }
+  }
+  //@}
 
+  //@{
   /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @param camID - %Camera ID
    *  @return the position vector WrWC (World->%Camera, expressed in World).
    */
-  V3D get_WrWC(const int camID = 0) const{
-    return this->template get<_pos>()+this->template get<_att>().rotate(get_MrMC(camID));
+  inline V3D& WrWC(const int camID = 0){
+    return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
   }
+  inline const V3D& WrWC(const int camID = 0) const{
+    return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
+  }
+  //@}
 
+  //@{
   /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
    *  @return the quaternion qCW (World Coordinates->%Camera Coordinates).
    */
-  QPD get_qCW(const int camID = 0) const{
-    return get_qCM(camID)*this->template get<_att>().inverted();
+  inline QPD& qCW(const int camID = 0){
+    return qCM(camID)*this->template get<_att>().inverted();
   }
+  inline const QPD& qCW(const int camID = 0) const{
+    return qCM(camID)*this->template get<_att>().inverted();
+  }
+  //@}
 
+  //@{
   /** \brief Get the depth value of a specific feature.
    *
    *  @param i - Feature Index
@@ -427,6 +482,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
     return d;
   }
+  //@}
 
 };
 

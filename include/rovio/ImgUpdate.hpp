@@ -735,8 +735,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
     if(verbose_){
       for(int i=0;i<mtState::nCam_;i++){
-        std::cout << filterState.state_.get_qCM(i) << std::endl;
-        std::cout << filterState.state_.get_MrMC(i).transpose() << std::endl;
+        std::cout << filterState.state_.qCM(i) << std::endl;
+        std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
       }
     }
   }
