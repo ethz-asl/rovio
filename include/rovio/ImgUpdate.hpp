@@ -743,51 +743,63 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
 
-    // Extract more features for backend
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Backend Start
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //std::cout << "-----------------------------------------------------------" << std::endl;
+    BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state = &(filterState.state_.aux().backend_state_);
+
+    // 1) Extract a set of corner candidates for the backend.
     const double t1_be = (double) cv::getTickCount();
-    std::cout << "-----------------------------------------------------------" << std::endl;
-
-    const int nFeatures = 300;                 // Maximal number of best features.
-    const int penaltyDistance = 20;            // Features are punished (strength inter alia dependent of zeroDistancePenalty),
-                                               // if smaller distance to existing feature.
-    const float scoreDetectionExponent = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
-    const int zeroDistancePenalty = nDetectionBuckets_;
-
-    // Extract a set of corner candidates for the backend.
-    std::list<cv::Point2f> candidates_be;
+    std::list<cv::Point2f> candidates_backend;
     for(int l=endLevel_; l<=startLevel_; l++) {
-      detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_be, l, fastDetectionThreshold_);
+      detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_backend, l, fastDetectionThreshold_);
     }
+    const double t2_be = (double) cv::getTickCount();
+    //std::cout << "Backend Feature Extraction: Extracted " << candidates_backend.size() << " features candidates." << std::endl;
 
-    std::cout << "Backend Feature Extraction: Extracted " << candidates_be.size() << " features candidates." << std::endl;
+    // 2) Extract the best corner candidates and create a mlps out of them.
+    //    Initializes added features with bearing vector and current cameraID.
+    const double t3_be = (double) cv::getTickCount();
+    std::unordered_set<unsigned int> idx_set_backend;
+    idx_set_backend = addBestCandidates(*(backend_state->mlps_), candidates_backend, meas.template get<mtMeas::_aux>().pyr_[searchCamID],
+                                        searchCamID, filterState.t_, endLevel_, startLevel_, backend_state->nMaxFeatures_, nDetectionBuckets_,
+                                        backend_state->scoreDetectionExponent_, backend_state->penaltyDistance_, backend_state->zeroDistancePenalty_, false, 0.0);
+    const double t4_be = (double) cv::getTickCount();
+    //std::cout << "Backend Feature Extraction: Chosen " << filterState.state_.aux().backend_state_.mlps_->getValidCount() << " features from the candidates list." << std::endl;
 
-    // Prune Candidates (needed if mlps not empty)
-    //    for(unsigned int camID=0;camID<mtState::nCam_;camID++){
-    //      pruneCandidates(filterState.mlps_,candidates,searchCamID);
-    //    }
+    // 3) Initialize the new added features.
+    const double t5_be = (double) cv::getTickCount();
+    for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+      backend_state->mlps_->features_[*it].setCamera(mpCameras_);
+      backend_state->mlps_->features_[*it].status_.inFrame_ = true;
+      backend_state->mlps_->features_[*it].status_.matchingStatus_ = FOUND;
+      backend_state->mlps_->features_[*it].status_.trackingStatus_ = TRACKED;
+      backend_state->mlps_->features_[*it].depth_ = 1.0;  // Initialize depth.
+    }
+    const double t6_be = (double) cv::getTickCount();
 
-    // Extract the best corner candidates and create a mlps out of them.
-    MultilevelPatchSet<mtFilterState::mtState::nLevels_,mtFilterState::mtState::patchSize_,nFeatures> mlps_be;
-    std::unordered_set<unsigned int> idx_set_be;
-    idx_set_be = addBestCandidates(mlps_be, candidates_be, meas.template get<mtMeas::_aux>().pyr_[searchCamID],
-                                   searchCamID, filterState.t_, endLevel_, startLevel_, nFeatures, nDetectionBuckets_,
-                                   scoreDetectionExponent, penaltyDistance, zeroDistancePenalty, false, 0.0);
-
-    std::cout << "Backend Feature Extraction: Chosen " << mlps_be.getValidCount() << " features from the candidates list." << std::endl;
-
-    // Draw the features of the extracted multilevel patch set.
+    // 4) Draw the features of the extracted multilevel patch set.
+    const double t7_be = (double) cv::getTickCount();
     if (doFrameVisualisation_){
-      for(auto it = idx_set_be.begin();it != idx_set_be.end();++it){
+      for(int i = 0; i < backend_state->nMaxFeatures_;++i){
         FeatureCoordinates featureCoordinates;
-        featureCoordinates.set_c(mlps_be.features_[*it].c_);
+        featureCoordinates.set_c(backend_state->mlps_->features_[i].c_);
         drawPoint(filterState.img_[searchCamID],  featureCoordinates, cv::Scalar(255,0,0));
       }
     }
+    const double t8_be = (double) cv::getTickCount();
 
-    const double t2_be = (double) cv::getTickCount();
-    std::cout<<"Backend feature Extraction: Took "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+    // 5) Output of timing data
+//    std::cout<<"Detecting fast corners took: "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+//    std::cout<<"Adding best candidates took: "<<(t4_be-t3_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+//    std::cout<<"Update feature state took: "<<(t6_be-t5_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+//    std::cout<<"Visualization took: "<<(t8_be-t7_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+//    std::cout<<"Whole process took: "<<(t8_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Backend End
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     if (doFrameVisualisation_){
           drawVirtualHorizon(filterState,0);
           drawVirtualHorizon(filterState,1);

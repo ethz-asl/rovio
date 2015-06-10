@@ -196,7 +196,35 @@ class DepthMap{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<int nLevels, int patchSize, int nCam>
+class BackendState {
 
+ public:
+
+  BackendState() {
+    activeFeature_ = 0;
+    activeCameraCounter_ = 0;
+    mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
+  }
+  ~BackendState() {}
+
+  // Parameters
+  static constexpr int nMaxFrames_ = 40;          // Maximal number of frames a feature should be found and stored.
+  static constexpr int nMaxFeatures_ = 300;       // Maximal number of best features per frame.
+  static constexpr int penaltyDistance_ = 20;     // Features are punished (strength inter alia dependent of zeroDistancePenalty),
+                                                  // if smaller distance to existing feature.
+  static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
+  static constexpr int zeroDistancePenalty_ = 5;
+
+  // Storage
+
+  // Temporary Variables
+  int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
+  int activeCameraCounter_;  /**<@todo*/
+
+  std::shared_ptr<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>> mlps_;  // Current multilevel patch set.
+};
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /** \brief Class, defining the auxiliary state of the filter.
  *
  *  \see State
@@ -253,6 +281,9 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<@todo*/
+
+  // Backend
+  BackendState<nLevels,patchSize,nCam> backend_state_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

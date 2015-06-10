@@ -146,15 +146,12 @@ class RovioNode{
     testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
-
     testState.aux().camID_[0] = mtState::nCam_-1;
     for(int i=0;i<mtState::nMax_;i++){
       testState.aux().bearingMeas_[i].setRandom(s);
     }
-
     // Prediction
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
-
     // Update
     for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
       testState.aux().activeFeature_ = i;
@@ -169,7 +166,6 @@ class RovioNode{
       std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
       std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
     }
-
     // CF
     cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
     attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);

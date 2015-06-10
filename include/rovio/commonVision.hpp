@@ -542,7 +542,7 @@ class FeatureCoordinates{
       if(valid_nor_ && mpCameras_[camID_].bearingToPixel(nor_,c_)){
         valid_c_ = true;
       } else {
-        std::cout << "ERROR: No valid coordinate data!" << std::endl;
+        std::cout << "ERROR: No valid coordinate data! " << std::endl;
       }
     }
     return c_;
@@ -559,7 +559,7 @@ class FeatureCoordinates{
       if(valid_c_ && mpCameras_[camID_].pixelToBearing(c_,nor_)){
         valid_nor_ = true;
       } else {
-        std::cout << "ERROR: No valid coordinate data!" << std::endl;
+        std::cout << "ERROR: No valid coordinate data! " << std::endl;
       }
     }
     return nor_;
@@ -1824,6 +1824,8 @@ class MultilevelPatchSet{
  *                                 If the best MultilevelPatchFeature has a Shi-Tomasi Score less than or equal this threshold, the function aborts and returns an empty map.
  *
  * @return an unordered_set, holding the indizes of the MultilevelPatchSet, at which the new MultilevelPatchFeature%s have been added (from the candidates list).
+ *
+ * \note The added features (MultilevelPatchFeature%s) are initialized as follows: \ref MultilevelPatchFeature::camID_ = camID, \ref MultilevelPatchFeature::valid_nor_ = true and \ref MultilevelPatchFeature::nor_ = "feature bearing vector".
  */
 // TODO: work more on bearing vectors (in general)
 template<int n_levels,int patch_size,int nMax>
@@ -1982,6 +1984,7 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
       if(mlpSet.isValid_[i]){
         mpFeature = &mlpSet.features_[i];
         featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
+        LWF::NormalVectorElement test = featureCoordinates.get_nor_other(candidateID);
         featureCoordinates.set_nor(featureCoordinates.get_nor_other(candidateID));
         featureCoordinates.camID_ = candidateID;
         if(featureCoordinates.isInFront() && pow(it->x-featureCoordinates.get_c().x,2) + pow(it->y-featureCoordinates.get_c().y,2) < t2){ // TODO: check inFrame, only if covariance not too large

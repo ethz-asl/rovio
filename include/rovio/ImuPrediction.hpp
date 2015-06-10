@@ -72,6 +72,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   };
   ~ImuPrediction(){};
   void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{ // TODO: implement without noise for speed
+
     output.aux().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
     output.aux().MwWMest_  = meas.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuRor = output.aux().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
@@ -80,19 +81,25 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     double d, d_p, p_d, p_d_p;
     LWF::NormalVectorElement tempNormal;
     LWF::NormalVectorElement oldBearing;
+
     for(unsigned int i=0;i<mtState::nMax_;i++){
       const int camID = state.aux().camID_[i];
       const V3D camRor = state.qCM(camID).rotate(imuRor);
       const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-      oldBearing = state.CfP(i);
-      state.aux().depthMap_.map(state.dep(i),d,d_p,p_d,p_d_p);
+      oldBearing = state.CfP(i);  // Old bearing vector.
+      state.aux().depthMap_.map(state.dep(i),d,d_p,p_d,p_d_p); // Depth value of feature i.
+
+      // New depth value.
       output.dep(i) = state.dep(i)-dt*p_d
           *oldBearing.getVec().transpose()*camVel + noise.template get<mtNoise::_dep>(i)*sqrt(dt);
+
+      // Get new bearing vector.
       V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d
           + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor)
           + oldBearing.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
       output.CfP(i) = oldBearing.rotated(qm);
+
       // WARP corners
       for(unsigned int j=0;j<2;j++){
         oldBearing.boxPlus(state.aux().bearingCorners_[i][j],tempNormal);
@@ -103,6 +110,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
         tempNormal.boxMinus(output.CfP(i),output.aux().bearingCorners_[i][j]);
       }
     }
+
     output.WrWM() = state.WrWM()-dt*(state.qWM().rotate(state.MvM())
         -noise.template get<mtNoise::_pos>()/sqrt(dt));
     output.MvM() = (M3D::Identity()-gSM(dOmega))*state.MvM()
@@ -115,9 +123,12 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>(i)*sqrt(dt));
       output.qCM(i) = dQ*state.qCM(i);
     }
+
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
   }
+
+
   void noMeasCase(mtFilterState& filterState, mtMeas& meas, double dt){
     meas.template get<mtMeas::_gyr>() = filterState.state_.gyb();
     meas.template get<mtMeas::_acc>() = filterState.state_.acb()-filterState.state_.qWM().inverseRotate(g_);
