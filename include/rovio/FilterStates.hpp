@@ -196,17 +196,17 @@ class DepthMap{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<int nLevels, int patchSize, int nCam>
-class BackendState {
-
+class VF
+{
  public:
+};
 
-  BackendState() {
-    activeFeature_ = 0;
-    activeCameraCounter_ = 0;
-    mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
-  }
-  ~BackendState() {}
+
+
+template<int nLevels, int patchSize, int nCam>
+class BackendState
+{
+ public:
 
   // Parameters
   static constexpr int nMaxFrames_ = 40;          // Maximal number of frames a feature should be found and stored.
@@ -216,12 +216,28 @@ class BackendState {
   static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
   static constexpr int zeroDistancePenalty_ = 5;
 
-  // Storage
 
-  // Temporary Variables
-  int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
-  int activeCameraCounter_;  /**<@todo*/
+  BackendState() {
+    mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
 
+    // Initialize features.
+    for(unsigned int i=0;i<nMaxFeatures_;i++){
+      LWF::NormalVectorElement nor;
+      nor.setFromVector(V3D(0,0,1));
+      mlps_->features_[i].set_nor(nor);
+      mlps_->features_[i].bearingCorners_[0].setZero();
+      mlps_->features_[i].bearingCorners_[1].setZero();
+      mlps_->features_[i].camID_ = 0;
+      mlps_->features_[i].setDepth(1.0);  // Initialize depth value.
+    }
+  }
+  ~BackendState() {}
+
+
+  // Storage.
+
+
+  // Temporary variables.
   std::shared_ptr<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>> mlps_;  // Current multilevel patch set.
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

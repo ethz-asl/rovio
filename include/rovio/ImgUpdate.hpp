@@ -411,12 +411,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         mpFeature->fromState();                        // Read the linked variable from the filter state.
         mpFeature->setDepth(state.get_depth(ID));      // Depth value.
         const int camID = mpFeature->camID_;           // Camera ID of the feature.
+
         if(activeCamCounter==0){
           mpFeature->increaseStatistics(filterState.t_);
           if(verbose_){
             std::cout << "=========== Feature " << ID << " ==================================================== " << std::endl;
           }
         }
+
         const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
         if(verbose_){
           std::cout << "  ========== Camera  " << activeCamID << " ================= " << std::endl;
@@ -443,7 +445,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           pixelOutputFromNorCF_.transformState(featureLocationOutput_,pixelOutput_);
           pixelOutputFromNorCF_.transformCovMat(featureLocationOutput_,featureLocationCov_,pixelOutputCov_);
 
-          // Visualization
+          // Visualization of the uncertainty ellipses.
           if(doFrameVisualisation_){
             FeatureCoordinates featureCoordinates(mpCameras_);
             featureCoordinates.set_c(pixelOutput_.getPoint2f());
@@ -586,7 +588,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         if(doFrameVisualisation_) drawPatchBorder(filterState.img_[activeCamID],drawPatch,4.0,cv::Scalar(0,0,255));
       }
 
-      // Remove negative feature
+      // Remove negative feature.
       if(removeNegativeFeatureAfterUpdate_){
         for(unsigned int i=0;i<mtState::nMax_;i++){
           if(filterState.mlps_.isValid_[i]){
@@ -746,70 +748,208 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //std::cout << "-----------------------------------------------------------" << std::endl;
     BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state = &(filterState.state_.aux().backend_state_);
+    MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> patchInTargetFrame(mpCameras_);
 
-    // 1) Extract a set of corner candidates for the backend.
-    const double t1_be = (double) cv::getTickCount();
-    std::list<cv::Point2f> candidates_backend;
-    for(int l=endLevel_; l<=startLevel_; l++) {
-      detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_backend, l, fastDetectionThreshold_);
-    }
-    const double t2_be = (double) cv::getTickCount();
-    //std::cout << "Backend Feature Extraction: Extracted " << candidates_backend.size() << " features candidates." << std::endl;
+    ////////////////////////////////////////////////
+    // 2D Patch Alignment                         //
+    ////////////////////////////////////////////////
+    int id, activeCameraCounter;
+    bool foundCorrespondence;
 
-    // 2) Extract the best corner candidates and create a mlps out of them.
-    //    Initializes added features with bearing vector and current cameraID.
-    const double t3_be = (double) cv::getTickCount();
-    std::unordered_set<unsigned int> idx_set_backend;
-    idx_set_backend = addBestCandidates(*(backend_state->mlps_), candidates_backend, meas.template get<mtMeas::_aux>().pyr_[searchCamID],
-                                        searchCamID, filterState.t_, endLevel_, startLevel_, backend_state->nMaxFeatures_, nDetectionBuckets_,
-                                        backend_state->scoreDetectionExponent_, backend_state->penaltyDistance_, backend_state->zeroDistancePenalty_, false, 0.0);
-    const double t4_be = (double) cv::getTickCount();
-    //std::cout << "Backend Feature Extraction: Chosen " << filterState.state_.aux().backend_state_.mlps_->getValidCount() << " features from the candidates list." << std::endl;
+    for (id = 0; id < backend_state->nMaxFeatures_; ++id) {
+      if (backend_state->mlps_->isValid_[id]) {
+        activeCameraCounter = 0;
+        foundCorrespondence = false;
 
-    // 3) Initialize the new added features.
-    const double t5_be = (double) cv::getTickCount();
-    for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
-      backend_state->mlps_->features_[*it].setCamera(mpCameras_);
-      backend_state->mlps_->features_[*it].status_.inFrame_ = true;
-      backend_state->mlps_->features_[*it].status_.matchingStatus_ = FOUND;
-      backend_state->mlps_->features_[*it].status_.trackingStatus_ = TRACKED;
-      backend_state->mlps_->features_[*it].depth_ = 1.0;  // Initialize depth.
-    }
-    const double t6_be = (double) cv::getTickCount();
+        while (activeCameraCounter != mtState::nCam_ && foundCorrespondence == false) {
+          // Data handling stuff.
+          mpFeature = &(backend_state->mlps_->features_[id]);                      // Set the feature pointer.
+          const int camID = mpFeature->camID_;                                     // Camera ID of the feature.
+          const int activeCamID = (activeCameraCounter + camID)%mtState::nCam_;    // Camera ID, in which the feature is currently searched.
 
-    // 4) Draw the features of the extracted multilevel patch set.
-    const double t7_be = (double) cv::getTickCount();
-    if (doFrameVisualisation_){
-      for(int i = 0; i < backend_state->nMaxFeatures_;++i){
-        FeatureCoordinates featureCoordinates;
-        featureCoordinates.set_c(backend_state->mlps_->features_[i].c_);
-        drawPoint(filterState.img_[searchCamID],  featureCoordinates, cv::Scalar(255,0,0));
+          // Increase feature statistics.
+          // (Counter for the current tracking and matching status, the inFrame-counter and the
+          // total-counter is incremented. Feature status is reset.)
+          if (activeCameraCounter == 0)
+            mpFeature->increaseStatistics(filterState.t_);
+
+          // Print information to screen
+          if(verbose_){
+            std::cout << "=========== Backend Feature " << id << " ===================================== " << std::endl;
+            std::cout << "  ========== Current Camera in which feature is searched:  " << activeCamID << " ==== " << std::endl;
+            std::cout << "  Normal in feature frame: " << mpFeature->get_nor().getVec().transpose() << std::endl;
+            std::cout << "  with depth: " << mpFeature->depth_ << std::endl;
+          }
+
+          // Transfer the feature bearing vector from the feature's camera frame to the current target frame.
+          LWF::NormalVectorElement DfP;
+          if (activeCamID == camID) {
+            DfP = mpFeature->get_nor();
+          }
+          else {
+            const QPD qDC = state.qCM(activeCamID)*state.qCM(camID).inverted();
+            const V3D CrCD = state.qCM(camID).rotate(V3D(state.MrMC(activeCamID)-state.MrMC(camID)));
+            const V3D CrCP = mpFeature->depth_ * mpFeature->get_nor().getVec();         // Used depth value of feature.
+            const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+            DfP.setFromVector(DrDP);
+          }
+          if(verbose_) std::cout << "    Normal in current camera frame: " << DfP.getVec().transpose() << std::endl;
+
+          // Create a multilevel patch feature in target frame and check if it is within frame.
+          patchInTargetFrame = *mpFeature; // TODO: make less costly
+          patchInTargetFrame.set_nor(DfP); // TODO: do warping
+          patchInTargetFrame.camID_ = activeCamID;
+          bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,
+                                                          meas.template get<mtMeas::_aux>().pyr_[activeCamID],
+                                                          startLevel_, false, doPatchWarping_);
+          mpFeature->status_.inFrame_ = mpFeature->status_.inFrame_ || isInActiveFrame;  // ??????
+
+          // If feature is within the active frame.
+          if (isInActiveFrame) {
+
+            // 2D Patch Alignment
+            // Sets the new feature location if successful. Otherwise, old one is kept.
+            // Sets feature status: If successful -> matchingStatus_ = FOUND;
+            //                      If failed     -> matchingStatus_ == NOTFOUND;
+            align2DComposed(patchInTargetFrame, meas.template get<mtMeas::_aux>().pyr_[activeCamID],
+                            startLevel_, endLevel_, startLevel_-endLevel_, doPatchWarping_);
+
+            // Check if average patch intensity difference too large.
+            // If true, feature's matching status is set to NOTFOUND.
+            if (patchInTargetFrame.status_.matchingStatus_ == FOUND) {
+
+              if(patchInTargetFrame.computeAverageDifferenceReprojection(
+                  meas.template get<mtMeas::_aux>().pyr_[activeCamID], endLevel_, startLevel_) <= patchRejectionTh_) {
+                // *********** If 2D alignment SUCCESSFUL and average patch intensity difference OK ********** //
+
+                // Visualize currently tracked features.
+                if(doFrameVisualisation_){
+                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,0,0));
+                }
+
+                // Transfer feature data.
+                mpFeature->set_nor(patchInTargetFrame.get_nor());
+                mpFeature->camID_ = activeCamID;
+                mpFeature->status_.matchingStatus_ = FOUND;
+                mpFeature->status_.trackingStatus_ = TRACKED;
+
+                // Triangulation ? remove negative depth!
+                // ******************************
+                double depth = 1;
+                mpFeature->setDepth(depth); // Set depth
+
+                // Extract feature patches and update Shi-Tomasi score.
+                extractMultilevelPatchFromImage(
+                    *mpFeature, meas.template get<mtMeas::_aux>().pyr_[camID], startLevel_, true, false);
+                mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
+
+                // Continue with the next feature in the multilevel patch set.
+                foundCorrespondence = true;
+              }
+              else {
+                // ********* If 2D alignment successful, but average patch intensity difference too large ********** //
+                patchInTargetFrame.status_.matchingStatus_ = NOTFOUND;
+                if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
+              }
+            }
+            else {
+              // ********* If 2D alignment failed (Matching status already set in align2DComposed(...)) ********** //
+              if(verbose_) std::cout << "    \033[31mNOT FOUND (matching failed)\033[0m" << std::endl;
+            }
+          }  // if End "isInActiveFrame"
+
+          activeCameraCounter++; // Search in the next camera.
+        }  // End while activeCameraCounter
+      }  // End if "isvalid"
+    }  // End while
+
+
+    ////////////////////////////////////////////////
+    // Remove bad features                        //
+    ////////////////////////////////////////////////
+    for (unsigned int i=0; i < backend_state->nMaxFeatures_; i++) {
+      if (backend_state->mlps_->isValid_[i]) {
+        mpFeature = &backend_state->mlps_->features_[i];
+        if(!mpFeature->isGoodFeature(trackingLocalRange_, trackingLocalVisibilityRange_,
+                                     trackingUpperBound_, trackingLowerBound_))
+          backend_state->mlps_->isValid_[i] = false;
       }
     }
-    const double t8_be = (double) cv::getTickCount();
 
-    // 5) Output of timing data
-//    std::cout<<"Detecting fast corners took: "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//    std::cout<<"Adding best candidates took: "<<(t4_be-t3_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//    std::cout<<"Update feature state took: "<<(t6_be-t5_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//    std::cout<<"Visualization took: "<<(t8_be-t7_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//    std::cout<<"Whole process took: "<<(t8_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+    ////////////////////////////////////////////////
+    // Extraction of new features                 //
+    ////////////////////////////////////////////////
+    double t1_be, t2_be, t3_be, t4_be, t5_be, t6_be, t7_be, t8_be;
+
+    if (backend_state->mlps_->getValidCount() < startDetectionTh_ * backend_state->nMaxFeatures_) {
+
+      // 1) Extract a set of corner candidates for the backend.
+      t1_be = (double) cv::getTickCount();
+      std::list<cv::Point2f> candidates_backend;
+      for(int l=endLevel_; l<=startLevel_; l++) {
+        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_backend, l, fastDetectionThreshold_);
+      }
+      t2_be = (double) cv::getTickCount();
+      //std::cout << "Backend Feature Extraction: Extracted " << candidates_backend.size() << " features candidates." << std::endl;
+
+      // 2) Extract the best corner candidates and add them to the mlps.
+      //    Initializes added features with bearing vector and current cameraID.
+      t3_be = (double) cv::getTickCount();
+      std::unordered_set<unsigned int> idx_set_backend;
+      idx_set_backend = addBestCandidates(*(backend_state->mlps_), candidates_backend,
+                                          meas.template get<mtMeas::_aux>().pyr_[searchCamID],
+                                          searchCamID, filterState.t_, endLevel_, startLevel_,
+                                          backend_state->nMaxFeatures_, nDetectionBuckets_,
+                                          backend_state->scoreDetectionExponent_, backend_state->penaltyDistance_,
+                                          backend_state->zeroDistancePenalty_, false, 0.0);
+      t4_be = (double) cv::getTickCount();
+      //std::cout << "Backend Feature Extraction: Chosen " << filterState.state_.aux().backend_state_.mlps_->getValidCount() << " features from the candidates list." << std::endl;
+
+      // 3) Initialize the new added features.
+      const double t5_be = (double) cv::getTickCount();
+      for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+        backend_state->mlps_->features_[*it].setCamera(mpCameras_);
+        backend_state->mlps_->features_[*it].status_.inFrame_ = true;
+        backend_state->mlps_->features_[*it].status_.matchingStatus_ = FOUND;
+        backend_state->mlps_->features_[*it].status_.trackingStatus_ = TRACKED;
+        backend_state->mlps_->features_[*it].depth_ = 1.0;  // Initialize depth.
+      }
+      t6_be = (double) cv::getTickCount();
+
+      // 4) Draw the extracted features of the multilevel patch set.
+      t7_be = (double) cv::getTickCount();
+      if (doFrameVisualisation_) {
+        for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+          FeatureCoordinates featureCoordinates;
+          featureCoordinates.set_c(backend_state->mlps_->features_[*it].c_);
+          drawPoint(filterState.img_[searchCamID],  featureCoordinates, cv::Scalar(255,0,0));
+        }
+      }
+      t8_be = (double) cv::getTickCount();
+
+      // 5) Output of timing data
+      //    std::cout<<"Detecting fast corners took: "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+      //    std::cout<<"Adding best candidates took: "<<(t4_be-t3_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+      //    std::cout<<"Update feature state took: "<<(t6_be-t5_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+      //    std::cout<<"Visualization took: "<<(t8_be-t7_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+      //    std::cout<<"Whole process took: "<<(t8_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+
+    }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend End
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     if (doFrameVisualisation_){
-          drawVirtualHorizon(filterState,0);
-          drawVirtualHorizon(filterState,1);
-        }
-        if(verbose_){
-          for(int i=0;i<mtState::nCam_;i++){
-            std::cout << filterState.state_.qCM(i) << std::endl;
-            std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
-          }
-        }
+      drawVirtualHorizon(filterState,0);
+      drawVirtualHorizon(filterState,1);
+    }
+    if(verbose_){
+      for(int i=0;i<mtState::nCam_;i++){
+        std::cout << filterState.state_.qCM(i) << std::endl;
+        std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
+      }
+    }
 
   }
 

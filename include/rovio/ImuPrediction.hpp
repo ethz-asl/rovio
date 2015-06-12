@@ -72,7 +72,6 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   };
   ~ImuPrediction(){};
   void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{ // TODO: implement without noise for speed
-
     output.aux().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
     output.aux().MwWMest_  = meas.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuRor = output.aux().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
@@ -126,6 +125,44 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
 
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Backend Start
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    const BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state_in = &(state.aux().backend_state_);
+    BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state_out = &(output.aux().backend_state_);
+
+    double d_old, d_new;
+    for(unsigned int i=0; i<backend_state_in->nMaxFeatures_; i++) {
+      const int camID = backend_state_in->mlps_->features_[i].camID_;
+      const V3D camRor = state.qCM(camID).rotate(imuRor);
+      const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
+      oldBearing = backend_state_in->mlps_->features_[i].get_nor();  // Old bearing vector.
+      d_old = backend_state_in->mlps_->features_[i].depth_;          // Old depth value.
+
+      // New depth value.
+      d_new = d_old - dt * oldBearing.getVec().transpose() * camVel;  // Change this expression if inverse depth is used!!
+
+      // Get new bearing vector.
+      V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d_old
+          + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
+      QPD qm = qm.exponentialMap(dm);
+      backend_state_out->mlps_->features_[i].set_nor(oldBearing.rotated(qm));  // Set the new bearing vector.
+
+      // WARP corners.
+      for(unsigned int j=0;j<2;j++){
+        oldBearing.boxPlus(backend_state_in->mlps_->features_[i].bearingCorners_[j], tempNormal);
+        dm = dt*(gSM(tempNormal.getVec())*camVel/d_old
+            + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
+        qm = qm.exponentialMap(dm);
+        tempNormal = tempNormal.rotated(qm);
+        tempNormal.boxMinus(backend_state_out->mlps_->features_[i].get_nor(),
+                            backend_state_out->mlps_->features_[i].bearingCorners_[j]);
+      }
+    }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Backend End
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   }
 
 

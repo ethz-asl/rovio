@@ -705,7 +705,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   mutable bool valid_affineTransform_;  /**<Specifies if the affine transformation \ref affineTransform_ is valid.*/
   int idx_;  /**<Feature ID.*/
   double initTime_;  /**<Time of feature initialization.*/
-  double currentTime_;  /**<Time of last featutre measurement.*/
+  double currentTime_;  /**<Time of last feature measurement.*/
   Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
   float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation, add mutable */
   int totCount_;  /**<Number of images which have passed since feature initialization.*/
@@ -1057,7 +1057,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   }
 
 
-  /** \brief Is the current feature a good feature. Combines different quality criteria for deciding if it is a good feature.
+  /** \brief Is the current feature a good feature? Combines different quality criteria for deciding if it is a good feature.
    * The product of local quality and visibility quality is compared with a threshold. This threshold depends on the global
    * quality (lower if the global quality is good).
    *
@@ -1673,7 +1673,8 @@ bool align2DSingleLevel(MultilevelPatchFeature<n_levels,patch_size>& mlp, const 
  * @param doWarping   - Should warping be considered
  */
 template<int n_levels,int patch_size>
-void align2DComposed(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,const int start_level,const int end_level, const int num_seq, const bool doWarping){
+void align2DComposed(MultilevelPatchFeature<n_levels,patch_size>& mlp, const ImagePyramid<n_levels>& pyr,
+                     const int start_level,const int end_level, const int num_seq, const bool doWarping){
   cv::Point2f c_backup = mlp.get_c();
   mlp.status_.matchingStatus_ = FOUND;
   for(int l = end_level+num_seq;l>=end_level;--l){
