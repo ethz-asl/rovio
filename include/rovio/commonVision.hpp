@@ -638,10 +638,11 @@ class FeatureCoordinates{
  *  @param drawImg - Image in which the point should be drawn.
  *  @param C       - Feature coordinates object. See class FeatureCoordinates.
  *  @param color   - Color of the point.
+ *  @param size    - Point size.
  */
-static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color){
-  cv::Size size(2,2);
-  cv::ellipse(drawImg,C.get_c(),size,0,0,360,color,-1,8,0);
+static void drawPoint(cv::Mat& drawImg, FeatureCoordinates& C, const cv::Scalar& color, const int size = 2){
+  cv::Size s(size,size);
+  cv::ellipse(drawImg,C.get_c(),s,0,0,360,color,-1,8,0);
 }
 
 /** \brief Draws an uncertainty ellipse at given feature coordinates.
@@ -2006,19 +2007,21 @@ void pruneCandidates(const MultilevelPatchSet<n_levels,patch_size,nMax>& mlpSet,
 
 /** \brief Get the depth value from the triangulation of two bearing vectors.
  *
- *  @param C1fP    - Bearing vector in the reference frame C1 (unit length!).
- *  @param C2fP    - Bearing vector in another frame C2 (unit length!).
- *  @param C2rC2C1 - Position vector, pointing from C2 to C1, expressed in cooridantes of C2.
- *  @param qC2C1   - Quaternion, expressing the orientation of C1 in the C2.
- *  @param d       - Triangulated depth value along the bearing vector C1fP.
+ *  @param C1fP           - Bearing vector in the reference frame C1 (unit length!).
+ *  @param C2fP           - Bearing vector in another frame C2 (unit length!).
+ *  @param C2rC2C1        - Position vector, pointing from C2 to C1, expressed in cooridantes of C2.
+ *  @param qC2C1          - Quaternion, expressing the orientation of C1 in the C2.
+ *  @param angleThreshold - Represents a threshold for the minimal allowed angle between the projection rays.
+ *                          If angle is smaller, false is returned.
+ *  @param d              - Triangulated depth value along the bearing vector C1fP.
  *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
  */
-bool getDepthFromTriangulation(const V3D& C1fP, const V3D& C2fP, const V3D& C2rC2C1, const QPD& qC2C1, double* d)
+bool getDepthFromTriangulation(const V3D& C1fP, const V3D& C2fP, const V3D& C2rC2C1, const QPD& qC2C1, double* d, const float angleThreshold = 0.000001)
 {
   Eigen::Matrix<double,3,2> B;
   B <<  qC2C1.rotate(C1fP), C2fP;
   const Eigen::Matrix2d BtB = B.transpose() * B;
-  if(BtB.determinant() < 0.000001)
+  if(BtB.determinant() < angleThreshold)
     return false;                      // Projection rays almost parallel.
   const Eigen::Vector2d dv = - BtB.inverse() * B.transpose() * C2rC2C1;
   *d = fabs(dv[0]);

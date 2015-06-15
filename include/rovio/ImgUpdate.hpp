@@ -745,18 +745,31 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
 
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    double t_start_backend = (double) cv::getTickCount();
     BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state = &(filterState.state_.aux().backend_state_);
     MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> patchInTargetFrame(mpCameras_);
+    auto vertex = std::make_shared<Vertex<mtState::nCam_, backend_state->nMaxFeatures_>>();
+
+    ////////////////////////////////////////////////
+    // Initialize Vertex                          //
+    ////////////////////////////////////////////////
+    vertex->WrWM_ = state.WrWM();
+    vertex->qWM_ = state.qWM();
+    vertex->mpCameras_ = mpCameras_;
+    for (int camID = 0; camID < mtState::nCam_; ++camID) {
+      vertex->MrMC_[camID] = state.MrMC(camID);
+      vertex->qMC_[camID] = state.qCM(camID).inverted();
+    }
 
     ////////////////////////////////////////////////
     // 2D Patch Alignment                         //
     ////////////////////////////////////////////////
     int id, activeCameraCounter;
     bool foundCorrespondence;
-
     for (id = 0; id < backend_state->nMaxFeatures_; ++id) {
       if (backend_state->mlps_->isValid_[id]) {
         activeCameraCounter = 0;
@@ -825,7 +838,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
                 // Visualize currently tracked features.
                 if(doFrameVisualisation_){
-                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,0,0));
+                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,0,255));
                 }
 
                 // Transfer feature data.
@@ -834,9 +847,15 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                 mpFeature->status_.matchingStatus_ = FOUND;
                 mpFeature->status_.trackingStatus_ = TRACKED;
 
-                // Triangulation ? remove negative depth!
-                // ******************************
-                double depth = 1;
+                // Triangulation
+                double depth;
+                BearingWithPose* bp = &backend_state->bearingsWithPosesAtInit_[id];
+                const QPD qC2W = bp->qMC_.inverted() * bp->qWM_.inverted();
+                const V3D WrC2C1 = state.WrWM() + state.qWM().rotate(state.MrMC(activeCamID)) - bp->WrWM_ - bp->qWM_.rotate(bp->MrMC_);
+                const V3D C2rC2C1  = qC2W.rotate(WrC2C1);
+                const QPD qC2C1 = bp->qMC_.inverted() * bp->qWM_.inverted() * state.qWM() * state.qCM(activeCamID).inverted();
+                getDepthFromTriangulation(mpFeature->get_nor().getVec(), bp->CfP_.getVec(),
+                                          C2rC2C1, qC2C1, &depth, 0.0);
                 mpFeature->setDepth(depth); // Set depth
 
                 // Extract feature patches and update Shi-Tomasi score.
@@ -844,8 +863,29 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                     *mpFeature, meas.template get<mtMeas::_aux>().pyr_[camID], startLevel_, true, false);
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
 
+                // Add Feature to current vertex
+                vertex->isFeatureValid_[id] = true;
+                vertex->features_[id].camID_ = activeCamID;
+                vertex->features_[id].isInit_ = false;
+                vertex->features_[id].counter_++;
+                vertex->features_[id].invDepth_ = 1.0 / depth;
+                vertex->features_[id].CfP_ = mpFeature->get_nor();
+
                 // Continue with the next feature in the multilevel patch set.
                 foundCorrespondence = true;
+
+                // Visualize currently tracked features.
+//                if(id == 0){
+//                  std::cout<<"Depth PINK : " <<depth<<std::endl;
+//                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(127,0,255), 8);
+//                }
+
+                if(id == 20){
+                  std::cout<<"Depth YELLOW: " <<depth<<std::endl;
+                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,255,255), 8);
+                  std::cout<<"-------------"<<std::endl;
+                }
+
               }
               else {
                 // ********* If 2D alignment successful, but average patch intensity difference too large ********** //
@@ -917,6 +957,15 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
       t6_be = (double) cv::getTickCount();
 
+      // Store the pose and the bearing vectors corresponding to the extracted features for triangulation.
+      for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+        backend_state->bearingsWithPosesAtInit_[*it].WrWM_ = state.WrWM();
+        backend_state->bearingsWithPosesAtInit_[*it].qWM_  = state.qWM();
+        backend_state->bearingsWithPosesAtInit_[*it].MrMC_ = state.MrMC(searchCamID);
+        backend_state->bearingsWithPosesAtInit_[*it].qMC_  = state.qCM(searchCamID).inverted();
+        backend_state->bearingsWithPosesAtInit_[*it].CfP_  = backend_state->mlps_->features_[*it].get_nor();
+      }
+
       // 4) Draw the extracted features of the multilevel patch set.
       t7_be = (double) cv::getTickCount();
       if (doFrameVisualisation_) {
@@ -935,7 +984,23 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       //    std::cout<<"Visualization took: "<<(t8_be-t7_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
       //    std::cout<<"Whole process took: "<<(t8_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
 
+      // 6) Store new features in vertex-graph.
+      for (auto it = idx_set_backend.begin(); it != idx_set_backend.end(); ++it) {
+        vertex->isFeatureValid_[*it] = true;
+        vertex->features_[*it].camID_ = searchCamID;
+        vertex->features_[*it].isInit_ = true;
+        vertex->features_[*it].invDepth_ = 1.0;
+        vertex->features_[*it].CfP_ = backend_state->mlps_->features_[*it].get_nor();
+      }
     }
+
+    ////////////////////////////////////////////////
+    // Store vertex in vertex graph               //
+    ////////////////////////////////////////////////
+    backend_state ->vertexGraph_.pushBack(vertex);
+
+    double t_end_backend = (double) cv::getTickCount();
+    //std::cout<<"Backend Duration: "<<(t_end_backend-t_start_backend)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend End
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

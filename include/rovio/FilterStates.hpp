@@ -32,6 +32,7 @@
 #include "kindr/rotations/RotationEigen.hpp"
 #include <Eigen/Dense>
 #include "lightweight_filtering/FilterState.hpp"
+#include <deque>
 #include <map>
 #include <unordered_set>
 #include "rovio/commonVision.hpp"
@@ -196,20 +197,71 @@ class DepthMap{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class VF
-{
+class BackendFeature {
  public:
+  BackendFeature(){
+    camID_ = 0;
+    isInit_ = false;
+    counter_ = 0;
+    invDepth_ = 0;
+    sigma_ = 0;
+  };
+  ~BackendFeature(){};
+
+  // Data Handling
+  int camID_;
+  bool isInit_;
+  unsigned int counter_;
+
+  // Feature Data
+  double invDepth_;
+  double sigma_;
+  LWF::NormalVectorElement CfP_;
 };
 
+template<int nCam, int nMaxFeatures>
+class Vertex {
+ public:
+ Vertex(){
+   mpCameras_ = nullptr;
+ };
 
+ const Camera* mpCameras_;
+ V3D WrWM_;
+ QPD qWM_;
+ V3D MrMC_[nCam];
+ QPD qMC_[nCam];
+
+ bool isFeatureValid_[nMaxFeatures] = {false};
+ BackendFeature features_[nMaxFeatures];
+};
+
+template<int nCam, int nMaxFeatures, int nMaxFrames>
+class VertexGraph {
+ public:
+  std::deque<std::shared_ptr<Vertex<nCam, nMaxFeatures>>> queue_;
+
+  void pushBack(std::shared_ptr<Vertex<nCam, nMaxFeatures>> vertex) {
+    queue_.push_back(vertex);
+    if(queue_.size() > nMaxFrames)
+      queue_.pop_front();
+  }
+};
+
+struct BearingWithPose {
+  V3D WrWM_;
+  QPD qWM_;
+  V3D MrMC_;
+  QPD qMC_;
+  LWF::NormalVectorElement CfP_;
+};
 
 template<int nLevels, int patchSize, int nCam>
-class BackendState
-{
+class BackendState {
  public:
 
   // Parameters
-  static constexpr int nMaxFrames_ = 40;          // Maximal number of frames a feature should be found and stored.
+  static constexpr int nMaxFrames_ = 50;          // Maximal number of frames a feature should be found and stored.
   static constexpr int nMaxFeatures_ = 300;       // Maximal number of best features per frame.
   static constexpr int penaltyDistance_ = 20;     // Features are punished (strength inter alia dependent of zeroDistancePenalty),
                                                   // if smaller distance to existing feature.
@@ -218,27 +270,28 @@ class BackendState
 
 
   BackendState() {
+    // Initialize feature tracking variables.
     mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
-
-    // Initialize features.
-    for(unsigned int i=0;i<nMaxFeatures_;i++){
+    for (unsigned int i=0; i<nMaxFeatures_; i++) {
       LWF::NormalVectorElement nor;
       nor.setFromVector(V3D(0,0,1));
       mlps_->features_[i].set_nor(nor);
       mlps_->features_[i].bearingCorners_[0].setZero();
       mlps_->features_[i].bearingCorners_[1].setZero();
       mlps_->features_[i].camID_ = 0;
-      mlps_->features_[i].setDepth(1.0);  // Initialize depth value.
+      mlps_->features_[i].setDepth(1.0);
     }
   }
   ~BackendState() {}
 
 
   // Storage.
+  VertexGraph<nCam, nMaxFeatures_, nMaxFrames_> vertexGraph_;
 
-
-  // Temporary variables.
+  // Backend Feature Tracking Variables (Temp.)
+  BearingWithPose bearingsWithPosesAtInit_[nMaxFeatures_];  // Array, containing bearing vectors & poses at initialization.
   std::shared_ptr<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>> mlps_;  // Current multilevel patch set.
+
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /** \brief Class, defining the auxiliary state of the filter.
