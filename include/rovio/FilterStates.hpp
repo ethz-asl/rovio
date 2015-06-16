@@ -201,7 +201,7 @@ class BackendFeature {
  public:
   BackendFeature(){
     camID_ = 0;
-    isInit_ = false;
+    isSourceFeature_ = false;
     counter_ = 0;
     invDepth_ = 0;
     sigma_ = 0;
@@ -210,7 +210,7 @@ class BackendFeature {
 
   // Data Handling
   int camID_;
-  bool isInit_;
+  bool isSourceFeature_;
   unsigned int counter_;
 
   // Feature Data
@@ -225,6 +225,7 @@ class Vertex {
  Vertex(){
    mpCameras_ = nullptr;
  };
+ ~Vertex(){};
 
  const Camera* mpCameras_;
  V3D WrWM_;
@@ -239,9 +240,14 @@ class Vertex {
 template<int nCam, int nMaxFeatures, int nMaxFrames>
 class VertexGraph {
  public:
+  VertexGraph(){};
+  ~VertexGraph(){};
+
+  // Data Members
   std::deque<std::shared_ptr<Vertex<nCam, nMaxFeatures>>> queue_;
 
-  void pushBack(std::shared_ptr<Vertex<nCam, nMaxFeatures>> vertex) {
+  // Functions
+  void pushBack(const std::shared_ptr<Vertex<nCam, nMaxFeatures>>& vertex) {
     queue_.push_back(vertex);
     if(queue_.size() > nMaxFrames)
       queue_.pop_front();
@@ -250,25 +256,15 @@ class VertexGraph {
 
 struct BearingWithPose {
   V3D WrWM_;
-  QPD qWM_;
+  QPD qMW_;
   V3D MrMC_;
-  QPD qMC_;
+  QPD qCM_;
   LWF::NormalVectorElement CfP_;
 };
 
 template<int nLevels, int patchSize, int nCam>
 class BackendState {
  public:
-
-  // Parameters
-  static constexpr int nMaxFrames_ = 50;          // Maximal number of frames a feature should be found and stored.
-  static constexpr int nMaxFeatures_ = 300;       // Maximal number of best features per frame.
-  static constexpr int penaltyDistance_ = 20;     // Features are punished (strength inter alia dependent of zeroDistancePenalty),
-                                                  // if smaller distance to existing feature.
-  static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
-  static constexpr int zeroDistancePenalty_ = 5;
-
-
   BackendState() {
     // Initialize feature tracking variables.
     mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
@@ -284,14 +280,20 @@ class BackendState {
   }
   ~BackendState() {}
 
+  // Parameters
+  static constexpr int nMaxFrames_ = 50;    // Maximal number of frames a feature should be found and stored.
+  static constexpr int nMaxFeatures_ = 300; // Maximal number of best features per frame.
+  static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
+  static constexpr int penaltyDistance_ = 20;  // Features are punished (strength inter alia dependent of zeroDistancePenalty),
+                                                  // if smaller distance to existing feature.
+  static constexpr int zeroDistancePenalty_ = 100;
 
   // Storage.
   VertexGraph<nCam, nMaxFeatures_, nMaxFrames_> vertexGraph_;
 
-  // Backend Feature Tracking Variables (Temp.)
+  // Feature Tracking Variables (temporary)
   BearingWithPose bearingsWithPosesAtInit_[nMaxFeatures_];  // Array, containing bearing vectors & poses at initialization.
   std::shared_ptr<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>> mlps_;  // Current multilevel patch set.
-
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /** \brief Class, defining the auxiliary state of the filter.
