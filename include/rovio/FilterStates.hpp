@@ -35,6 +35,7 @@
 #include <deque>
 #include <map>
 #include <unordered_set>
+#include <unordered_map>
 #include "rovio/commonVision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -199,42 +200,52 @@ class DepthMap{
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class BackendFeature {
  public:
-  BackendFeature(){
+  typedef std::shared_ptr<BackendFeature> Ptr;
+  BackendFeature()
+ {
     camID_ = 0;
-    isSourceFeature_ = false;
-    counter_ = 0;
-    invDepth_ = 0;
-    sigma_ = 0;
+    nObservations_ = 0;
+    globalID_ = 0;
+    id_ = 0;
   };
   ~BackendFeature(){};
 
   // Data Handling
   int camID_;
-  bool isSourceFeature_;
-  unsigned int counter_;
+  int nObservations_;  /**<How many times the feature was seen before (not including the current observation).*/
+  unsigned long globalID_;    /**<Global feature ID. Corresponding features have the same unique ID.*/
 
   // Feature Data
-  double invDepth_;
-  double sigma_;
-  LWF::NormalVectorElement CfP_;
+  double id_;    /**<Inverse depth.*/
+  cv::Point2f c_;  /**<Pixel coordinate in vertical direction.*/
+  LWF::NormalVectorElement CfP_;  /**<Bearing vector.*/
 };
 
 template<int nCam, int nMaxFeatures>
-class Vertex {
+struct Vertex {
  public:
  Vertex(){
    mpCameras_ = nullptr;
+   features_.reserve(nMaxFeatures);
  };
  ~Vertex(){};
 
- const Camera* mpCameras_;
+ const Camera* mpCameras_; // ToDo Extract intrinsics (object will be destroyed after filter shuts down!)
+ // State
  V3D WrWM_;
  QPD qWM_;
+ V3D MvM_;
+ V3D acb_;
+ V3D gyb_;
  V3D MrMC_[nCam];
- QPD qMC_[nCam];
+ QPD qCM_[nCam];
+ // IMU Data
+ V3D ac_;
+ V3D gy_;
 
- bool isFeatureValid_[nMaxFeatures] = {false};
- BackendFeature features_[nMaxFeatures];
+
+
+ std::unordered_multimap<unsigned long, BackendFeature::Ptr> features_;
 };
 
 template<int nCam, int nMaxFeatures, int nMaxFrames>

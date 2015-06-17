@@ -64,7 +64,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtPrediction mtPrediction;
   typedef typename Base::mtState mtState;
-  rovio::Camera cameras_[mtState::nCam_]; // TODO IMG
+  rovio::Camera cameras_[mtState::nCam_];  // TODO IMG
   std::string cameraCalibrationFile_[mtState::nCam_];
 
   /** \brief Constructor. Initializes the filter.

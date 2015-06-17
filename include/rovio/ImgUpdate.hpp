@@ -745,7 +745,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
 
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -756,16 +755,18 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     auto vertex = std::make_shared<Vertex<mtState::nCam_, BackendState::nMaxFeatures_>>();
 
     ////////////////////////////////////////////////
-    // Initialize vertex  with camera poses.      //
+    // Set Vertex Data                            //
     ////////////////////////////////////////////////
+    vertex->mpCameras_ = mpCameras_;
     vertex->WrWM_ = state.WrWM();
     vertex->qWM_ = state.qWM();
-    vertex->mpCameras_ = mpCameras_;
+    vertex->MvM_ = state.MvM();
+    vertex->acb_ = state.acb();
+    vertex->gyb_ = state.gyb();
     for (int camID = 0; camID < mtState::nCam_; camID++) {
       vertex->MrMC_[camID] = state.MrMC(camID);
-      vertex->qMC_[camID] = state.qCM(camID).inverted();
+      vertex->qCM_[camID] = state.qCM(camID);
     }
-
     ////////////////////////////////////////////////
     // 2D Patch Alignment                         //
     ////////////////////////////////////////////////
@@ -865,15 +866,21 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                     *mpFeature, meas.template get<mtMeas::_aux>().pyr_[activeCamID], startLevel_, true, false);
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
 
-                // Add Feature to current vertex.
-                vertex->isFeatureValid_[id] = true;
-                vertex->features_[id].camID_ = activeCamID;
-                vertex->features_[id].isSourceFeature_ = false;
-                vertex->features_[id].counter_++;
-                vertex->features_[id].invDepth_ = 1.0 / depth;
-                vertex->features_[id].CfP_ = mpFeature->get_nor();
+                // Store the current BackendFeature in current vertex.
+                BackendFeature::Ptr bf(new BackendFeature);
+                bf->CfP_ = mpFeature->get_nor();
+                bf->camID_ = activeCamID;
+                bf->globalID_ = mpFeature->globalID_;  // Corresponding features have same ID.
+                bf->id_ = 1.0 / depth;
+                bf->nObservations_++;
+                bf->c_ = mpFeature->get_c();
+                vertex->features_.insert(std::make_pair(bf->globalID_, bf)); // Key is global feature ID.
 
-//                // Visualize a specific feature and output triangulated depth;
+                std::cout<<"Found Feature with global ID: "<<bf->globalID_<<std::endl;
+                std::cout<<"Has be seen "<<bf->nObservations_<<" times before."<<std::endl;
+                std::cout<<"-------------"<<std::endl;
+
+                // Visualize a specific feature and output triangulated depth;
 //                if(id == 20){
 //                  std::cout<<"Depth YELLOW: " <<depth<<std::endl;
 //                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,255,255), 8);
@@ -915,22 +922,18 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     ////////////////////////////////////////////////
     // Extraction of new features                 //
     ////////////////////////////////////////////////
-    double t1_be, t2_be, t3_be, t4_be, t5_be, t6_be, t7_be, t8_be, t9_be, t10_be;
+    static unsigned long nBackendFeaturesCreated = 0;  // Number of features extracted for the backend so far. Needed for global feature ID.
 
     if (backend_state->mlps_->getValidCount() < startDetectionTh_ * BackendState::nMaxFeatures_) {
-
       // 1) Extract a set of corner candidates for the backend.
-      t1_be = (double) cv::getTickCount();
       std::list<cv::Point2f> candidates_backend;
       for(int l=endLevel_; l<=startLevel_; l++) {
         detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID], candidates_backend, l, fastDetectionThreshold_);
       }
-      t2_be = (double) cv::getTickCount();
-      //std::cout << "Backend Feature Extraction: Extracted " << candidates_backend.size() << " features candidates." << std::endl;
+      // std::cout << "Backend Feature Extraction: Extracted " << candidates_backend.size() << " features candidates." << std::endl;
 
       // 2) Extract the best corner candidates and add them to the mlps.
       //    Initializes added features with bearing vector and current cameraID.
-      t3_be = (double) cv::getTickCount();
       std::unordered_set<unsigned int> idx_set_backend;
       idx_set_backend = addBestCandidates(*(backend_state->mlps_), candidates_backend,
                                           meas.template get<mtMeas::_aux>().pyr_[searchCamID],
@@ -938,64 +941,47 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                                           backend_state->nMaxFeatures_, nDetectionBuckets_,
                                           backend_state->scoreDetectionExponent_, backend_state->penaltyDistance_,
                                           backend_state->zeroDistancePenalty_, false, 0.0);
-      t4_be = (double) cv::getTickCount();
       //std::cout << "Backend Feature Extraction: Chosen " << filterState.state_.aux().backend_state_.mlps_->getValidCount() << " features from the candidates list." << std::endl;
 
-      // 3) Initialize the new added features.
-      const double t5_be = (double) cv::getTickCount();
+      // 3) Loop through newly extracted features.
       for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+        // Initialize newly extracted features.
         backend_state->mlps_->features_[*it].setCamera(mpCameras_);
         backend_state->mlps_->features_[*it].status_.inFrame_ = true;
         backend_state->mlps_->features_[*it].status_.matchingStatus_ = FOUND;
         backend_state->mlps_->features_[*it].status_.trackingStatus_ = TRACKED;
-        backend_state->mlps_->features_[*it].depth_ = 1.0;  // Initialize depth.
-      }
-      t6_be = (double) cv::getTickCount();
-
-      // 4) Store the pose and the bearing vectors corresponding to the extracted features for triangulation.
-      for(auto it = idx_set_backend.begin();it != idx_set_backend.end();++it){
+        backend_state->mlps_->features_[*it].depth_ = 1.0;                         // Initialize depth.
+        backend_state->mlps_->features_[*it].globalID_ = nBackendFeaturesCreated;  // Set global ID.
+        // Store the pose and the bearing vectors for triangulation.
         backend_state->bearingsWithPosesAtInit_[*it].WrWM_ = state.WrWM();
         backend_state->bearingsWithPosesAtInit_[*it].qMW_  = state.qWM().inverted();
         backend_state->bearingsWithPosesAtInit_[*it].MrMC_ = state.MrMC(searchCamID);
         backend_state->bearingsWithPosesAtInit_[*it].qCM_  = state.qCM(searchCamID);
         backend_state->bearingsWithPosesAtInit_[*it].CfP_  = backend_state->mlps_->features_[*it].get_nor();
-      }
-
-      // 5) Draw the extracted features of the multilevel patch set.
-      t7_be = (double) cv::getTickCount();
-      if (doFrameVisualisation_) {
-        for(auto it = idx_set_backend.begin(); it != idx_set_backend.end(); ++it){
+        // Store the BackendFeature in current vertex.
+        BackendFeature::Ptr bf(new BackendFeature);
+        bf->CfP_ = backend_state->mlps_->features_[*it].get_nor();
+        bf->camID_ = searchCamID;
+        bf->globalID_ = nBackendFeaturesCreated;
+        bf->id_ = 1.0;
+        bf->nObservations_ = 0;
+        bf->c_ = backend_state->mlps_->features_[*it].get_c();
+        vertex->features_.insert(std::make_pair(nBackendFeaturesCreated, bf)); // Key is global feature ID.
+        // Draw the extracted features if desired.
+        if (doFrameVisualisation_) {
           FeatureCoordinates featureCoordinates;
           featureCoordinates.set_c(backend_state->mlps_->features_[*it].c_);
           drawPoint(filterState.img_[searchCamID],  featureCoordinates, cv::Scalar(255,0,0));
         }
+        //Increase backend feature counter.
+        nBackendFeaturesCreated++;
       }
-      t8_be = (double) cv::getTickCount();
-
-      // 6) Store new features in vertex-graph.
-      t9_be = (double) cv::getTickCount();
-      for (auto it = idx_set_backend.begin(); it != idx_set_backend.end(); ++it) {
-        vertex->isFeatureValid_[*it] = true;
-        vertex->features_[*it].camID_ = searchCamID;
-        vertex->features_[*it].isSourceFeature_ = true;
-        vertex->features_[*it].invDepth_ = 1.0;
-        vertex->features_[*it].CfP_ = backend_state->mlps_->features_[*it].get_nor();
-      }
-      t10_be = (double) cv::getTickCount();
-
-      // 7) Output of timing data.
-//      std::cout<<"Detecting fast corners took: "<<(t2_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//      std::cout<<"Adding best candidates took: "<<(t4_be-t3_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//      std::cout<<"Update feature state took: "<<(t6_be-t5_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//      std::cout<<"Visualization took: "<<(t8_be-t7_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//      std::cout<<"Storage in vertex took: "<<(t10_be-t9_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-//      std::cout<<"Whole process took: "<<(t10_be-t1_be)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
     }
 
     ////////////////////////////////////////////////
     // Store vertex in vertex graph               //
     ////////////////////////////////////////////////
-    backend_state ->vertexGraph_.pushBack(vertex);
+    //backend_state ->vertexGraph_.pushBack(vertex);
 
     double t_end_backend = (double) cv::getTickCount();
 //  std::cout<<"Backend Duration: "<<(t_end_backend-t_start_backend)/cv::getTickFrequency()*1000 << " ms"<<std::endl;

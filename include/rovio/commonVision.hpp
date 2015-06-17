@@ -713,6 +713,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
   Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
   Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
+  unsigned long globalID_;  /**<Global feature ID.*/
 
   FeatureCoordinates log_previous_;
   FeatureCoordinates log_prediction_;
