@@ -9,6 +9,7 @@
 #define INCLUDE_ROVIO_BACKEND_HPP_
 
 #include <condition_variable>
+#include <ctime>
 #include <deque>
 #include <mutex>
 #include <rosbag/bag.h>
@@ -23,8 +24,8 @@ class Backend {
  public:
 
   // Parameters
-  static constexpr bool active_ = true;  /**<Turn Backend ON or OFF.*/
-  static constexpr bool storeMissionData_ = true;  /**<Store mission data to file.*/
+  static constexpr bool active_ = false;  /**<Turn Backend ON or OFF.*/
+  static constexpr bool storeMissionData_ = false;  /**<Store mission data to file.*/
   static constexpr bool detectDrift_ = false;  /**<Detect drift of rovio.*/
 
   static constexpr int nCam_ = 1;  // Number of cameras.
@@ -33,12 +34,23 @@ class Backend {
   static constexpr int penaltyDistance_ = 20;  // Features are punished (strength inter alia dependent of zeroDistancePenalty), if smaller distance to existing feature.
   static constexpr int zeroDistancePenalty_ = 100;
 
+
   // Constructor
   Backend() {
 
     if (active_ && storeMissionData_) {
-      bag_.open("test.bag", rosbag::bagmode::Write);
+      // Create path string and bagfile name.
+      rovioPackagePath_ = ros::package::getPath("rovio");
+      std::ostringstream bagName;
+      std::time_t time = std::time(nullptr);
+      char datestr[100];
+      std::strftime(datestr, sizeof(datestr), "%F_%T", std::localtime(&time));
+      bagName <<rovioPackagePath_<<"/storage/"<<"Mission_"<<datestr<<".bag";
+      // Create bagfile and open it.
+      bag_.open(bagName.str(), rosbag::bagmode::Write);
+      // Create vertex queue for storage.
       storageVQ_ = new VertexQueue(-1);
+      // Create and start storage thread.
       missionStorageThread_ = new std::thread(&rovio::Backend::missionStorageThread, this);
     }
 
@@ -222,6 +234,7 @@ class Backend {
   ///////////////////////
   // Data Members      //
   ///////////////////////
+  std::string rovioPackagePath_;
 
   // Vertex Data Storage
   rosbag::Bag bag_;
