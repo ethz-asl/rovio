@@ -37,6 +37,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include "rovio/commonVision.hpp"
+#include "rovio/Backend.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -197,116 +198,6 @@ class DepthMap{
   }
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class BackendFeature {
- public:
-  typedef std::shared_ptr<BackendFeature> Ptr;
-  BackendFeature()
- {
-    camID_ = 0;
-    nObservations_ = 0;
-    globalID_ = 0;
-    id_ = 0;
-  };
-  ~BackendFeature(){};
-
-  // Data Handling
-  int camID_;
-  int nObservations_;  /**<How many times the feature was seen before (not including the current observation).*/
-  unsigned long globalID_;    /**<Global feature ID. Corresponding features have the same unique ID.*/
-
-  // Feature Data
-  double id_;    /**<Inverse depth.*/
-  cv::Point2f c_;  /**<Pixel coordinate in vertical direction.*/
-  LWF::NormalVectorElement CfP_;  /**<Bearing vector.*/
-};
-
-template<int nCam, int nMaxFeatures>
-struct Vertex {
- public:
- Vertex(){
-   mpCameras_ = nullptr;
-   features_.reserve(nMaxFeatures);
- };
- ~Vertex(){};
-
- const Camera* mpCameras_; // ToDo Extract intrinsics (object will be destroyed after filter shuts down!)
- // State
- V3D WrWM_;
- QPD qWM_;
- V3D MvM_;
- V3D acb_;
- V3D gyb_;
- V3D MrMC_[nCam];
- QPD qCM_[nCam];
- // IMU Data
- V3D ac_;
- V3D gy_;
-
-
-
- std::unordered_multimap<unsigned long, BackendFeature::Ptr> features_;
-};
-
-template<int nCam, int nMaxFeatures, int nMaxFrames>
-class VertexGraph {
- public:
-  VertexGraph(){};
-  ~VertexGraph(){};
-
-  // Data Members
-  std::deque<std::shared_ptr<Vertex<nCam, nMaxFeatures>>> queue_;
-
-  // Functions
-  void pushBack(const std::shared_ptr<Vertex<nCam, nMaxFeatures>>& vertex) {
-    queue_.push_back(vertex);
-    if(queue_.size() > nMaxFrames)
-      queue_.pop_front();
-  }
-};
-
-struct BearingWithPose {
-  V3D WrWM_;
-  QPD qMW_;
-  V3D MrMC_;
-  QPD qCM_;
-  LWF::NormalVectorElement CfP_;
-};
-
-template<int nLevels, int patchSize, int nCam>
-class BackendState {
- public:
-  BackendState() {
-    // Initialize feature tracking variables.
-    mlps_ = std::make_shared<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>>();
-    for (unsigned int i=0; i<nMaxFeatures_; i++) {
-      LWF::NormalVectorElement nor;
-      nor.setFromVector(V3D(0,0,1));
-      mlps_->features_[i].set_nor(nor);
-      mlps_->features_[i].bearingCorners_[0].setZero();
-      mlps_->features_[i].bearingCorners_[1].setZero();
-      mlps_->features_[i].camID_ = 0;
-      mlps_->features_[i].setDepth(1.0);
-    }
-  }
-  ~BackendState() {}
-
-  // Parameters
-  static constexpr int nMaxFrames_ = 50;    // Maximal number of frames a feature should be found and stored.
-  static constexpr int nMaxFeatures_ = 300; // Maximal number of best features per frame.
-  static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
-  static constexpr int penaltyDistance_ = 20;  // Features are punished (strength inter alia dependent of zeroDistancePenalty),
-                                                  // if smaller distance to existing feature.
-  static constexpr int zeroDistancePenalty_ = 100;
-
-  // Storage.
-  VertexGraph<nCam, nMaxFeatures_, nMaxFrames_> vertexGraph_;
-
-  // Feature Tracking Variables (temporary)
-  BearingWithPose bearingsWithPosesAtInit_[nMaxFeatures_];  // Array, containing bearing vectors & poses at initialization.
-  std::shared_ptr<MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_>> mlps_;  // Current multilevel patch set.
-};
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /** \brief Class, defining the auxiliary state of the filter.
  *
  *  \see State
@@ -321,7 +212,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
  public:
   /** \brief Constructor
    */
-  StateAuxiliary(){
+  StateAuxiliary() {
     MwWMest_.setZero();
     MwWMmeas_.setZero();
     wMeasCov_.setIdentity();
@@ -342,15 +233,17 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
+    backendFeatureTracking_ = std::make_shared<Backend::FeatureTracking<nLevels,patchSize>>();
   };
 
   /** \brief Destructor
    */
   ~StateAuxiliary(){};
 
-  V3D MwWMest_;  /**<@todo*/
-  V3D MwWMmeas_;  /**<@todo*/
-  M3D wMeasCov_;  /**<@todo*/
+  V3D MaWMmeas_;  /**<Measured acceleration of the IMU, expressed in IMU coordinates.*/
+  V3D MwWMest_;   /**<Estimated angular velocity, expressed in IMU coordinates.*/
+  V3D MwWMmeas_;  /**<Measured angular velocity, expressed in IMU coordinates.*/
+  M3D wMeasCov_;  /**<Covariance matrix of the measured angular velocity vector.*/
   Eigen::Matrix2d A_red_[nMax];  /**<Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   Eigen::Vector2d b_red_[nMax];  /**<Reduced intensity errors, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   LWF::NormalVectorElement bearingMeas_[nMax];  /**<@todo*/
@@ -363,9 +256,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<@todo*/
-
-  // Backend
-  BackendState<nLevels,patchSize,nCam> backend_state_;
+  std::shared_ptr<Backend::FeatureTracking<nLevels,patchSize>> backendFeatureTracking_;  /**<Backend feature tracking members. Note: Needs to be a pointer, otherwise framework gets stuck!*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -649,6 +540,32 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
   /** \brief Destructor
    */
   ~PredictionMeas(){};
+
+  //@{
+  /** \brief Get/Set the measured IMU acceleration value, expressed in IMU coordinates.
+   *
+   *  @return a reference to the measured IMU acceleration, expressed in IMU coordinates.
+   */
+  inline V3D& MaM(){
+    return this->template get<_acc>();
+  }
+  inline const V3D& MaM() const{
+    return this->template get<_acc>();
+  }
+  //@}
+
+  //@{
+  /** \brief Get/Set the measured (IMU) angular velocity vector MwM, expressed in IMU frame.
+   *
+   *  @return a reference to the measured (IMU) angular velocity vector MwM, expressed in IMU frame.
+   */
+  inline V3D& MwM(){
+    return this->template get<_gyr>();
+  }
+  inline const V3D& MwM() const{
+    return this->template get<_gyr>();
+  }
+  //@}
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -671,15 +588,15 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
       LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
       LWF::ArrayElement<LWF::ScalarElement,STATE::nMax_>,
       LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>::E_;
-  static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
-  static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the IMU-Frame, expressed in IMU-Coordinates.*/
-  static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/
-  static constexpr unsigned int _gyb = _acb+1;  /**<Idx. Additive bias on gyroscope.*/
-  static constexpr unsigned int _att = _gyb+1;  /**<Idx. Quaternion qWM: IMU coordinates to World coordinates.*/
-  static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
-  static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
-  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Depth Parameters @todo complete*/
-  static constexpr unsigned int _nor = _dep+1;  /**<Idx. Bearing Vectors expressed in Camera-Coordinates.*/
+  static constexpr unsigned int _pos = 0;       /**<Idx. Noise Of Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
+  static constexpr unsigned int _vel = _pos+1;  /**<Idx. Noise Of Velocity Vector MvM: Absolute velocity of the IMU-Frame, expressed in IMU-Coordinates.*/
+  static constexpr unsigned int _acb = _vel+1;  /**<Idx. Noise Of Additive bias on accelerometer.*/
+  static constexpr unsigned int _gyb = _acb+1;  /**<Idx. Noise Of Additive bias on gyroscope.*/
+  static constexpr unsigned int _att = _gyb+1;  /**<Idx. Noise Of Quaternion qWM: IMU coordinates to World coordinates.*/
+  static constexpr unsigned int _vep = _att+1;  /**<Idx. Noise Of Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
+  static constexpr unsigned int _vea = _vep+1;  /**<Idx. Noise Of Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
+  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Noise Of Depth Parameters @todo complete*/
+  static constexpr unsigned int _nor = _dep+1;  /**<Idx. Noise Of Bearing Vectors expressed in Camera-Coordinates.*/
 
   /** \brief Constructor
    */

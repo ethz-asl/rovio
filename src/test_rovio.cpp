@@ -62,7 +62,6 @@ int main(int argc, char** argv){
   rovio::RovioNode<mtFilter> rovioNode(nh,mpFilter);
   rovioNode.makeTest();
 
-
 #ifdef MAKE_SCENE
   // Scene
   std::string mVSFileName = rootdir + "/shaders/shader.vs";

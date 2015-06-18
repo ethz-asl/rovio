@@ -72,6 +72,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   };
   ~ImuPrediction(){};
   void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{ // TODO: implement without noise for speed
+    output.aux().MaWMmeas_ = meas.template get<mtMeas::_acc>();
     output.aux().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
     output.aux().MwWMest_  = meas.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuRor = output.aux().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
@@ -95,7 +96,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       // Get new bearing vector.
       V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d
           + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor)
-          + oldBearing.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
+              + oldBearing.getN()*noise.template get<mtNoise::_nor>(i)*sqrt(dt);
       QPD qm = qm.exponentialMap(dm);
       output.CfP(i) = oldBearing.rotated(qm);
 
@@ -113,7 +114,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     output.WrWM() = state.WrWM()-dt*(state.qWM().rotate(state.MvM())
         -noise.template get<mtNoise::_pos>()/sqrt(dt));
     output.MvM() = (M3D::Identity()-gSM(dOmega))*state.MvM()
-        -dt*(meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
+            -dt*(meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.acb() = state.acb()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.gyb() = state.gyb()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
     output.qWM() = state.qWM()*dQ;
@@ -129,35 +130,37 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    const BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state_in = &(state.aux().backend_state_);
-    BackendState<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>* backend_state_out = &(output.aux().backend_state_);
+    if (Backend::active_) {
+      const Backend::FeatureTracking<mtState::nLevels_,mtState::patchSize_>* backendFeatureTrackingIn = state.aux().backendFeatureTracking_.get();
+      Backend::FeatureTracking<mtState::nLevels_,mtState::patchSize_>* backendFeatureTrackingOut = output.aux().backendFeatureTracking_.get();
 
-    double d_old, d_new;
-    for(unsigned int i=0; i<backend_state_in->nMaxFeatures_; i++) {
-      const int camID = backend_state_in->mlps_->features_[i].camID_;
-      const V3D camRor = state.qCM(camID).rotate(imuRor);
-      const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-      oldBearing = backend_state_in->mlps_->features_[i].get_nor();  // Old bearing vector.
-      d_old = backend_state_in->mlps_->features_[i].depth_;          // Old depth value.
+      double d_old, d_new;
+      for(unsigned int i = 0; i < Backend::nMaxFeatures_; i++) {
+        const int camID = backendFeatureTrackingIn->mlps_.features_[i].camID_;
+        const V3D camRor = state.qCM(camID).rotate(imuRor);
+        const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
+        oldBearing = backendFeatureTrackingIn->mlps_.features_[i].get_nor();  // Old bearing vector.
+        d_old = backendFeatureTrackingIn->mlps_.features_[i].depth_;          // Old depth value.
 
-      // New depth value.
-      d_new = d_old - dt * oldBearing.getVec().transpose() * camVel;  // Change this expression if inverse depth is used!!
+        // New depth value.
+        d_new = d_old - dt * oldBearing.getVec().transpose() * camVel;  // Change this expression if inverse depth is used!!
 
-      // Get new bearing vector.
-      V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d_old
-          + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
-      QPD qm = qm.exponentialMap(dm);
-      backend_state_out->mlps_->features_[i].set_nor(oldBearing.rotated(qm));  // Set the new bearing vector.
+        // Get new bearing vector.
+        V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d_old
+            + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
+        QPD qm = qm.exponentialMap(dm);
+        backendFeatureTrackingOut->mlps_.features_[i].set_nor(oldBearing.rotated(qm));  // Set the new bearing vector.
 
-      // WARP corners.
-      for(unsigned int j=0;j<2;j++){
-        oldBearing.boxPlus(backend_state_in->mlps_->features_[i].bearingCorners_[j], tempNormal);
-        dm = dt*(gSM(tempNormal.getVec())*camVel/d_old
-            + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
-        qm = qm.exponentialMap(dm);
-        tempNormal = tempNormal.rotated(qm);
-        tempNormal.boxMinus(backend_state_out->mlps_->features_[i].get_nor(),
-                            backend_state_out->mlps_->features_[i].bearingCorners_[j]);
+        // WARP corners.
+        for(unsigned int j=0;j<2;j++){
+          oldBearing.boxPlus(backendFeatureTrackingIn->mlps_.features_[i].bearingCorners_[j], tempNormal);
+          dm = dt*(gSM(tempNormal.getVec())*camVel/d_old
+              + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
+          qm = qm.exponentialMap(dm);
+          tempNormal = tempNormal.rotated(qm);
+          tempNormal.boxMinus(backendFeatureTrackingOut->mlps_.features_[i].get_nor(),
+                              backendFeatureTrackingOut->mlps_.features_[i].bearingCorners_[j]);
+        }
       }
     }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

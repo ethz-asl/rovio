@@ -35,6 +35,7 @@ pkg_check_modules(YamlCpp yaml-cpp)
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
   	kindr
+	rosbag
 	roscpp
 	roslib
 	cv_bridge
@@ -49,6 +50,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   RovioOutput.msg
+  BackendMsg.msg
 )
 
 ## Generate added messages and services with any dependencies listed here
