@@ -20,15 +20,16 @@
 
 namespace rovio{
 
+
 class Backend {
  public:
 
   // Parameters
-  static constexpr bool active_ = false;  /**<Turn Backend ON or OFF.*/
-  static constexpr bool storeMissionData_ = false;  /**<Store mission data to file.*/
+  static constexpr bool active_ = true;  /**<Turn Backend ON or OFF.*/
+  static constexpr bool storeMissionData_ = true;  /**<Store mission data to file.*/
   static constexpr bool detectDrift_ = false;  /**<Detect drift of rovio.*/
 
-  static constexpr int nCam_ = 1;  // Number of cameras.
+  static constexpr int nCam_ = 1;
   static constexpr int nMaxFeatures_ = 300; // Maximal number of best features per frame.
   static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
   static constexpr int penaltyDistance_ = 20;  // Features are punished (strength inter alia dependent of zeroDistancePenalty), if smaller distance to existing feature.
@@ -258,6 +259,7 @@ class Backend {
 
   void missionStorageThread()
   {
+    int i = 0;
     while (true) {
 
       // Get the front vertex of the storage vertex queue
@@ -270,12 +272,13 @@ class Backend {
       lock.unlock();
 
       // Storage of the vertex data in the mission file.
-
+      BackendMsg be_msg;
+      be_msg.test = "Hallo" + std::to_string(i);
+      bag_.write("mytopic", ros::Time::now(),be_msg);
+      i++;
     }
  };
 };
-
-
 
 } // namespace rovio
 #endif /* INCLUDE_ROVIO_BACKEND_HPP_ */

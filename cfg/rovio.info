@@ -155,3 +155,14 @@ Prediction
     beta 2
     kappa 0
 }
+
+Backend 
+{
+  active true
+  storeMissionData true
+  detectDrift false
+  nMaxFeatures 300
+  scoreDetectionExponent 0.5
+  penaltyDistance 20
+  zeroDistancePenalty 100
+}

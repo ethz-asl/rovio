@@ -3,7 +3,7 @@
    
      <!-- Run Bagfile -->
      <node pkg="rosbag" type="play" name="player" output="screen"   
-      args="--rate=1 /home/andreas/Bagfiles/slow_2.bag"/>
+      args="--rate=0.5 /home/andreas/Bagfiles/slow_2.bag"/>
       
      <!-- Run rovio -->
      <node  name="rovio" pkg="rovio" type="test_rovio"     
