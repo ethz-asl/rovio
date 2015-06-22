@@ -2030,6 +2030,36 @@ bool getDepthFromTriangulation(const V3D& C1fP, const V3D& C2fP, const V3D& C2rC
   return true;
 }
 
+bool getWrWPFromObservations(const std::vector<V3D>& WrWC, const std::vector<V3D>& WrCP, V3D* WrWP)
+{
+  // Solve system of equations: A*x=b -> Normal Equation: ATA * x = AT * b -> ATA * x = g
+  assert(WrWC.size() == WrCP.size());
+  const int nObservations = WrWC.size();
+  const int rows = 3 * nObservations;  // Cols of A
+  const int cols = nObservations  + 3; // Rows of A
+  Eigen::MatrixXf AT (cols,rows);
+  Eigen::MatrixXf ATA(cols,cols);
+  Eigen::MatrixXf B (3,nObservations);  // Matrix having a bearing vector in each col.
+  Eigen::Matrix3f K;
+  Eigen::VectorXf b(rows);
+  Eigen::VectorXf g(cols);
+  Eigen::Vector3f l;
+
+  for (int i = 0; i < nObservations; i++) {
+    AT.block<3,3>(0,i*3).setIdentity();
+    AT.block<1,3>(3+i,3*i) = WrCP[i].cast<float>().transpose();
+    b.segment(i*3,3) = WrWC[i].cast<float>();
+  }
+
+  ATA = AT * AT.transpose();
+  g = AT * b;
+  B = ATA.block(0,3,3,nObservations);
+  K = Eigen::Matrix3f::Identity() - B * ATA.block(3,3,nObservations,nObservations).inverse() * B.transpose();
+  l = g.segment(0,3) - B * ATA.block(3,3,nObservations,nObservations).inverse() * g.segment(3,rows-3);
+  *WrWP = Eigen::Vector3f(K.inverse() * l).cast<double>();
+  return true;
+}
+
 /** \brief Get the depth uncertainty tau of a triangulated depth value.
  *
  *  Consider a bearing vector C1fP in a reference frame and a bearing vector C2fP in a partner frame have been used

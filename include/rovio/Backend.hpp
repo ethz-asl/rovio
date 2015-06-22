@@ -93,6 +93,7 @@ class Backend {
   ///////////////////////
   // Type Definitions  //
   ///////////////////////
+
   struct Feature {
    public:
     Feature() {
