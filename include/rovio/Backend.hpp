@@ -12,34 +12,61 @@
 #include <ctime>
 #include <deque>
 #include <mutex>
+#include <opencv2/core/core.hpp>
 #include <rosbag/bag.h>
 #include <thread>
 #include <unordered_map>
 
-#include <rovio/BackendMsg.h>
+#include "rovio/BackendMsg.h"
+#include "rovio/Camera.hpp"
+#include "rovio/commonVision.hpp"
 
 namespace rovio{
 
+class BackendParams {
+ public:
+  template<int nCam> friend class Backend;
+  typedef std::shared_ptr<BackendParams> Ptr;
 
+  // Parameter which can be set via rovio.info
+  bool active_ = false;                      /**<Turn Backend ON or OFF.*/
+  bool storeMissionData_ = false;            /**<Store mission data to file.*/
+  bool detectDrift_ = false;                 /**<Detect drift of rovio.*/
+  double scoreDetectionExponent_ = 0.5;      /**<Influences the distribution of the mlp's into buckets. Choose between [0,1].*/
+  int penaltyDistance_ = 20;                 /**<Features are punished (strength inter alia dependent of zeroDistancePenalty), if smaller distance to existing feature.*/
+  int zeroDistancePenalty_ = 100;
+  // Parameter which can not be set via rovio.info
+  static constexpr int nMaxFeatures_ = 300;  /**<Maximal number of best features per frame.*/
+
+ private:
+  int nCam_ = -1;
+};
+
+template<int nCam>
 class Backend {
  public:
+// typedef typename std::shared_ptr< Backend<nCam>> Ptr;
 
-  // Parameters
-  static constexpr bool active_ = true;  /**<Turn Backend ON or OFF.*/
-  static constexpr bool storeMissionData_ = true;  /**<Store mission data to file.*/
-  static constexpr bool detectDrift_ = false;  /**<Detect drift of rovio.*/
+  Backend(const std::shared_ptr<BackendParams>& params) {
+    //Set parameters.
+    params_ = params;
+    params_->nCam_ = nCam;
+    storageVQ_ = nullptr;
+    missionStorageThread_ = nullptr;
+  }
 
-  static constexpr int nCam_ = 1;
-  static constexpr int nMaxFeatures_ = 300; // Maximal number of best features per frame.
-  static constexpr float scoreDetectionExponent_ = 0.5;  // Influences the distribution of the mlp's into buckets. Choose between [0,1].
-  static constexpr int penaltyDistance_ = 20;  // Features are punished (strength inter alia dependent of zeroDistancePenalty), if smaller distance to existing feature.
-  static constexpr int zeroDistancePenalty_ = 100;
+  ~Backend() {
+    if (params_->active_ && params_->storeMissionData_) {
+      bag_.close();
+      delete storageVQ_;
+      delete missionStorageThread_;
+    }
+  };
 
+  void initialize() {
 
-  // Constructor
-  Backend() {
-
-    if (active_ && storeMissionData_) {
+    // Feature: Store Mission Data
+    if (params_->active_ && params_->storeMissionData_) {
       // Create path string and bagfile name.
       rovioPackagePath_ = ros::package::getPath("rovio");
       std::ostringstream bagName;
@@ -50,29 +77,27 @@ class Backend {
       // Create bagfile and open it.
       bag_.open(bagName.str(), rosbag::bagmode::Write);
       // Create vertex queue for storage.
+      std::cout<<"CREATEEEEEE"<<std::endl;
       storageVQ_ = new VertexQueue(-1);
       // Create and start storage thread.
-      missionStorageThread_ = new std::thread(&rovio::Backend::missionStorageThread, this);
+      missionStorageThread_ = new std::thread(&rovio::Backend<nCam>::missionStorageThread, this);
     }
 
+    // Feature: Detect Drift
+    // ...
   };
 
-  ~Backend() {
-
-    if (active_ && storeMissionData_) {
-      bag_.close();
-    }
-    delete storageVQ_;
-    delete missionStorageThread_;
-
-  };
+  ///////////////////////
+  // Params            //
+  ///////////////////////
+  std::shared_ptr<BackendParams> params_;
 
   ///////////////////////
   // Type Definitions  //
   ///////////////////////
   struct Feature {
    public:
-    typedef std::shared_ptr<Feature> Ptr;
+    typedef typename std::shared_ptr<Feature> Ptr;
     Feature() {
       camID_ = 0;
       nObservations_ = 0;
@@ -97,7 +122,7 @@ class Backend {
     typedef std::shared_ptr<Vertex> Ptr;
     Vertex() {
       mpCameras_ = nullptr;
-      features_.reserve(nMaxFeatures_);
+      features_.reserve(BackendParams::nMaxFeatures_);
     };
     ~Vertex(){};
 
@@ -109,13 +134,13 @@ class Backend {
     V3D MvM_;
     V3D acb_;
     V3D gyb_;
-    V3D MrMC_[nCam_];
-    QPD qCM_[nCam_];
+    V3D MrMC_[nCam];
+    QPD qCM_[nCam];
     // IMU Data
     V3D MaM_;
     V3D MwM_;
     // Feature Data
-    std::unordered_multimap<unsigned long, Feature::Ptr> features_;
+    std::unordered_multimap<unsigned long,std::shared_ptr<Feature>> features_;
   };
 
   struct BearingWithPose {
@@ -130,7 +155,7 @@ class Backend {
   struct FeatureTracking {
    public:
     FeatureTracking() {
-      for (unsigned int i=0; i<nMaxFeatures_; i++) {
+      for (unsigned int i = 0; i < BackendParams::nMaxFeatures_; i++) {
         LWF::NormalVectorElement nor;
         nor.setFromVector(V3D(0,0,1));
         mlps_.features_[i].set_nor(nor);
@@ -140,8 +165,8 @@ class Backend {
         mlps_.features_[i].setDepth(1.0);
       }
     }
-    BearingWithPose bearingsWithPosesAtInit_[nMaxFeatures_];  /**<Array, containing bearing vectors & poses at initialization.*/
-    MultilevelPatchSet<nLevels, patchSize, nMaxFeatures_> mlps_;  /**<Current multilevel patch set, containing the tracked features.*/
+    BearingWithPose bearingsWithPosesAtInit_[BackendParams::nMaxFeatures_];  /**<Array, containing bearing vectors & poses at initialization.*/
+    MultilevelPatchSet<nLevels, patchSize, BackendParams::nMaxFeatures_> mlps_;  /**<Current multilevel patch set, containing the tracked features.*/
   };
 
   class VertexQueue {
@@ -161,7 +186,7 @@ class Backend {
     int nMax_;
 
     // Functions
-    void pushBack(const Vertex::Ptr& vertex)
+    void pushBack(const std::shared_ptr<Vertex>& vertex)
     {
       queue_.push_back(vertex);
       if(queue_.size() > nMax_)
@@ -183,42 +208,42 @@ class Backend {
       return this->queue_.size();
     };
 
-    Vertex::Ptr get (const unsigned int i)
+    std::shared_ptr<Vertex> get (const unsigned int i)
     {
       if ( i < queue_.size()) {
         return queue_.at(i);
       }
       else {
-        return Vertex::Ptr(nullptr);
+        return std::shared_ptr<Vertex>(nullptr);
       }
     };
 
-    Vertex::Ptr getFront()
+    std::shared_ptr<Vertex> getFront()
     {
       if (queue_.size() > 0) {
         return queue_.front();
       }
       else {
-        return Vertex::Ptr(nullptr);
+        return std::shared_ptr<Vertex>(nullptr);
       }
     };
 
-    Vertex::Ptr getBack()
+    std::shared_ptr<Vertex> getBack()
     {
       if (queue_.size() > 0) {
         return queue_.back();
       }
       else {
-        return Vertex::Ptr(nullptr);
+        return std::shared_ptr<Vertex>(nullptr);
       }
     };
 
-    std::deque<Vertex::Ptr>::iterator getBeginIterator()
+    typename std::deque<std::shared_ptr<Vertex>>::iterator getBeginIterator()
     {
       return queue_.begin();
     };
 
-    std::deque<Vertex::Ptr>::iterator getEndIterator()
+    typename std::deque<std::shared_ptr<Vertex>>::iterator getEndIterator()
     {
       return queue_.end();
     };
@@ -229,7 +254,7 @@ class Backend {
     };
 
    private:
-    std::deque<Vertex::Ptr> queue_;
+    std::deque<std::shared_ptr<Vertex>> queue_;
   };
 
   ///////////////////////
@@ -247,7 +272,7 @@ class Backend {
   //////////////////////////////
   // Public Members Functions //
   //////////////////////////////
-  void storeVertex(const Vertex::Ptr& vertex)
+  void storeVertex(const std::shared_ptr<Vertex>& vertex)
   {
     std::lock_guard<std::mutex> lock(mutexStorageVQ_);
     storageVQ_->pushBack(vertex);
@@ -264,7 +289,7 @@ class Backend {
 
       // Get the front vertex of the storage vertex queue
       // and delete corresponding queue element afterwards.
-      Vertex::Ptr vertex;
+      std::shared_ptr<Vertex> vertex;
       std::unique_lock<std::mutex> lock(mutexStorageVQ_);
       condVarStorageVQ_.wait(lock, [&]{return !storageVQ_->isEmpty();});
       vertex = storageVQ_->getBack();
@@ -277,7 +302,7 @@ class Backend {
       bag_.write("mytopic", ros::Time::now(),be_msg);
       i++;
     }
- };
+  };
 };
 
 } // namespace rovio

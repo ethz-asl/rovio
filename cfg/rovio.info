@@ -159,9 +159,8 @@ Prediction
 Backend 
 {
   active true
-  storeMissionData true
+  storeMissionData false
   detectDrift false
-  nMaxFeatures 300
   scoreDetectionExponent 0.5
   penaltyDistance 20
   zeroDistancePenalty 100

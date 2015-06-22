@@ -33,7 +33,7 @@
 #include <Eigen/Dense>
 #include "lightweight_filtering/FilterBase.hpp"
 #include "lightweight_filtering/State.hpp"
-//#include "rovio/Backend.hpp"
+#include "rovio/Backend.hpp"
 #include "rovio/FilterStates.hpp"
 #include "rovio/ImgUpdate.hpp"
 #include "rovio/ImuPrediction.hpp"
@@ -67,6 +67,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   typedef typename Base::mtState mtState;
   rovio::Camera cameras_[mtState::nCam_];  // TODO IMG
   std::string cameraCalibrationFile_[mtState::nCam_];
+  std::shared_ptr<Backend<mtState::nCam_>> backend_;
 
   /** \brief Constructor. Initializes the filter.
    */
@@ -107,6 +108,18 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
     reset(0.0);
+
+    // Backend (Note: Parameters from info file are not known yet!)
+    BackendParams::Ptr backendParams = std::make_shared<BackendParams>();
+    boolRegister_.registerScalar("Backend.active", backendParams->active_);
+    boolRegister_.registerScalar("Backend.storeMissionData", backendParams->storeMissionData_);
+    boolRegister_.registerScalar("Backend.detectDrift", backendParams->detectDrift_);
+    doubleRegister_.registerScalar("Backend.scoreDetectionExponent", backendParams->scoreDetectionExponent_);
+    intRegister_.registerScalar("Backend.penaltyDistance", backendParams->penaltyDistance_);
+    intRegister_.registerScalar("Backend.zeroDistancePenalty", backendParams->zeroDistancePenalty_);
+    backend_ = std::make_shared<Backend<mtState::nCam_>>(backendParams);
+    std::get<0>(mUpdates_).backend_ = backend_;
+    mPrediction_.backend_ = backend_;
   }
 
   /** \brief Reloads the camera calibration for all cameras and resets the depth map type.

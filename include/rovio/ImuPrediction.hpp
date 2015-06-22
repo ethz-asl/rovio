@@ -56,6 +56,8 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
   const V3D g_;
+  std::shared_ptr<Backend<mtState::nCam_>> backend_;
+
   ImuPrediction():g_(0,0,-9.81){
     int ind;
     for(int i=0;i<mtState::nMax_;i++){
@@ -130,17 +132,14 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    if (Backend::active_) {
-      const Backend::FeatureTracking<mtState::nLevels_,mtState::patchSize_>* backendFeatureTrackingIn = state.aux().backendFeatureTracking_.get();
-      Backend::FeatureTracking<mtState::nLevels_,mtState::patchSize_>* backendFeatureTrackingOut = output.aux().backendFeatureTracking_.get();
-
+    if (backend_->params_->active_) {
       double d_old, d_new;
-      for(unsigned int i = 0; i < Backend::nMaxFeatures_; i++) {
-        const int camID = backendFeatureTrackingIn->mlps_.features_[i].camID_;
+      for(unsigned int i = 0; i < BackendParams::nMaxFeatures_; i++) {
+        const int camID = state.aux().backendFeatureTracking_->mlps_.features_[i].camID_;
         const V3D camRor = state.qCM(camID).rotate(imuRor);
         const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-        oldBearing = backendFeatureTrackingIn->mlps_.features_[i].get_nor();  // Old bearing vector.
-        d_old = backendFeatureTrackingIn->mlps_.features_[i].depth_;          // Old depth value.
+        oldBearing = state.aux().backendFeatureTracking_->mlps_.features_[i].get_nor();  // Old bearing vector.
+        d_old = state.aux().backendFeatureTracking_->mlps_.features_[i].depth_;          // Old depth value.
 
         // New depth value.
         d_new = d_old - dt * oldBearing.getVec().transpose() * camVel;  // Change this expression if inverse depth is used!!
@@ -149,17 +148,17 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
         V3D dm = dt*(gSM(oldBearing.getVec())*camVel/d_old
             + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
         QPD qm = qm.exponentialMap(dm);
-        backendFeatureTrackingOut->mlps_.features_[i].set_nor(oldBearing.rotated(qm));  // Set the new bearing vector.
+        output.aux().backendFeatureTracking_->mlps_.features_[i].set_nor(oldBearing.rotated(qm));  // Set the new bearing vector.
 
         // WARP corners.
         for(unsigned int j=0;j<2;j++){
-          oldBearing.boxPlus(backendFeatureTrackingIn->mlps_.features_[i].bearingCorners_[j], tempNormal);
+          oldBearing.boxPlus(state.aux().backendFeatureTracking_->mlps_.features_[i].bearingCorners_[j], tempNormal);
           dm = dt*(gSM(tempNormal.getVec())*camVel/d_old
               + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
           qm = qm.exponentialMap(dm);
           tempNormal = tempNormal.rotated(qm);
-          tempNormal.boxMinus(backendFeatureTrackingOut->mlps_.features_[i].get_nor(),
-                              backendFeatureTrackingOut->mlps_.features_[i].bearingCorners_[j]);
+          tempNormal.boxMinus(output.aux().backendFeatureTracking_->mlps_.features_[i].get_nor(),
+                              output.aux().backendFeatureTracking_->mlps_.features_[i].bearingCorners_[j]);
         }
       }
     }

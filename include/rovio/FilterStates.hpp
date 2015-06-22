@@ -233,7 +233,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
-    backendFeatureTracking_ = std::make_shared<Backend::FeatureTracking<nLevels,patchSize>>();
+    backendFeatureTracking_ = std::make_shared<typename Backend<nCam>::template FeatureTracking<nLevels,patchSize> >();
   };
 
   /** \brief Destructor
@@ -256,7 +256,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<@todo*/
-  std::shared_ptr<Backend::FeatureTracking<nLevels,patchSize>> backendFeatureTracking_;  /**<Backend feature tracking members. Note: Needs to be a pointer, otherwise framework gets stuck!*/
+  std::shared_ptr<typename Backend<nCam>::template FeatureTracking<nLevels,patchSize> > backendFeatureTracking_;  /**<Backend feature tracking members. Note: Needs to be a pointer, otherwise framework gets stuck!*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
