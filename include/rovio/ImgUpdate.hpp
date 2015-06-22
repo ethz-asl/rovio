@@ -861,8 +861,10 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
     // Backend Start
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     if (backend_->params_->active_) {
-
       double t_start_backend = (double) cv::getTickCount();
+      typename Backend<mtState::nCam_>::template FeatureTracking<mtState::nLevels_,mtState::patchSize_>*
+      backendFeatureTracking_ = filterState.state_.aux().backendFeatureTracking_.get();
+      typedef typename Backend<mtState::nCam_>::Feature BackendFeature;
       MultilevelPatchFeature<mtState::nLevels_, mtState::patchSize_> patchInTargetFrame(mpCameras_);
       auto vertex = std::make_shared<typename Backend<mtState::nCam_>::Vertex>();
 
@@ -900,13 +902,13 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       bool foundCorrespondence;
 
       for (id = 0; id < BackendParams::nMaxFeatures_; ++id) {
-        if (filterState.state_.aux().backendFeatureTracking_.get()->mlps_.isValid_[id]) {
+        if (backendFeatureTracking_->mlps_.isValid_[id]) {
           activeCameraCounter = 0;
           foundCorrespondence = false;
 
           while (activeCameraCounter != mtState::nCam_ && foundCorrespondence == false) {
             // Data handling stuff.
-            mpFeature = &(filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[id]);  // Set the feature pointer.
+            mpFeature = &(backendFeatureTracking_->mlps_.features_[id]);  // Set the feature pointer.
             const int camID = mpFeature->camID_;                        // Camera ID of the feature.
             const int activeCamID = (activeCameraCounter + camID) % mtState::nCam_;  // Camera ID of the camera the feature is currently searched.
 
@@ -984,14 +986,14 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
 
                   // Triangulation
                   double depth;
-                  typename Backend<mtState::nCam_>::BearingWithPose* bp = &filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[id];
+                  typename Backend<mtState::nCam_>::BearingWithPose* bp = &backendFeatureTracking_->bearingsWithPosesAtInit_[id];
                   const QPD qC2W = bp->qCM_ * bp->qMW_;
                   const V3D WrC2C1 = state.WrWM() + state.qWM().rotate(state.MrMC(activeCamID)) - bp->WrWM_ - bp->qMW_.inverted().rotate(bp->MrMC_);
                   const V3D C2rC2C1 = qC2W.rotate(WrC2C1);
                   const QPD qC2C1 = bp->qCM_ * bp->qMW_ * state.qWM() * state.qCM(activeCamID).inverted();
                   getDepthFromTriangulation(mpFeature->get_nor().getVec(), bp->CfP_.getVec(),
                                             C2rC2C1, qC2C1, &depth, 0.0);
-                  mpFeature->setDepth(depth);// Set depth
+                  mpFeature->setDepth(depth);  // Set depth
 
                   // Extract feature patches and update Shi-Tomasi score.
                   extractMultilevelPatchFromImage(
@@ -999,7 +1001,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
                   mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
 
                   // Store the current BackendFeature in current vertex.
-                  std::shared_ptr<typename Backend<mtState::nCam_>::Feature> bf(new typename Backend<mtState::nCam_>::Feature);
+                  std::shared_ptr<BackendFeature> bf(new BackendFeature);
                   bf->CfP_ = mpFeature->get_nor();
                   bf->camID_ = activeCamID;
                   bf->globalID_ = mpFeature->globalID_;// Corresponding features have same ID.
@@ -1009,11 +1011,11 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
                   vertex->features_.insert(std::make_pair(bf->globalID_, bf));// Key is global feature ID.
 
                   // Visualize a specific feature and output triangulated depth;
-                  //                if(id == 20){
-                  //                  std::cout<<"Depth YELLOW: " <<depth<<std::endl;
-                  //                  drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,255,255), 8);
-                  //                  std::cout<<"-------------"<<std::endl;
-                  //                }
+//                  if(id == 20){
+//                    std::cout<<"Depth YELLOW: " <<depth<<std::endl;
+//                    drawPoint(filterState.img_[activeCamID], patchInTargetFrame, cv::Scalar(0,255,255), 8);
+//                    std::cout<<"-------------"<<std::endl;
+//                  }
 
                   // Continue with the next feature in the multilevel patch set.
                   foundCorrespondence = true;
@@ -1039,11 +1041,11 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       // Remove bad features                        //
       ////////////////////////////////////////////////
       for (int i = 0; i < BackendParams::nMaxFeatures_; i++) {
-        if (filterState.state_.aux().backendFeatureTracking_.get()->mlps_.isValid_[i]) {
-          mpFeature = &filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[i];
+        if (backendFeatureTracking_->mlps_.isValid_[i]) {
+          mpFeature = &backendFeatureTracking_->mlps_.features_[i];
           if (!mpFeature->isGoodFeature(trackingLocalRange_, trackingLocalVisibilityRange_,
                                         trackingUpperBound_, trackingLowerBound_))
-            filterState.state_.aux().backendFeatureTracking_.get()->mlps_.isValid_[i] = false;
+            backendFeatureTracking_->mlps_.isValid_[i] = false;
         }
       }
 
@@ -1052,7 +1054,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       ////////////////////////////////////////////////
       static unsigned long nBackendFeaturesCreated = 0;  // Number of features extracted for the backend so far. Needed for global feature ID.
 
-      if (filterState.state_.aux().backendFeatureTracking_.get()->mlps_.getValidCount()
+      if (backendFeatureTracking_->mlps_.getValidCount()
           < startDetectionTh_ * BackendParams::nMaxFeatures_) {
         // 1) Extract a set of corner candidates for the backend.
         std::list<cv::Point2f> candidates_backend;
@@ -1064,7 +1066,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         // 2) Extract the best corner candidates and add them to the mlps.
         //    Initializes added features with bearing vector and current cameraID.
         std::unordered_set<unsigned int> idx_set_backend;
-        idx_set_backend = addBestCandidates(filterState.state_.aux().backendFeatureTracking_.get()->mlps_, candidates_backend,
+        idx_set_backend = addBestCandidates(backendFeatureTracking_->mlps_, candidates_backend,
                                             meas.template get<mtMeas::_aux>().pyr_[searchCamID],
                                             searchCamID, filterState.t_, endLevel_, startLevel_,
                                             BackendParams::nMaxFeatures_, nDetectionBuckets_,
@@ -1075,25 +1077,25 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         // 3) Loop through newly extracted features.
         for (auto it = idx_set_backend.begin(); it != idx_set_backend.end(); ++it) {
           // Initialize newly extracted features.
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].setCamera(mpCameras_);
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].status_.inFrame_ = true;
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].status_.matchingStatus_ = FOUND;
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].depth_ = 1.0;            // Initialize depth.
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].globalID_ = nBackendFeaturesCreated;  // Set global ID.
-          filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].nObservations_ = 0;  // Set global ID.
+          backendFeatureTracking_->mlps_.features_[*it].setCamera(mpCameras_);
+          backendFeatureTracking_->mlps_.features_[*it].status_.inFrame_ = true;
+          backendFeatureTracking_->mlps_.features_[*it].status_.matchingStatus_ = FOUND;
+          backendFeatureTracking_->mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
+          backendFeatureTracking_->mlps_.features_[*it].depth_ = 1.0;            // Initialize depth.
+          backendFeatureTracking_->mlps_.features_[*it].globalID_ = nBackendFeaturesCreated;  // Set global ID.
+          backendFeatureTracking_->mlps_.features_[*it].nObservations_ = 0;  // Set global ID.
 
           // Store the pose and the bearing vectors for triangulation.
-          filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[*it].WrWM_ = state.WrWM();
-          filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[*it].qMW_ = state.qWM().inverted();
-          filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[*it].MrMC_ = state.MrMC(searchCamID);
-          filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[*it].qCM_ = state.qCM(searchCamID);
-          filterState.state_.aux().backendFeatureTracking_.get()->bearingsWithPosesAtInit_[*it].CfP_ = filterState.state_.aux().backendFeatureTracking_.get()->mlps_
+          backendFeatureTracking_->bearingsWithPosesAtInit_[*it].WrWM_ = state.WrWM();
+          backendFeatureTracking_->bearingsWithPosesAtInit_[*it].qMW_ = state.qWM().inverted();
+          backendFeatureTracking_->bearingsWithPosesAtInit_[*it].MrMC_ = state.MrMC(searchCamID);
+          backendFeatureTracking_->bearingsWithPosesAtInit_[*it].qCM_ = state.qCM(searchCamID);
+          backendFeatureTracking_->bearingsWithPosesAtInit_[*it].CfP_ = backendFeatureTracking_->mlps_
               .features_[*it].get_nor();
           // Store the BackendFeature in current vertex.
-          std::shared_ptr<typename Backend<mtState::nCam_>::Feature> bf(new typename Backend<mtState::nCam_>::Feature);
-          bf->CfP_ = filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].get_nor();
-          bf->c_ = filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].get_c();
+          std::shared_ptr<BackendFeature> bf(new BackendFeature);
+          bf->CfP_ = backendFeatureTracking_->mlps_.features_[*it].get_nor();
+          bf->c_ = backendFeatureTracking_->mlps_.features_[*it].get_c();
           bf->globalID_ = nBackendFeaturesCreated;
           bf->camID_ = searchCamID;
           bf->nObservations_ = 0;
@@ -1102,7 +1104,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
           // Draw the extracted features if desired.
           if (doFrameVisualisation_) {
             FeatureCoordinates featureCoordinates;
-            featureCoordinates.set_c(filterState.state_.aux().backendFeatureTracking_.get()->mlps_.features_[*it].c_);
+            featureCoordinates.set_c(backendFeatureTracking_->mlps_.features_[*it].c_);
             drawPoint(filterState.img_[searchCamID], featureCoordinates, cv::Scalar(255, 0, 0));
           }
           //Increase backend feature counter.

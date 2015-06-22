@@ -45,7 +45,6 @@ class BackendParams {
 template<int nCam>
 class Backend {
  public:
-// typedef typename std::shared_ptr< Backend<nCam>> Ptr;
 
   Backend(const std::shared_ptr<BackendParams>& params) {
     //Set parameters.
@@ -77,7 +76,6 @@ class Backend {
       // Create bagfile and open it.
       bag_.open(bagName.str(), rosbag::bagmode::Write);
       // Create vertex queue for storage.
-      std::cout<<"CREATEEEEEE"<<std::endl;
       storageVQ_ = new VertexQueue(-1);
       // Create and start storage thread.
       missionStorageThread_ = new std::thread(&rovio::Backend<nCam>::missionStorageThread, this);
@@ -97,7 +95,6 @@ class Backend {
   ///////////////////////
   struct Feature {
    public:
-    typedef typename std::shared_ptr<Feature> Ptr;
     Feature() {
       camID_ = 0;
       nObservations_ = 0;
@@ -119,7 +116,6 @@ class Backend {
 
   struct Vertex {
    public:
-    typedef std::shared_ptr<Vertex> Ptr;
     Vertex() {
       mpCameras_ = nullptr;
       features_.reserve(BackendParams::nMaxFeatures_);
