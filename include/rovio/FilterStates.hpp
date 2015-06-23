@@ -54,6 +54,9 @@ class DepthMap{
   void setType(const DepthType& type){
     type_ = type;
   }
+  DepthType getType() {
+    return type_;
+  }
   void setType(const int& type){
     switch(type){
       case 0:
@@ -91,6 +94,63 @@ class DepthMap{
       default:
         mapRegular(p,d,d_p,p_d,p_d_p);
         break;
+    }
+  }
+  static void convertDepthType(const DepthType& type_p, const double& p, const DepthType& type_dep, double& dep) {
+    // Source type is REGULAR.
+    if (type_p == REGULAR) {
+      if (type_dep == INVERSE) {
+        dep = 1.0 / p;
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(p);
+      }
+    }
+    // Source type is INVERSE.
+    else if (type_p == INVERSE) {
+      if (type_dep == REGULAR) {
+        dep = 1.0 / p;
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(1.0/p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(1.0/p);
+      }
+    }
+    // Source type is LOG.
+    else if (type_p == LOG) {
+      if (type_dep == REGULAR) {
+        dep = std::exp(p);
+      }
+      else if (type_dep == INVERSE) {
+        dep = 1.0 / std::exp(p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(std::exp(p));
+      }
+    }
+    // Source type is HYPERBOLIC.
+    else if (type_p == HYPERBOLIC) {
+      if (type_dep == REGULAR) {
+        dep = std::sinh(p);
+      }
+      else if (type_dep == INVERSE) {
+        dep = 1.0 / std::sinh(p);
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(std::sinh(p));
+      }
+    }
+    // Source type is Target type.
+    else if (type_p == type_dep) {
+      dep = p;
+    }
+    else {
+      std::cout<<"Desired depth type conversion not known!"<<std::endl;
     }
   }
   void mapRegular(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{

@@ -506,6 +506,33 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
       mpCameras_[i].setExtrinsics(state.template get<mtState::_vep>(i),state.template get<mtState::_vea>(i));
     }
 
+    // Compute median depth of the current features in the state.
+    float medianDepthSF[mtState::nCam_] = {float(initDepth_)};
+    std::vector<float> depthCollectionSF[mtState::nCam_];
+    const float maxUncertaintyToDepthRatio = 0.3;
+    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaMax;
+    for (unsigned int i = 0; i < mtState::nMax_; i++) {
+      if (filterState.mlps_.isValid_[i]) {
+        const int camID = filterState.mlps_.features_[i].camID_;
+        state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i), depth, d_p, p_d, p_d_p);
+        state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) + cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
+                                  , depthPlus, d_p, p_d, p_d_p);
+        state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) - cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
+                                  , depthMinus, d_p, p_d, p_d_p);
+        sigmaMax = std::max(std::abs(depthPlus - depth), std::abs(depthMinus - depth));
+        if (sigmaMax/depth <= maxUncertaintyToDepthRatio) {
+          depthCollectionSF[camID].push_back(depth);
+        }
+      }
+    }
+    for (unsigned int i = 0; i < mtState::nCam_; i++) {
+      int size = depthCollectionSF[i].size();
+      if(size != 0) {
+        std::partial_sort(depthCollectionSF[i].begin(), depthCollectionSF[i].begin() + size / 2 + 1, depthCollectionSF[i].end());
+        medianDepthSF[i] = depthCollectionSF[i][size/2];
+      }
+    }
+
     countTracked = 0;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.mlps_.isValid_[i]){
@@ -597,12 +624,14 @@ class ImgUpdate: public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Got " << filterState.mlps_.getValidCount() << " after adding " << newSet.size() << " features (" << (t4-t3)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
+      double initDepthParam;
+      DepthMap::convertDepthType(DepthMap::REGULAR, medianDepthSF[searchCamID], state.template get<mtState::_aux>().depthMap_.getType(), initDepthParam);
       for(auto it = newSet.begin();it != newSet.end();++it){
         filterState.mlps_.features_[*it].setCamera(mpCameras_);
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
-        filterState.initializeFeatureState(*it,filterState.mlps_.features_[*it].get_nor().getVec(),initDepth_,initCovFeature_);
+        filterState.initializeFeatureState(*it,filterState.mlps_.features_[*it].get_nor().getVec(),initDepthParam,initCovFeature_);
         filterState.mlps_.features_[*it].linkToState(&state.template get<mtState::_aux>().camID_[*it],&state.template get<mtState::_nor>(*it),&state.template get<mtState::_aux>().bearingCorners_[*it]);
         filterState.mlps_.features_[*it].toState();
       }
