@@ -52,6 +52,7 @@ class Backend {
     params_->nCam_ = nCam;
     storageVQ_ = nullptr;
     missionStorageThread_ = nullptr;
+    isInitialized_ = false;
   }
 
   ~Backend() {
@@ -66,6 +67,7 @@ class Backend {
 
     // Feature: Store Mission Data
     if (params_->active_ && params_->storeMissionData_) {
+      std::cout<<"ROVIO Backend: Store Mission Data in Bagfiles!"<<std::endl;
       // Create path string and bagfile name.
       rovioPackagePath_ = ros::package::getPath("rovio");
       std::ostringstream bagName;
@@ -83,7 +85,15 @@ class Backend {
 
     // Feature: Detect Drift
     // ...
+
+
+    // Set initialization status.
+    isInitialized_ = true;
   };
+
+  bool isInitialized() {
+    return isInitialized_;
+  }
 
   ///////////////////////
   // Params            //
@@ -258,6 +268,7 @@ class Backend {
   // Data Members      //
   ///////////////////////
   std::string rovioPackagePath_;
+  bool isInitialized_;
 
   // Vertex Data Storage
   rosbag::Bag bag_;

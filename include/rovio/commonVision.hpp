@@ -2035,8 +2035,8 @@ bool getWrWPFromObservations(const std::vector<V3D>& WrWC, const std::vector<V3D
   // Solve system of equations: A*x=b -> Normal Equation: ATA * x = AT * b -> ATA * x = g
   assert(WrWC.size() == WrCP.size());
   const int nObservations = WrWC.size();
-  const int rows = 3 * nObservations;  // Cols of A
-  const int cols = nObservations  + 3; // Rows of A
+  const int rows = 3 * nObservations;   // Cols of A
+  const int cols = nObservations  + 3;  // Rows of A
   Eigen::MatrixXf AT (cols,rows);
   Eigen::MatrixXf ATA(cols,cols);
   Eigen::MatrixXf B (3,nObservations);  // Matrix having a bearing vector in each col.

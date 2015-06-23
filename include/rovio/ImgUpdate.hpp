@@ -874,10 +874,8 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       //       time of the backend creation in      //
       //       rovioFilter.hpp.                      //
       ////////////////////////////////////////////////
-      static bool isInitialized = false;
-      if (!isInitialized){
+      if (!backend_->isInitialized()){
         backend_->initialize();
-        isInitialized = true;
       }
 
       ////////////////////////////////////////////////
