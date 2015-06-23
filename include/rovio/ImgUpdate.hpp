@@ -735,6 +735,35 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
     }
 
     countTracked = 0;
+
+    // Compute median depth of the current features in the state.
+    float medianDepthSF[mtState::nCam_] = {float(initDepth_)};
+    std::vector<float> depthCollectionSF[mtState::nCam_];
+    const float maxUncertaintyToDepthRatio = 0.3;
+    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaMax;
+    for (unsigned int i = 0; i < mtState::nMax_; i++) {
+      if (filterState.mlps_.isValid_[i]) {
+        const int camID = filterState.mlps_.features_[i].camID_;
+        state.aux().depthMap_.map(state.dep(i), depth, d_p, p_d, p_d_p);
+        state.aux().depthMap_.map(state.dep(i) + cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
+                                  , depthPlus, d_p, p_d, p_d_p);
+        state.aux().depthMap_.map(state.dep(i) - cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
+                                  , depthMinus, d_p, p_d, p_d_p);
+        sigmaMax = std::max(std::abs(depthPlus - depth), std::abs(depthMinus - depth));
+
+        if (sigmaMax/depth <= maxUncertaintyToDepthRatio) {
+          depthCollectionSF[camID].push_back(depth);
+        }
+      }
+    }
+    for (unsigned int i = 0; i < mtState::nCam_; i++) {
+      int size = depthCollectionSF[i].size();
+      if(size != 0) {
+        std::partial_sort(depthCollectionSF[i].begin(), depthCollectionSF[i].begin() + size / 2 + 1, depthCollectionSF[i].end());
+        medianDepthSF[i] = depthCollectionSF[i][size/2];
+      }
+    }
+
     // For all features in the state.
     for (unsigned int i = 0; i < mtState::nMax_; i++) {
       if (filterState.mlps_.isValid_[i]) {
@@ -839,13 +868,15 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         std::cout << "== Got " << filterState.mlps_.getValidCount() << " after adding "
             << newSet.size() << " features (" << (t4 - t3) / cv::getTickFrequency() * 1000 << " ms)"
             << std::endl;
+      double initDepthParam;
+      DepthMap::convertDepthType(DepthMap::REGULAR, medianDepthSF[searchCamID], state.aux().depthMap_.getType(), initDepthParam);
       for (auto it = newSet.begin(); it != newSet.end(); ++it) {
         filterState.mlps_.features_[*it].setCamera(mpCameras_);
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
         filterState.initializeFeatureState(*it, filterState.mlps_.features_[*it].get_nor().getVec(),
-                                           initDepth_, initCovFeature_);
+                                           initDepthParam, initCovFeature_);
         filterState.mlps_.features_[*it].linkToState(&state.template get<mtState::_aux>().camID_[*it],&state.template get<mtState::_nor>(*it),&state.template get<mtState::_aux>().bearingCorners_[*it]);
         filterState.mlps_.features_[*it].toState();
       }
@@ -866,7 +897,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       backendFeatureTracking_ = filterState.state_.aux().backendFeatureTracking_.get();
       typedef typename Backend<mtState::nCam_>::Feature BackendFeature;
       MultilevelPatchFeature<mtState::nLevels_, mtState::patchSize_> patchInTargetFrame(mpCameras_);
-      auto vertex = std::make_shared<typename Backend<mtState::nCam_>::Vertex>();
+      auto vertex  = std::make_shared<typename Backend<mtState::nCam_>::Vertex>();
 
       ////////////////////////////////////////////////
       // Initialization of the backend.             //
@@ -893,6 +924,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         vertex->MrMC_[camID] = state.MrMC(camID);
         vertex->qCM_[camID] = state.qCM(camID);
       }
+
       ////////////////////////////////////////////////
       // 2D Patch Alignment                         //
       ////////////////////////////////////////////////
@@ -982,16 +1014,24 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
                   mpFeature->status_.matchingStatus_ = FOUND;
                   mpFeature->status_.trackingStatus_ = TRACKED;
 
-                  // Triangulation
+                  // Get current depth value of the feature
                   double depth;
-                  typename Backend<mtState::nCam_>::BearingWithPose* bp = &backendFeatureTracking_->bearingsWithPosesAtInit_[id];
-                  const QPD qC2W = bp->qCM_ * bp->qMW_;
-                  const V3D WrC2C1 = state.WrWM() + state.qWM().rotate(state.MrMC(activeCamID)) - bp->WrWM_ - bp->qMW_.inverted().rotate(bp->MrMC_);
-                  const V3D C2rC2C1 = qC2W.rotate(WrC2C1);
-                  const QPD qC2C1 = bp->qCM_ * bp->qMW_ * state.qWM() * state.qCM(activeCamID).inverted();
-                  getDepthFromTriangulation(mpFeature->get_nor().getVec(), bp->CfP_.getVec(),
-                                            C2rC2C1, qC2C1, &depth, 0.0);
-                  mpFeature->setDepth(depth);  // Set depth
+
+                  // **** Method 1 : Use median depth of the state features (Good enough for tracking!).
+                  depth = medianDepthSF[activeCamID];
+
+                    // **** Method 2 : Triangulation
+//                  typename Backend<mtState::nCam_>::BearingWithPose* bp = &backendFeatureTracking_->bearingsWithPosesAtInit_[id];
+//                  const QPD qC2W = bp->qCM_ * bp->qMW_;
+//                  const V3D WrC2C1 = state.WrWM() + state.qWM().rotate(state.MrMC(activeCamID)) - bp->WrWM_ - bp->qMW_.inverted().rotate(bp->MrMC_);
+//                  const V3D C2rC2C1 = qC2W.rotate(WrC2C1);
+//                  const QPD qC2C1 = bp->qCM_ * bp->qMW_ * state.qWM() * state.qCM(activeCamID).inverted();
+//                  getDepthFromTriangulation(mpFeature->get_nor().getVec(), bp->CfP_.getVec(),
+//                                            C2rC2C1, qC2C1, &depth, 0.0);
+
+
+                  // Set depth.
+                  mpFeature->setDepth(depth);
 
                   // Extract feature patches and update Shi-Tomasi score.
                   extractMultilevelPatchFromImage(
@@ -1051,7 +1091,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       // Extraction of new features                 //
       ////////////////////////////////////////////////
       static unsigned long nBackendFeaturesCreated = 0;  // Number of features extracted for the backend so far. Needed for global feature ID.
-
+      std::cout<<"Median Depth: "<<medianDepthSF[searchCamID]<<std::endl;
       if (backendFeatureTracking_->mlps_.getValidCount()
           < startDetectionTh_ * BackendParams::nMaxFeatures_) {
         // 1) Extract a set of corner candidates for the backend.
@@ -1075,11 +1115,13 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         // 3) Loop through newly extracted features.
         for (auto it = idx_set_backend.begin(); it != idx_set_backend.end(); ++it) {
           // Initialize newly extracted features.
+          float initDepth = medianDepthSF[searchCamID];
+          //float initDepth = 1.0;
           backendFeatureTracking_->mlps_.features_[*it].setCamera(mpCameras_);
           backendFeatureTracking_->mlps_.features_[*it].status_.inFrame_ = true;
           backendFeatureTracking_->mlps_.features_[*it].status_.matchingStatus_ = FOUND;
           backendFeatureTracking_->mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
-          backendFeatureTracking_->mlps_.features_[*it].depth_ = 1.0;            // Initialize depth.
+          backendFeatureTracking_->mlps_.features_[*it].depth_ = initDepth;            // Initialize depth.
           backendFeatureTracking_->mlps_.features_[*it].globalID_ = nBackendFeaturesCreated;  // Set global ID.
           backendFeatureTracking_->mlps_.features_[*it].nObservations_ = 0;  // Set global ID.
 
@@ -1097,7 +1139,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
           bf->globalID_ = nBackendFeaturesCreated;
           bf->camID_ = searchCamID;
           bf->nObservations_ = 0;
-          bf->id_ = 1.0;
+          bf->id_ = 1 / initDepth;
           vertex->features_.insert(std::make_pair(nBackendFeaturesCreated, bf));  // Key is global feature ID.
           // Draw the extracted features if desired.
           if (doFrameVisualisation_) {
@@ -1118,8 +1160,12 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       }
 
       double t_end_backend = (double) cv::getTickCount();
-      //  std::cout<<"Backend Duration: "<<(t_end_backend-t_start_backend)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
-
+//      std::cout<<"Backend Duration: "<<(t_end_backend-t_start_backend)/cv::getTickFrequency()*1000 << " ms"<<std::endl;
+//      static float timeSum;
+//      static int n;
+//      n++;
+//      timeSum = timeSum + (t_end_backend-t_start_backend)/cv::getTickFrequency()*1000;
+//      std::cout<<"Mean Duration: "<<timeSum/float(n)<<std::endl;
    }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Backend End
