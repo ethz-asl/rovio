@@ -737,20 +737,19 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
     countTracked = 0;
 
     // Compute median depth of the current features in the state.
+
     float medianDepthSF[mtState::nCam_] = {float(initDepth_)};
     std::vector<float> depthCollectionSF[mtState::nCam_];
     const float maxUncertaintyToDepthRatio = 0.3;
-    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaMax;
+    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaDep, sigmaMax;
     for (unsigned int i = 0; i < mtState::nMax_; i++) {
       if (filterState.mlps_.isValid_[i]) {
         const int camID = filterState.mlps_.features_[i].camID_;
         state.aux().depthMap_.map(state.dep(i), depth, d_p, p_d, p_d_p);
-        state.aux().depthMap_.map(state.dep(i) + cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
-                                  , depthPlus, d_p, p_d, p_d_p);
-        state.aux().depthMap_.map(state.dep(i) - cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i))
-                                  , depthMinus, d_p, p_d, p_d_p);
+        sigmaDep = std::sqrt(cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)));
+        state.aux().depthMap_.map(state.dep(i) + sigmaDep, depthPlus, d_p, p_d, p_d_p);
+        state.aux().depthMap_.map(state.dep(i) - sigmaDep, depthMinus, d_p, p_d, p_d_p);
         sigmaMax = std::max(std::abs(depthPlus - depth), std::abs(depthMinus - depth));
-
         if (sigmaMax/depth <= maxUncertaintyToDepthRatio) {
           depthCollectionSF[camID].push_back(depth);
         }
