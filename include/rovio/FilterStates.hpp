@@ -238,12 +238,12 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
    */
   ~StateAuxiliary(){};
 
-  V3D MwWMest_;  /**<@todo*/
-  V3D MwWMmeas_;  /**<@todo*/
-  M3D wMeasCov_;  /**<@todo*/
+  V3D MwWMest_;  /**<Estimated rotational rate.*/
+  V3D MwWMmeas_;  /**<Measured rotational rate.*/
+  M3D wMeasCov_;  /**<Covariance of the measured rotational rate.*/
   Eigen::Matrix2d A_red_[nMax];  /**<Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   Eigen::Vector2d b_red_[nMax];  /**<Reduced intensity errors, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
-  LWF::NormalVectorElement bearingMeas_[nMax];  /**<@todo*/
+  LWF::NormalVectorElement bearingMeas_[nMax];  /**<Intermediate variable for storing the measured bearing vectors.*/
   int camID_[nMax];  /**<%Camera ID*/
   BearingCorners bearingCorners_[nMax];
   QPD qCM_[nCam];  /**<Quaternion Array: IMU coordinates to camera coordinates.*/
@@ -252,7 +252,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   DepthMap depthMap_;
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
-  int activeCameraCounter_;  /**<@todo*/
+  int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -389,7 +389,6 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *
    *  @param i - Feature Index
    *  @return a reference to the bearing vector (NormalVectorElement) of feature i.
-   *  @todo check this!
    */
   inline LWF::NormalVectorElement& CfP(const int i = 0){
     return this->template get<_nor>(i);
@@ -520,12 +519,11 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Class, holding the prediction measurement of the filter.
- *  @todo check this
  */
 class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{
  public:
-  static constexpr unsigned int _acc = 0;  /**<Index: Acceleration @todo check*/
-  static constexpr unsigned int _gyr = _acc+1;   /**<Index: Angular Velocity @todo check*/
+  static constexpr unsigned int _acc = 0;  /**<Index: Acceleration*/
+  static constexpr unsigned int _gyr = _acc+1;   /**<Index: Angular Velocity*/
   /** \brief Constructor
    */
   PredictionMeas(){
@@ -596,7 +594,6 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
  *  @tparam nLevels   - Total number of pyramid levels considered.
  *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
  *  @tparam nCam      - Used total number of cameras.
- *  @todo check this
  */
 template<unsigned int nMax, int nLevels, int patchSize,int nCam>
 class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true>{
@@ -605,12 +602,12 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   typedef typename Base::mtState mtState;  /**<Local Filter %State Type. \see LWF::FilterState*/
   using Base::state_;  /**<Filter State. \see LWF::FilterState*/
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
-  using Base::usePredictionMerge_;  /**<@todo*/
+  using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
-  cv::Mat img_[nCam];     /**<Mainly used for drawing*/
-  cv::Mat patchDrawing_;  /**<Mainly used for drawing*/
-  double imgTime_;        /**<@todo*/
-  int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps. @todo check this*/
+  cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
+  cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
+  double imgTime_;        /**<Time of the last image, which was processed.*/
+  int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
 
   /** \brief Constructor
    */
@@ -626,14 +623,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @param qMW  - Quaternion, expressing World-Frame in IMU-Coordinates (World Coordinates->IMU Coordinates)
    */
   void initWithImuPose(V3D WrWM, QPD qMW){
-    state_.WrWM() = qMW.rotate(WrWM);   //Todo: Why do we initialize "_pos" with MrWM? Should we not initialize it with WrWM?
+    state_.WrWM() = WrWM;
     state_.qWM()  = qMW.inverted();
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the Acceleration-Vector.
    *
-   *  @param fMeasInit - Acceleration-Vector
-   *  @todo Complete/Correct
+   *  @param fMeasInit - Acceleration-Vector which should be used for initializing the attitude of the IMU.
    */
   void initWithAccelerometer(const V3D& fMeasInit){
     V3D unitZ(0,0,1);
@@ -655,8 +651,6 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *                   [ Cov(d,d)      Cov(d,nor_1)      Cov(d,nor_2)
    *                     Cov(nor_1,d)  Cov(nor_1,nor_1)  Cov(nor_1,nor_2)
    *                     Cov(nor_2,d)  Cov(nor_2,nor_1)  Cov(nor_2,nor_2) ]
-   *
-   *  @todo Complete/Correct
    */
   void initializeFeatureState(unsigned int i, V3D n, double d,const Eigen::Matrix<double,3,3>& initCov){
     state_.dep(i) = d;
