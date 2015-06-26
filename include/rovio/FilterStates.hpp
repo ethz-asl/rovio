@@ -405,6 +405,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)).setIdentity();
     cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
   }
+
+  void getMedianDepthParameters(std::array<double,nCam>* medianDepthParameters) {
+
+
+
+
+  }
 };
 
 }
