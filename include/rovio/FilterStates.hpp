@@ -390,7 +390,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @param i - Feature Index
    *  @return a reference to the bearing vector (NormalVectorElement) of feature i.
    */
-  inline LWF::NormalVectorElement& CfP(const int i = 0){
+  inline LWF::NormalVectorElement& CfP(const int i = 0) {
     return this->template get<_nor>(i);
   }
   inline const LWF::NormalVectorElement& CfP(const int i = 0) const{
@@ -443,29 +443,24 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get/Set the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
+  /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @param camID - %Camera ID
-   *  @return a reference to the position vector WrWC (World->%Camera, expressed in World).
+   *  @return the position vector WrWC (World->%Camera, expressed in World).
    */
-  inline V3D& WrWC(const int camID = 0){
+  inline V3D WrWC(const int camID = 0) const{
     return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
   }
-  inline const V3D& WrWC(const int camID = 0) const{
-    return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
-  }
+
   //@}
 
   //@{
-  /** \brief Get/Set the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
+  /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @param camID - %Camera ID
-   *  @return a reference to the quaternion qCW (World Coordinates->%Camera Coordinates).
+   *  @return he quaternion qCW (World Coordinates->%Camera Coordinates).
    */
-  inline QPD& qCW(const int camID = 0){
-    return qCM(camID)*this->template get<_att>().inverted();
-  }
-  inline const QPD& qCW(const int camID = 0) const{
+  inline QPD qCW(const int camID = 0) const{
     return qCM(camID)*this->template get<_att>().inverted();
   }
   //@}
