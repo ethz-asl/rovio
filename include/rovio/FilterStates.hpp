@@ -35,6 +35,7 @@
 #include <map>
 #include <unordered_set>
 #include "rovio/commonVision.hpp"
+#include "rovio/FeatureDepthOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -362,6 +363,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;
   using Base::usePredictionMerge_;
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
+  FeatureDepthOutputCF<mtState> featureDepthOutputCF_;
+  FeatureDepthOutput featureDepthOutput_;
   cv::Mat img_[nCam]; // Mainly used for drawing
   cv::Mat patchDrawing_; // Mainly used for drawing
   double imgTime_;
@@ -406,11 +409,74 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
   }
 
-  void getMedianDepthParameters(std::array<double,nCam>* medianDepthParameters) {
+  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters) {
+
+    const float maxUncertaintyToDepthRatio = 0.3;
+
+    // Fill array with initialization value (set if no median depth value can be computed for a given camera frame).
+    medianDepthParameters->fill(initDepthParameter);
+
+    std::vector<double> depthParameters[nCam];
+    unsigned int activeCamCounter;
+    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaDep, sigmaMax;
+    for (unsigned int i = 0; i < nMax; i++) {
+      if (mlps_.isValid_[i]) {
+        const int camID = mlps_.features_[i].camID_;
+        activeCamCounter = 0;
+        while(activeCamCounter != nCam) {
+          const unsigned int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
+
+
+          if (activeCamCounter == 0) {
+
+
+
+          }
+          else {
+
+          }
 
 
 
 
+          activeCamCounter++;
+        }
+
+
+
+
+
+
+
+
+      }
+    }
+
+//        double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaDep, sigmaMax;
+//        for (unsigned int i = 0; i < mtState::nMax_; i++) {
+//          if (filterState.mlps_.isValid_[i]) {
+//            const int camID = filterState.mlps_.features_[i].camID_;
+//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i), depth, d_p, p_d, p_d_p);
+//            sigmaDep = std::sqrt(cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)));
+//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) + sigmaDep, depthPlus, d_p, p_d, p_d_p);
+//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) - sigmaDep, depthMinus, d_p, p_d, p_d_p);
+//            sigmaMax = std::max(std::abs(depthPlus - depth), std::abs(depthMinus - depth));
+//            if (sigmaMax/depth <= maxUncertaintyToDepthRatio) {
+//              depthCollectionSF[camID].push_back(depth);
+//            }
+//          }
+//        }
+//        for (unsigned int i = 0; i < mtState::nCam_; i++) {
+//          int size = depthCollectionSF[i].size();
+//          if(size != 0) {
+//            std::partial_sort(depthCollectionSF[i].begin(), depthCollectionSF[i].begin() + size / 2 + 1, depthCollectionSF[i].end());
+//            medianDepthSF[i] = depthCollectionSF[i][size/2];
+//          }
+//        }
+//
+//
+//
+//
   }
 };
 
