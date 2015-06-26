@@ -74,7 +74,12 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     const V3D CrCD = input.get_qVM(camID).rotate(V3D(input.get_MrMV(outputCamID_)-input.get_MrMV(camID)));
     const V3D CrCP = input.get_depth(ID_)*input.template get<mtInput::_nor>(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    output.template get<mtOutput::_dep>() = DrDP.norm();
+    if (DrDP[2] > 0.0) {                                        // Todo Change this! Should check if bearing vector intersects with image plane!
+      output.template get<mtOutput::_dep>() = DrDP.norm();
+    }
+    else {
+      output.template get<mtOutput::_dep>() = 0;
+    }
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();

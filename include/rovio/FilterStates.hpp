@@ -98,6 +98,7 @@ class DepthMap{
     }
   }
   static void convertDepthType(const DepthType& type_p, const double& p, const DepthType& type_dep, double& dep) {
+    dep = p;
     // Source type is REGULAR.
     if (type_p == REGULAR) {
       if (type_dep == INVERSE) {
@@ -145,14 +146,7 @@ class DepthMap{
       else if (type_dep == LOG) {
         dep = std::log(std::sinh(p));
       }
-    }
-    // Source type is Target type.
-    else if (type_p == type_dep) {
-      dep = p;
-    }
-    else {
-      std::cout<<"Desired depth type conversion not known!"<<std::endl;
-    }
+    };
   }
   void mapRegular(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
     d = p;
@@ -365,6 +359,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
   FeatureDepthOutputCF<mtState> featureDepthOutputCF_;
   FeatureDepthOutput featureDepthOutput_;
+  typename FeatureDepthOutputCF<mtState>::mtOutputCovMat featureDepthOutputCov_;
   cv::Mat img_[nCam]; // Mainly used for drawing
   cv::Mat patchDrawing_; // Mainly used for drawing
   double imgTime_;
@@ -408,75 +403,55 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)).setIdentity();
     cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
   }
-
   void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters) {
-
     const float maxUncertaintyToDepthRatio = 0.3;
-
-    // Fill array with initialization value (set if no median depth value can be computed for a given camera frame).
+    // Fill array with initialization value.
+    // The initialization value is set, if no median depth value can be computed for a given camera frame.
     medianDepthParameters->fill(initDepthParameter);
-
-    std::vector<double> depthParameters[nCam];
-    unsigned int activeCamCounter;
-    double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaDep, sigmaMax;
+    // Collect the depth values of the features for each camera frame.
+    std::vector<double> depthValueCollection[nCam];
+    unsigned int camID, activeCamCounter, activeCamID;
+    double depth, sigmaDepth;
     for (unsigned int i = 0; i < nMax; i++) {
       if (mlps_.isValid_[i]) {
-        const int camID = mlps_.features_[i].camID_;
         activeCamCounter = 0;
-        while(activeCamCounter != nCam) {
-          const unsigned int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
-
-
+        camID = mlps_.features_[i].camID_;
+        featureDepthOutputCF_.setFeatureID(i);
+        while (activeCamCounter != nCam) {
+          activeCamID = (activeCamCounter + camID)%nCam;
+          featureDepthOutputCF_.setOutputCameraID(activeCamID);
+          featureDepthOutputCF_.transformCovMat(state_, cov_, featureDepthOutputCov_);
+          sigmaDepth = std::sqrt(featureDepthOutputCov_(0,0));
           if (activeCamCounter == 0) {
-
-
-
+            DepthMap::convertDepthType(state_.template get<mtState::_aux>().depthMap_.getType(),
+                                       state_.template get<mtState::_dep>(i), DepthMap::REGULAR, depth);
           }
           else {
-
+            featureDepthOutputCF_.transformState(state_, featureDepthOutput_);
+            depth = featureDepthOutput_.template get<FeatureDepthOutput::_dep>();
+            if (depth == 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
+              activeCamCounter++;
+              continue;
+            }
           }
-
-
-
-
+          // Collect depth data if uncertainty-depth ratio small enough.
+          if (sigmaDepth/depth <= maxUncertaintyToDepthRatio) {
+            depthValueCollection[activeCamID].push_back(depth);
+          }
           activeCamCounter++;
         }
-
-
-
-
-
-
-
-
       }
     }
-
-//        double depth, depthPlus, depthMinus, d_p, p_d, p_d_p, sigmaDep, sigmaMax;
-//        for (unsigned int i = 0; i < mtState::nMax_; i++) {
-//          if (filterState.mlps_.isValid_[i]) {
-//            const int camID = filterState.mlps_.features_[i].camID_;
-//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i), depth, d_p, p_d, p_d_p);
-//            sigmaDep = std::sqrt(cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)));
-//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) + sigmaDep, depthPlus, d_p, p_d, p_d_p);
-//            state.template get<mtState::_aux>().depthMap_.map(state.template get<mtState::_dep>(i) - sigmaDep, depthMinus, d_p, p_d, p_d_p);
-//            sigmaMax = std::max(std::abs(depthPlus - depth), std::abs(depthMinus - depth));
-//            if (sigmaMax/depth <= maxUncertaintyToDepthRatio) {
-//              depthCollectionSF[camID].push_back(depth);
-//            }
-//          }
-//        }
-//        for (unsigned int i = 0; i < mtState::nCam_; i++) {
-//          int size = depthCollectionSF[i].size();
-//          if(size != 0) {
-//            std::partial_sort(depthCollectionSF[i].begin(), depthCollectionSF[i].begin() + size / 2 + 1, depthCollectionSF[i].end());
-//            medianDepthSF[i] = depthCollectionSF[i][size/2];
-//          }
-//        }
-//
-//
-//
-//
+    // Compute and store the median depth parameter.
+    int size;
+    for (unsigned int i = 0; i < nCam; i++) {
+      size = depthValueCollection[i].size();
+      if(size != 0) {
+        std::nth_element(depthValueCollection[i].begin(), depthValueCollection[i].begin() + size / 2, depthValueCollection[i].end());
+        DepthMap::convertDepthType(DepthMap::REGULAR, depthValueCollection[i][size/2],
+                                   state_.template get<mtState::_aux>().depthMap_.getType(), (*medianDepthParameters)[i]);
+      }
+    }
   }
 };
 
