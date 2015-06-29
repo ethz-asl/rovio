@@ -158,7 +158,7 @@ Prediction
 
 Backend 
 {
-  active false
+  active true
   storeMissionData false
   detectDrift false
   scoreDetectionExponent 0.5

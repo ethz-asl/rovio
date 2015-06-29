@@ -929,7 +929,6 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       ////////////////////////////////////////////////
       int id, activeCameraCounter;
       bool foundCorrespondence;
-
       for (id = 0; id < BackendParams::nMaxFeatures_; ++id) {
         if (backendFeatureTracking_->mlps_.isValid_[id]) {
           activeCameraCounter = 0;
@@ -1090,7 +1089,6 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       // Extraction of new features                 //
       ////////////////////////////////////////////////
       static unsigned long nBackendFeaturesCreated = 0;  // Number of features extracted for the backend so far. Needed for global feature ID.
-      std::cout<<"Median Depth: "<<medianDepthSF[searchCamID]<<std::endl;
       if (backendFeatureTracking_->mlps_.getValidCount()
           < startDetectionTh_ * BackendParams::nMaxFeatures_) {
         // 1) Extract a set of corner candidates for the backend.
