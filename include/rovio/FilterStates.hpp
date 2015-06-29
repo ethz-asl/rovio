@@ -36,8 +36,11 @@
 #include <map>
 #include <unordered_set>
 #include <unordered_map>
+
 #include "rovio/commonVision.hpp"
 #include "rovio/Backend.hpp"
+#include "rovio/FeatureDepthOutputCF.hpp"
+
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -72,7 +75,7 @@ class DepthMap{
     type_ = type;
   }
 
-  /** \brief Getthe \ref DepthType type_ of the depth map.
+  /** \brief Get the \ref DepthType type_ of the depth map.
    *
    *  @param type - Enum \ref DepthType.
    */
@@ -146,6 +149,7 @@ class DepthMap{
    *   @param dep      - Target value.
    */
   static void convertDepthType(const DepthType& type_p, const double& p, const DepthType& type_dep, double& dep) {
+    dep = p;
     // Source type is REGULAR.
     if (type_p == REGULAR) {
       if (type_dep == INVERSE) {
@@ -194,14 +198,7 @@ class DepthMap{
         dep = std::log(std::sinh(p));
       }
     }
-    // Source type is Target type.
-    else if (type_p == type_dep) {
-      dep = p;
-    }
-    else {
-      std::cout<<"Desired depth type conversion not known!"<<std::endl;
-    }
-  }
+  };
 
   /** \brief Computes some depth parameterization values, given a depth value p = d.
    *
@@ -703,10 +700,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
+  FeatureDepthOutputCF<mtState> featureDepthOutputCF_;
+  FeatureDepthOutput featureDepthOutput_;
+  typename FeatureDepthOutputCF<mtState>::mtOutputCovMat featureDepthOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
-  double imgTime_;        /**<Time of the last image, which was processed.*/
-  int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
+  double imgTime_;     /**<Time of the last image, which was processed.*/
+  int imageCounter_;  /**<Total number of images, used so far for updates. Same as total number of update steps.*/
 
   /** \brief Constructor
    */
@@ -777,6 +777,65 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_nor>(i),0).setZero();
     cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)).setIdentity();
     cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
+  }
+
+  /** \brief Get an array, containing the median depth parameters of the state features for each camera.
+   *
+   *  \note The output median depth parameters are expressed in the set \ref DepthType.
+   *
+   *  @param initDepthParameter       - Value, which is set if the median depth parameter could not be computed for a specific camera, e.g.
+   *                                    if a camera can not see any features or the uncertainty is too high.
+   *  @param medianDepthParameters    - Array containing the median depth parameters (expressed in the set \ref DepthType) for each camera.
+   */
+  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters) {
+    const float maxUncertaintyToDepthRatio = 0.3;
+    // Fill array with initialization value.
+    // The initialization value is set, if no median depth value can be computed for a given camera frame.
+    medianDepthParameters->fill(initDepthParameter);
+    // Collect the depth values of the features for each camera frame.
+    std::vector<double> depthValueCollection[nCam];
+    unsigned int camID, activeCamCounter, activeCamID;
+    double depth, sigmaDepth;
+    for (unsigned int i = 0; i < nMax; i++) {
+      if (mlps_.isValid_[i]) {
+        activeCamCounter = 0;
+        camID = mlps_.features_[i].camID_;
+        featureDepthOutputCF_.setFeatureID(i);
+        while (activeCamCounter != nCam) {
+          activeCamID = (activeCamCounter + camID)%nCam;
+          featureDepthOutputCF_.setOutputCameraID(activeCamID);
+          featureDepthOutputCF_.transformCovMat(state_, cov_, featureDepthOutputCov_);
+          sigmaDepth = std::sqrt(featureDepthOutputCov_(0,0));
+          if (activeCamCounter == 0) {
+            DepthMap::convertDepthType(state_.template get<mtState::_aux>().depthMap_.getType(),
+                                       state_.template get<mtState::_dep>(i), DepthMap::REGULAR, depth);
+          }
+          else {
+            featureDepthOutputCF_.transformState(state_, featureDepthOutput_);
+            depth = featureDepthOutput_.template get<FeatureDepthOutput::_dep>();
+            if (depth == 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
+              activeCamCounter++;
+              continue;
+            }
+          }
+          // Collect depth data if uncertainty-depth ratio small enough.
+          if (sigmaDepth/depth <= maxUncertaintyToDepthRatio) {
+            depthValueCollection[activeCamID].push_back(depth);
+          }
+          activeCamCounter++;
+        }
+      }
+    }
+    // Compute and store the median depth parameter.
+    int size;
+    for (unsigned int i = 0; i < nCam; i++) {
+      size = depthValueCollection[i].size();
+      if(size != 0) {
+        std::nth_element(depthValueCollection[i].begin(), depthValueCollection[i].begin() + size / 2, depthValueCollection[i].end());
+        DepthMap::convertDepthType(DepthMap::REGULAR, depthValueCollection[i][size/2],
+                                   state_.template get<mtState::_aux>().depthMap_.getType(), (*medianDepthParameters)[i]);
+      }
+    }
   }
 };
 
