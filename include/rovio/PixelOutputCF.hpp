@@ -46,6 +46,7 @@ class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
     return cv::Point2f(static_cast<float>(this->get<_pix>()(0)),static_cast<float>(this->get<_pix>()(1)));
   }
 };
+
 template<typename STATE>
 class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
  public:
@@ -68,19 +69,19 @@ class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
   }
   ~PixelOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // MrMV = MrMV
-    // qVM = qVM
+    // MrMC = MrMC
+    // qCM = qCM
     cv::Point2f c;
-    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    mpCameras_[camID].bearingToPixel(input.template get<mtInput::_nor>(ID_),c);
+    const int& camID = input.aux().camID_[ID_];
+    mpCameras_[camID].bearingToPixel(input.CfP(ID_),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     cv::Point2f c;
     Eigen::Matrix<double,2,2> J_temp;
-    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    mpCameras_[camID].bearingToPixel(input.template get<mtInput::_nor>(ID_),c,J_temp);
+    const int& camID = input.aux().camID_[ID_];
+    mpCameras_[camID].bearingToPixel(input.CfP(ID_),c,J_temp);
     J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>(ID_)) = J_temp;
   }
 };
@@ -106,17 +107,17 @@ class PixelOutputFromNorCF:public LWF::CoordinateTransform<FeatureLocationOutput
   }
   ~PixelOutputFromNorCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // MrMV = MrMV
-    // qVM = qVM
+    // MrMC = MrMC
+    // qCM = qCM
     cv::Point2f c;
-    mpCameras_[camID_].bearingToPixel(input.template get<mtInput::_nor>(),c);
+    mpCameras_[camID_].bearingToPixel(input.CfP(),c);
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     cv::Point2f c;
     Eigen::Matrix<double,2,2> J_temp;
-    mpCameras_[camID_].bearingToPixel(input.template get<mtInput::_nor>(),c,J_temp);
+    mpCameras_[camID_].bearingToPixel(input.CfP(),c,J_temp);
     J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_nor>()) = J_temp;
   }
 };

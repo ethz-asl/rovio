@@ -36,13 +36,65 @@ namespace rovio {
 
 class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,3>,LWF::QuaternionElement>{
  public:
-  static constexpr unsigned int _pos = 0;
-  static constexpr unsigned int _vel = _pos+1;
-  static constexpr unsigned int _ror = _vel+1;
-  static constexpr unsigned int _att = _ror+1;
+  static constexpr unsigned int _pos = 0;         /**<Idx. Position Vector WrWC: Pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates.*/
+  static constexpr unsigned int _vel = _pos+1;    /**<Idx. Velocity Vector  CvC: Absolute velocity of the of the Camera-Frame, expressed in Camera-Coordinates.*/
+  static constexpr unsigned int _ror = _vel+1;    /**<Idx. Angular velocity CwWC: Absolute angular velocity of the camera frame (of the solid), expressed in camera coordinates.*/
+  static constexpr unsigned int _att = _ror+1;    /**<Idx. Quaternion qCW: World coordinates to Camera coordinates.*/
   StandardOutput(){
   }
   ~StandardOutput(){};
+
+  //@{
+  /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
+   *
+   *  @return the position vector WrWC (World->%Camera, expressed in World).
+   */
+  inline V3D& WrWC(){
+    return this->template get<_pos>();
+  }
+  inline const V3D& WrWC() const{
+    return this->template get<_pos>();
+  }
+  //@}
+
+  //@{
+  /** \brief Get the absolute velocity vector of the camera, expressed in camera coordinates.
+   *
+   *  @return the absolute velocity vector of the Camera-Frame CvC, expressed in Camera-Coordinates.
+   */
+  inline V3D& CvC(){
+    return this->template get<_vel>();
+  }
+  inline const V3D& CvC() const{
+    return this->template get<_vel>();
+  }
+  //@}
+
+  //@{
+  /** \brief Get the absolute angular velocity of the camera (angular velocity of the solid), expressed in camera coordinates.
+   *
+   *  @return the absolute angular velocity of the Camera-Frame CwWC, expressed in Camera-Coordinates.
+   */
+  inline V3D& CwWC(){
+    return this->template get<_ror>();
+  }
+  inline const V3D& CwWC() const{
+    return this->template get<_ror>();
+  }
+  //@}
+
+  //@{
+  /** \brief Get the quaternion qCW, expressing the  World-Frame in Camera-Coordinates (World Coordinates->Camera Coordinates).
+   *
+   *  @return the quaternion qCW (World Coordinates->Camera Coordinates).
+   */
+  inline QPD& qCW(){
+    return this->template get<_att>();
+  }
+  inline const QPD& qCW() const{
+    return this->template get<_att>();
+  }
+  //@}
 };
 
 template<typename STATE>
@@ -60,42 +112,41 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
   };
   ~CameraOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // IrIV = IrIM + qIM*(MrMV)
-    // VvV = qVM*(MvM + MwIM x MrMV)
-    // qVI = qVM*qIM^T
-    // VwIV = qVM*MwIM
-    output.template get<mtOutput::_pos>() = input.template get<mtInput::_pos>()+input.template get<mtInput::_att>().rotate(input.get_MrMV(camID_));
-    output.template get<mtOutput::_ror>() = input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
-    output.template get<mtOutput::_vel>() =
-        input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV(camID_)));
-    output.template get<mtOutput::_att>() = input.get_qVM(camID_)*input.template get<mtInput::_att>().inverted();
+    // WrWC = WrWM + qWM*(MrMC)
+    // CwWC = qCM*MwWM
+    // CvC  = qCM*(MvM + MwWM x MrMC)
+    // qCW  = qCM*qWM^T
+    output.WrWC() = input.WrWM()+input.qWM().rotate(input.MrMC(camID_));
+    output.CwWC() = input.qCM(camID_).rotate(V3D(input.aux().MwWMmeas_-input.gyb()));
+    output.CvC()  = input.qCM(camID_).rotate(V3D(-input.MvM() + gSM(V3D(input.aux().MwWMmeas_-input.gyb()))*input.MrMC(camID_)));
+    output.qCW()  = input.qCM(camID_)*input.qWM().inverted();
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) = M3D::Identity();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_att>()) =
-        gSM(input.template get<mtInput::_att>().rotate(input.get_MrMV(camID_)));
+        gSM(input.qWM().rotate(input.MrMC(camID_)));
     J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_att>()) =
-        -MPD(input.get_qVM(camID_)*input.template get<mtInput::_att>().inverted()).matrix();
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -MPD(input.get_qVM(camID_)).matrix();
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_gyb>()) = MPD(input.get_qVM(camID_)).matrix()
-        * gSM(input.get_MrMV(camID_));
-    J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_gyb>()) = -MPD(input.get_qVM(camID_)).matrix();
-    if(input.template get<mtInput::_aux>().doVECalibration_){
+        -MPD(input.qCM(camID_)*input.qWM().inverted()).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -MPD(input.qCM(camID_)).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_gyb>()) = MPD(input.qCM(camID_)).matrix()
+        * gSM(input.MrMC(camID_));
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_gyb>()) = -MPD(input.qCM(camID_)).matrix();
+    if(input.aux().doVECalibration_){
       J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_vep>(camID_)) =
-          MPD(input.template get<mtInput::_att>()).matrix();
+          MPD(input.qWM()).matrix();
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vep>(camID_)) =
-          MPD(input.get_qVM(camID_)).matrix()*gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()));
+          MPD(input.qCM(camID_)).matrix()*gSM(V3D(input.aux().MwWMmeas_-input.gyb()));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_vea>(camID_)) =
-          gSM(input.get_qVM(camID_).rotate(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>())));
+          gSM(input.qCM(camID_).rotate(V3D(input.aux().MwWMmeas_-input.gyb())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vea>(camID_)) =
-          gSM(input.get_qVM(camID_).rotate(V3D(-input.template get<mtInput::_vel>() + gSM(V3D(input.template get<mtInput::_aux>().MwIMmeas_-input.template get<mtInput::_gyb>()))*input.get_MrMV())));
+          gSM(input.qCM(camID_).rotate(V3D(-input.MvM() + gSM(V3D(input.aux().MwWMmeas_-input.gyb()))*input.MrMC())));
       J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_vea>(camID_)) =
           M3D::Identity();
     }
   }
   void postProcess(mtOutputCovMat& cov,const mtInput& input){
-    cov.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtOutput::template getId<mtOutput::_ror>()) += input.template get<mtInput::_aux>().wMeasCov_;
+    cov.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtOutput::template getId<mtOutput::_ror>()) += input.aux().wMeasCov_;
   }
 };
 

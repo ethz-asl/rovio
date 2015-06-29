@@ -7,24 +7,24 @@ Common
 Camera0
 {
 	CalibrationFile /home/michael/calibrations/p22035_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
-	qVM_x  0.0
-	qVM_y  0.0
-	qVM_z  0.7071
-	qVM_w  0.7071
-	MrMV_x 0
-	MrMV_y 0
-	MrMV_z 0
+	qCM_x  0.0
+	qCM_y  0.0
+	qCM_z  0.7071
+	qCM_w  0.7071
+	MrMC_x 0
+	MrMC_y 0
+	MrMC_z 0
 }
 Camera1
 {
 	CalibrationFile /home/michael/calibrations/p22035_equidist_cam1.yaml
-	qVM_x  0.0
-	qVM_y  0.0
-	qVM_z  0.7071
-	qVM_w  0.7071
-	MrMV_x 0
-	MrMV_y 0
-	MrMV_z 0
+	qCM_x  0.0
+	qCM_y  0.0
+	qCM_z  0.7071
+	qCM_w  0.7071
+	MrMC_x 0
+	MrMC_y 0
+	MrMC_z 0
 }
 Init
 {
