@@ -70,8 +70,8 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     // DrDP = qDC*(d_in*nor_in-CrCD)
     // d_out = ||DrDP||
     const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    const QPD qDC = input.get_qVM(outputCamID_)*input.get_qVM(camID).inverted(); // TODO: avoid double computation
-    const V3D CrCD = input.get_qVM(camID).rotate(V3D(input.get_MrMV(outputCamID_)-input.get_MrMV(camID)));
+    const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
+    const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
     const V3D CrCP = input.get_depth(ID_)*input.template get<mtInput::_nor>(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     if (DrDP[2] > 0.0) {                                        // Todo Change this! Should check if bearing vector intersects with image plane!
@@ -86,8 +86,8 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     double d, d_p, p_d, p_d_p;
     input.template get<mtInput::_aux>().depthMap_.map(input.template get<mtInput::_dep>(ID_),d,d_p,p_d,p_d_p);
     const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
-    const QPD qDC = input.get_qVM(outputCamID_)*input.get_qVM(camID).inverted(); // TODO: avoid double computation
-    const V3D CrCD = input.get_qVM(camID).rotate(V3D(input.get_MrMV(outputCamID_)-input.get_MrMV(camID)));
+    const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
+    const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
     const V3D CrCP = d*input.template get<mtInput::_nor>(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     const double d_out = DrDP.norm();
@@ -101,8 +101,8 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     const Eigen::Matrix<double,3,3> J_qDC_qDB = Eigen::Matrix3d::Identity();
     const Eigen::Matrix<double,3,3> J_qDC_qCB = -MPD(qDC).matrix();
     const Eigen::Matrix<double,3,3> J_CrCD_qCB = gSM(CrCD);
-    const Eigen::Matrix<double,3,3> J_CrCD_BrBC = -MPD(input.get_qVM(camID)).matrix();
-    const Eigen::Matrix<double,3,3> J_CrCD_BrBD = MPD(input.get_qVM(camID)).matrix();
+    const Eigen::Matrix<double,3,3> J_CrCD_BrBC = -MPD(input.qCM(camID)).matrix();
+    const Eigen::Matrix<double,3,3> J_CrCD_BrBD = MPD(input.qCM(camID)).matrix();
 
     const Eigen::Matrix<double,3,1> J_CrCP_d = input.template get<mtInput::_nor>(ID_).getVec()*d_p;
     const Eigen::Matrix<double,3,2> J_CrCP_nor = d*input.template get<mtInput::_nor>(ID_).getM();
