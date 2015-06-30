@@ -62,6 +62,12 @@ class RovioScene{
       mpPatches_[i] = nullptr;
     }
   }
+  void addKeyboardCB(unsigned char Key, std::function<void()> f){
+    mScene.addKeyboardCB(Key,f);
+  }
+  void addSpecialKeyboardCB(int Key, std::function<void()> f){
+    mScene.addSpecialKeyboardCB(Key,f);
+  }
   void initScene(int argc, char** argv, const std::string& mVSFileName,const std::string& mFSFileName,FILTER* mpFilter){
     initGlut(argc,argv,mScene);
     mScene.init(argc, argv,mVSFileName,mFSFileName);

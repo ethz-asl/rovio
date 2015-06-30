@@ -451,10 +451,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             featureCoordinates.setSigmaFromCov(pixelOutputCov_);
             if(activeCamID==camID){
               drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(0,175,175), 2.0, false);
-              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(ID),cv::Scalar(0,175,175));
+              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(mpFeature->totCount_),cv::Scalar(0,175,175));
             } else {
               drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(175,175,0), 2.0, false);
-              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(ID),cv::Scalar(175,175,0));
+              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(mpFeature->totCount_),cv::Scalar(175,175,0));
             }
           }
 

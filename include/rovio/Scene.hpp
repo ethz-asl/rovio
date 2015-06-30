@@ -29,6 +29,7 @@
 #ifndef ROVIO_SCENE_HPP_
 #define ROVIO_SCENE_HPP_
 
+#include <functional>
 #include <Eigen/Dense>
 #include "lightweight_filtering/common.hpp"
 
@@ -444,6 +445,8 @@ class SceneObject{
 
 class Scene{
  public:
+  std::map<unsigned char, std::function<void()>> keyboardCallbacks_;
+  std::map<int, std::function<void()>> specialKeyboardCallbacks_;
   Scene(){
     stepScale_ = 0.5f;
     W_r_WC_ = Eigen::Vector3f(0.0f, 0.0f, 0.0f);
@@ -457,6 +460,13 @@ class Scene{
     mDirectionalLight_.direction_ = Eigen::Vector3f(0.5f, -1.0f, 0.0f);
     mDirectionalLight_.direction_.normalize();
     mIdleFunc = nullptr;
+    addKeyboardCB('q',glutLeaveMainLoop);
+    addSpecialKeyboardCB(101,[&]() mutable {W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);}); // UP
+    addSpecialKeyboardCB(103,[&]() mutable {W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);}); // DOWN
+    addSpecialKeyboardCB(100,[&]() mutable {W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);}); // LEFT
+    addSpecialKeyboardCB(102,[&]() mutable {W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);}); // RIGHT
+    addSpecialKeyboardCB(104,[&]() mutable {W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);}); // PAGE_UP
+    addSpecialKeyboardCB(105,[&]() mutable {W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);}); // PAGE_DOWN
   };
   ~Scene(){
     for(int i=0;i<mSceneObjects_.size();i++){
@@ -594,35 +604,21 @@ class Scene{
   }
   void SpecialKeyboardCB(int Key, int x, int y)
   {
-    switch (Key) {
-      case 101: // UP
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);
-        break;
-      case 103: // DOWN
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,0.0,1.0)) * stepScale_);
-        break;
-      case 100: // LEFT
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);
-        break;
-      case 102: // RIGHT
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(1.0,0.0,0.0)) * stepScale_);
-        break;
-      case 104: // PAGE_UP
-        W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);
-        break;
-      case 105: // PAGE_DOWN
-        W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);
-        break;
-      default:
-        break;
+    if (specialKeyboardCallbacks_.count(Key)>0){
+      specialKeyboardCallbacks_[Key]();
     }
+  }
+  void addSpecialKeyboardCB(int Key, std::function<void()> f){
+    specialKeyboardCallbacks_[Key] = f;
   }
   void KeyboardCB(unsigned char Key, int x, int y)
   {
-      switch (Key) {
-          case 'q':
-              glutLeaveMainLoop();
-      }
+    if (keyboardCallbacks_.count(Key)>0){
+      keyboardCallbacks_[Key]();
+    }
+  }
+  void addKeyboardCB(unsigned char Key, std::function<void()> f){
+    keyboardCallbacks_[Key] = f;
   }
   void MotionCB(int x, int y)
   {
