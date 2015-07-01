@@ -106,10 +106,10 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
    *  \see ImgUpdateMeasAuxiliary
    *  @return the the auxiliary state of the ImgUpdateMeas.
    */
-  inline Base& aux(){
+  inline ImgUpdateMeasAuxiliary<STATE>& aux(){
     return this->template get<_aux>();
   }
-  inline const Base& aux() const{
+  inline const ImgUpdateMeasAuxiliary<STATE>& aux() const{
     return this->template get<_aux>();
   }
   //@}
@@ -359,7 +359,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     assert(filterState.t_ == meas.aux().imgTime_);
     for(int i=0;i<mtState::nCam_;i++){
       if(doFrameVisualisation_){
-        cvtColor(meas.template get<mtMeas::_aux>().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
+        cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
       }
     }
     filterState.imgTime_ = filterState.t_;
@@ -435,7 +435,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         patchInTargetFrame = *mpFeature; // TODO: make less costly
         patchInTargetFrame.set_nor(featureLocationOutput_.CfP()); // TODO: do warping
         patchInTargetFrame.camID_ = activeCamID;
-        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
+        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
         mpFeature->status_.inFrame_ = mpFeature->status_.inFrame_ || isInActiveFrame;
 
         if(isInActiveFrame){
@@ -473,10 +473,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           // Search patch
           if(!useDirectMethod_ || true){ // TODO: make adaptive || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_
-            align2DComposed(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
+            align2DComposed(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           }
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
-            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_){
+            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.aux().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_){
               patchInTargetFrame.status_.matchingStatus_ = NOTFOUND;
               if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
             } else {
@@ -507,7 +507,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
               if(activeCamID == camID || !useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
                 if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
-                if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
+                if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.aux().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
                                                                        state.aux().A_red_[ID],state.aux().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
                   state.aux().bearingMeas_[ID] = patchInTargetFrame.get_nor();
@@ -658,12 +658,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           // Extract feature patches and update Shi-Tomasi score.
           if(mpFeature->status_.trackingStatus_ == TRACKED){
-            if(isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false)){
+            if(isMultilevelPatchInFrame(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false)){
               testFeature.set_c(mpFeature->get_c());
-              extractMultilevelPatchFromImage(testFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+              extractMultilevelPatchFromImage(testFeature,meas.aux().pyr_[camID],startLevel_,true,false);
               testFeature.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
               if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){
-                extractMultilevelPatchFromImage(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+                extractMultilevelPatchFromImage(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false);
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
                 mpFeature->toState();
               }
@@ -714,7 +714,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
-        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
+        detectFastCorners(meas.aux().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
@@ -723,7 +723,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
       const double t3 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
-      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_[searchCamID],searchCamID,filterState.t_,
+      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.aux().pyr_[searchCamID],searchCamID,filterState.t_,
                                                                   endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
