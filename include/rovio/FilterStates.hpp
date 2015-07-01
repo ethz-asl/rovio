@@ -34,8 +34,9 @@
 #include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
+
+#include "FeatureLocationOutputCF.hpp"
 #include "rovio/commonVision.hpp"
-#include "rovio/FeatureDepthOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -667,9 +668,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
-  FeatureDepthOutputCF<mtState> featureDepthOutputCF_;
-  FeatureDepthOutput featureDepthOutput_;
-  typename FeatureDepthOutputCF<mtState>::mtOutputCovMat featureDepthOutputCov_;
+  FeatureLocationOutputCF<mtState> featureLocationOutputCF_;
+  FeatureLocationOutput featureLocationOutput_;
+  typename FeatureLocationOutputCF<mtState>::mtOutputCovMat featureLocationOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
@@ -753,8 +754,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *                                  computed from the state features for a specific camera.
    *  @param medianDepthParameters  - Array, containing the median depth parameter values for each camera.
    * */
-  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters) {
-    const float maxUncertaintyToDepthRatio = 0.3;
+  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters, const float maxUncertaintyToDepthRatio) {
     // Fill array with initialization value.
     // The initialization value is set, if no median depth value can be computed for a given camera frame.
     medianDepthParameters->fill(initDepthParameter);
@@ -766,23 +766,17 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
       if (mlps_.isValid_[i]) {
         activeCamCounter = 0;
         camID = mlps_.features_[i].camID_;
-        featureDepthOutputCF_.setFeatureID(i);
+        featureLocationOutputCF_.setFeatureID(i);
         while (activeCamCounter != nCam) {
           activeCamID = (activeCamCounter + camID)%nCam;
-          featureDepthOutputCF_.setOutputCameraID(activeCamID);
-          featureDepthOutputCF_.transformCovMat(state_, cov_, featureDepthOutputCov_);
-          sigmaDepth = std::sqrt(featureDepthOutputCov_(0,0));
-          if (activeCamCounter == 0) {
-            DepthMap::convertDepthType(state_.template get<mtState::_aux>().depthMap_.getType(),
-                                       state_.template get<mtState::_dep>(i), DepthMap::REGULAR, depth);
-          }
-          else {
-            featureDepthOutputCF_.transformState(state_, featureDepthOutput_);
-            depth = featureDepthOutput_.template get<FeatureDepthOutput::_dep>();
-            if (depth == 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
-              activeCamCounter++;
-              continue;
-            }
+          featureLocationOutputCF_.setOutputCameraID(activeCamID);
+          featureLocationOutputCF_.transformCovMat(state_, cov_, featureLocationOutputCov_);
+          sigmaDepth = std::sqrt(featureLocationOutputCov_(FeatureLocationOutput::_dep,FeatureLocationOutput::_dep));
+          featureLocationOutputCF_.transformState(state_, featureLocationOutput_);
+          depth = featureLocationOutput_.dep();
+          if (featureLocationOutput_.CfP().getVec()(2) <= 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
+            activeCamCounter++;
+            continue;
           }
           // Collect depth data if uncertainty-depth ratio small enough.
           if (sigmaDepth/depth <= maxUncertaintyToDepthRatio) {
@@ -796,10 +790,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     int size;
     for (unsigned int i = 0; i < nCam; i++) {
       size = depthValueCollection[i].size();
-      if(size != 0) {
+      if(size > 2) { // Require a minimum of three features
         std::nth_element(depthValueCollection[i].begin(), depthValueCollection[i].begin() + size / 2, depthValueCollection[i].end());
         DepthMap::convertDepthType(DepthMap::REGULAR, depthValueCollection[i][size/2],
-                                   state_.template get<mtState::_aux>().depthMap_.getType(), (*medianDepthParameters)[i]);
+                                   state_.aux().depthMap_.getType(), (*medianDepthParameters)[i]);
       }
     }
   }

@@ -33,10 +33,11 @@
 #include <Eigen/Dense>
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
+
+#include "FeatureBearingOutputCF.hpp"
 #include "rovio/FilterStates.hpp"
 #include "rovio/Camera.hpp"
 #include "rovio/PixelOutputCF.hpp"
-#include "rovio/FeatureLocationOutputCF.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -172,10 +173,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   PixelOutput pixelOutput_;
   typename PixelOutputCF<typename FILTERSTATE::mtState>::mtOutputCovMat pixelOutputCov_;
   PixelOutputFromNorCF pixelOutputFromNorCF_;
-  mutable rovio::FeatureLocationOutputCF<mtState> featureLocationOutputCF_;
-  mutable FeatureLocationOutput featureLocationOutput_;
-  mutable typename rovio::FeatureLocationOutputCF<mtState>::mtOutputCovMat featureLocationCov_;
-  mutable typename rovio::FeatureLocationOutputCF<mtState>::mtJacInput featureLocationOutputJac_;
+  mutable rovio::FeatureBearingOutputCF<mtState> featureBearingOutputCF_;
+  mutable FeatureBearingOutput featureBearingOutput_;
+  mutable typename rovio::FeatureBearingOutputCF<mtState>::mtOutputCovMat featureBearingCov_;
+  mutable typename rovio::FeatureBearingOutputCF<mtState>::mtJacInput featureBearingOutputJac_;
   int startLevel_;
   int endLevel_;
   double startDetectionTh_;
@@ -198,6 +199,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
   double specialLinearizationThreshold_;
+  double maxUncertaintyToDepthRatioForDepthInitialization_;
 
   /** \brief Constructor.
    *
@@ -230,6 +232,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     patchRejectionTh_ = 10.0;
     removeNegativeFeatureAfterUpdate_ = true;
     specialLinearizationThreshold_ = 1.0/400;
+    maxUncertaintyToDepthRatioForDepthInitialization_ = 0.3;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -246,6 +249,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
     doubleRegister_.registerScalar("patchRejectionTh",patchRejectionTh_);
     doubleRegister_.registerScalar("specialLinearizationThreshold",specialLinearizationThreshold_);
+    doubleRegister_.registerScalar("maxUncertaintyToDepthRatioForDepthInitialization",maxUncertaintyToDepthRatioForDepthInitialization_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
@@ -301,10 +305,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     if(useDirectMethod_){
       y.template get<mtInnovation::_nor>() = state.aux().b_red_[ID]+noise.template get<mtNoise::_nor>();
     } else {
-      featureLocationOutputCF_.setFeatureID(ID);
-      featureLocationOutputCF_.setOutputCameraID(activeCamID);
-      featureLocationOutputCF_.eval(featureLocationOutput_,state,state);
-      featureLocationOutput_.CfP().boxMinus(state.aux().bearingMeas_[ID],y.template get<mtInnovation::_nor>()); // 0 = m - m_meas + n
+      featureBearingOutputCF_.setFeatureID(ID);
+      featureBearingOutputCF_.setOutputCameraID(activeCamID);
+      featureBearingOutputCF_.eval(featureBearingOutput_,state,state);
+      featureBearingOutput_.CfP().boxMinus(state.aux().bearingMeas_[ID],y.template get<mtInnovation::_nor>()); // 0 = m - m_meas + n
       y.template get<mtInnovation::_nor>() += noise.template get<mtNoise::_nor>();
     }
   }
@@ -325,19 +329,19 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     const int& activeCamCounter = state.aux().activeCameraCounter_;
     const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
     F.setZero();
-    featureLocationOutputCF_.setFeatureID(ID);
-    featureLocationOutputCF_.setOutputCameraID(activeCamID);
-    featureLocationOutputCF_.eval(featureLocationOutput_,state,state);
-    featureLocationOutputCF_.jacInput(featureLocationOutputJac_,state,state);
+    featureBearingOutputCF_.setFeatureID(ID);
+    featureBearingOutputCF_.setOutputCameraID(activeCamID);
+    featureBearingOutputCF_.eval(featureBearingOutput_,state,state);
+    featureBearingOutputCF_.jacInput(featureBearingOutputJac_,state,state);
     if(useDirectMethod_){
       cv::Point2f c_temp;
       Eigen::Matrix2d c_J;
-      mpCameras_[activeCamID].bearingToPixel(featureLocationOutput_.CfP(),c_temp,c_J);
-      F = -state.aux().A_red_[ID]*c_J*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
+      mpCameras_[activeCamID].bearingToPixel(featureBearingOutput_.CfP(),c_temp,c_J);
+      F = -state.aux().A_red_[ID]*c_J*featureBearingOutputJac_.template block<2,mtState::D_>(0,0);
     } else {
       F = state.aux().bearingMeas_[ID].getN().transpose()
-                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureLocationOutput_.CfP(),state.aux().bearingMeas_[ID])
-      *featureLocationOutput_.CfP().getM()*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
+                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureBearingOutput_.CfP(),state.aux().bearingMeas_[ID])
+      *featureBearingOutput_.CfP().getM()*featureBearingOutputJac_.template block<2,mtState::D_>(0,0);
     }
   }
 
@@ -425,23 +429,23 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         }
 
         // Get normal in target frame
-        featureLocationOutputCF_.setFeatureID(ID);
-        featureLocationOutputCF_.setOutputCameraID(activeCamID);
-        featureLocationOutputCF_.transformState(state,featureLocationOutput_);
-        featureLocationOutputCF_.transformCovMat(state,cov,featureLocationCov_);
-        if(verbose_) std::cout << "    Normal in camera frame: " << featureLocationOutput_.CfP().getVec().transpose() << std::endl;
+        featureBearingOutputCF_.setFeatureID(ID);
+        featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        featureBearingOutputCF_.transformState(state,featureBearingOutput_);
+        featureBearingOutputCF_.transformCovMat(state,cov,featureBearingCov_);
+        if(verbose_) std::cout << "    Normal in camera frame: " << featureBearingOutput_.CfP().getVec().transpose() << std::endl;
 
         // Make patch feature in target frame
         patchInTargetFrame = *mpFeature; // TODO: make less costly
-        patchInTargetFrame.set_nor(featureLocationOutput_.CfP()); // TODO: do warping
+        patchInTargetFrame.set_nor(featureBearingOutput_.CfP()); // TODO: do warping
         patchInTargetFrame.camID_ = activeCamID;
         bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
         mpFeature->status_.inFrame_ = mpFeature->status_.inFrame_ || isInActiveFrame;
 
         if(isInActiveFrame){
           pixelOutputFromNorCF_.setCameraID(activeCamID);
-          pixelOutputFromNorCF_.transformState(featureLocationOutput_,pixelOutput_);
-          pixelOutputFromNorCF_.transformCovMat(featureLocationOutput_,featureLocationCov_,pixelOutputCov_);
+          pixelOutputFromNorCF_.transformState(featureBearingOutput_,pixelOutput_);
+          pixelOutputFromNorCF_.transformCovMat(featureBearingOutput_,featureBearingCov_,pixelOutputCov_);
 
           // Visualization
           if(doFrameVisualisation_){
@@ -493,19 +497,19 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
             // Compute deviation of expected
-            patchInTargetFrame.get_nor().boxMinus(featureLocationOutput_.CfP(),bearingError);
-            const double weightedBearingError = (bearingError.transpose()*featureLocationCov_.template block<2,2>(FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>(),FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>()).inverse()*bearingError)(0,0);
+            patchInTargetFrame.get_nor().boxMinus(featureBearingOutput_.CfP(),bearingError);
+            const double weightedBearingError = (bearingError.transpose()*featureBearingCov_.template block<2,2>(FeatureBearingOutput::template getId<FeatureBearingOutput::_nor>(),FeatureBearingOutput::template getId<FeatureBearingOutput::_nor>()).inverse()*bearingError)(0,0);
 
             // Determine linearization mode
             useSpecialLinearizationPoint_ = bearingError.norm() > specialLinearizationThreshold_;
 
             if(weightedBearingError < 5.886){ // TODO: param
-              if(useSpecialLinearizationPoint_) featureLocationOutput_.CfP() = patchInTargetFrame.get_nor();
+              if(useSpecialLinearizationPoint_) featureBearingOutput_.CfP() = patchInTargetFrame.get_nor();
               mtState linearizationPoint = state;
               if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
-              if(!useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
+              if(!useSpecialLinearizationPoint_ || featureBearingOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureBearingOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
-                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
+                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureBearingOutput_.CfP());
                 if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
                                                                        state.aux().A_red_[ID],state.aux().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
@@ -574,10 +578,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       drawPatch.set_nor(filterState.state_.CfP(ID));
       drawPatch.camID_ = activeCamID;
       if(doFrameVisualisation_ && activeCamID != camID){
-        featureLocationOutputCF_.setFeatureID(ID);
-        featureLocationOutputCF_.setOutputCameraID(activeCamID);
-        featureLocationOutputCF_.transformState(filterState.state_,featureLocationOutput_);
-        drawPatch.set_nor(featureLocationOutput_.CfP());
+        featureBearingOutputCF_.setFeatureID(ID);
+        featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        featureBearingOutputCF_.transformState(filterState.state_,featureBearingOutput_);
+        drawPatch.set_nor(featureBearingOutput_.CfP());
       }
       if(!outlierDetection.isOutlier(0)){
         filterState.mlps_.features_[ID].status_.trackingStatus_ = TRACKED;
@@ -634,10 +638,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     for(int i=0;i<mtState::nCam_;i++){
       mpCameras_[i].setExtrinsics(state.MrMC(i),state.qCM(i));
     }
-
-    // Compute the median depth parameters for each camera, using the state features.
-    std::array<double, mtState::nCam_> medianDepthParameters;
-    filterState.getMedianDepthParameters(initDepth_, &medianDepthParameters);
 
     countTracked = 0;
     // For all features in the state.
@@ -713,6 +713,15 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     const int searchCamID = rand()%mtState::nCam_;
     averageScore = filterState.mlps_.getAverageScore(); // TODO
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
+      // Compute the median depth parameters for each camera, using the state features.
+      std::array<double, mtState::nCam_> medianDepthParameters;
+      if(maxUncertaintyToDepthRatioForDepthInitialization_>0){
+        filterState.getMedianDepthParameters(initDepth_, &medianDepthParameters,maxUncertaintyToDepthRatioForDepthInitialization_);
+      } else {
+        medianDepthParameters.fill(initDepth_);
+      }
+
+      // Get Candidates
       std::list<cv::Point2f> candidates;
       if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
@@ -736,7 +745,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
-        filterState.initializeFeatureState(*it, filterState.mlps_.features_[*it].get_nor().getVec(), medianDepthParameters[searchCamID], initCovFeature_);
+        filterState.initializeFeatureState(*it, filterState.mlps_.features_[*it].get_nor().getVec(), medianDepthParameters[searchCamID], initCovFeature_); // TODO: adapt covariance to initial depth
         filterState.mlps_.features_[*it].linkToState(&state.template get<mtState::_aux>().camID_[*it],&state.template get<mtState::_nor>(*it),&state.template get<mtState::_aux>().bearingCorners_[*it]);
         filterState.mlps_.features_[*it].toState();
       }
