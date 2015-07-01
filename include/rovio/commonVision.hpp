@@ -633,6 +633,71 @@ class FeatureCoordinates{
   }
 };
 
+//class FeatureElement: public LWF::ElementBase<FeatureElement,FeatureElement,3>, FeatureCoordinates{
+// public:
+//  typedef LWF::ElementBase<FeatureElement,FeatureElement,3> Base;
+//  using typename Base::mtDifVec;
+//  using typename Base::mtCovMat;
+//  using typename Base::mtGet;
+//  using Base::name_;
+//  LWF::NormalVectorElement::mtDifVec norDifTemp_;
+//  LWF::NormalVectorElement::mtCovMat norCovMatTemp_;
+//  LWF::NormalVectorElement norTemp_;
+//  FeatureElement(){
+//    nor_.name_ = "";
+//  }
+//  FeatureElement(const FeatureElement& other): FeatureCoordinates(other){
+//  }
+//  void boxPlus(const mtDifVec& vecIn, FeatureElement& stateOut) const{
+//    get_nor().boxPlus(vecIn.template block<2,1>(0,0),norTemp_);
+//    stateOut.set_nor(norTemp_);
+//    stateOut.depth_ = depth_ + vecIn(2);
+//  }
+//  void boxMinus(const FeatureElement& stateIn, mtDifVec& vecOut) const{
+//    get_nor().boxMinus(stateIn.get_nor(),norDif_);
+//    vecOut.template block<2,1>(0,0) = norDif_;
+//    vecOut(2) = depth_-stateIn.depth_;
+//  }
+//  void boxMinusJac(const FeatureElement& stateIn, mtCovMat& matOut) const{
+//    matOut.setIdentity();
+//    get_nor().boxMinusJac(stateIn.get_nor(),norCovMat_);
+//    matOut.template block<2,2>(0,0) = norCovMat_;
+//  }
+//  void print() const{
+//    std::cout << "Bearing vector: " << get_nor().getVec().transpose() << " ,depth-parameter: " << depth_ << std::endl;
+//  }
+//  void setIdentity(){
+//    norTemp_.setIdentity();
+//    set_nor(norTemp_);
+//    depth_ = 1;
+//  }
+//  void setRandom(unsigned int& s){
+//    norTemp_.setRandom(s);
+//    set_nor(norTemp_);
+//    std::default_random_engine generator (s);
+//    std::normal_distribution<double> distribution (0.0,1.0);
+//    depth_ = distribution(generator) + 1.0;
+//    s++;
+//  }
+//  void fix(){
+//    norTemp_ = get_nor();
+//    norTemp_.fix();
+//    set_nor(norTemp_);
+//  }
+//  mtGet& get(unsigned int i = 0){
+//    assert(i==0);
+//    return *this;
+//  }
+//  const mtGet& get(unsigned int i = 0) const{
+//    assert(i==0);
+//    return *this;
+//  }
+//  void registerElementToPropertyHandler(LWF::PropertyHandler* mpPropertyHandler, const std::string& str){
+//    nor_.registerElementToPropertyHandler(mpPropertyHandler,str + name_); // Does not work properly since when loading the info file the validity of nor_/c_ is not adapted
+//    mpPropertyHandler->doubleRegister_.registerScalar(str + name_ + "_d", depth_);
+//  }
+//};
+
 /** \brief Draws a point at given feature coordinates.
  *
  *  @param drawImg - Image in which the point should be drawn.
