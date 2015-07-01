@@ -127,19 +127,10 @@ class ImgUpdateMeas : public LWF::State<ImgUpdateMeasAuxiliary<STATE>>
    *  \see ImgUpdateMeasAuxiliary
    *  @return the the auxiliary state of the ImgUpdateMeas.
    */
-//<<<<<<< HEAD
-//  inline Base& aux()
-//  {
-//    return this->template get<_aux>();
-//  }
-//  inline const Base& aux() const
-//  {
-//=======
   inline ImgUpdateMeasAuxiliary<STATE>& aux(){
     return this->template get<_aux>();
   }
   inline const ImgUpdateMeasAuxiliary<STATE>& aux() const{
-//>>>>>>> master
     return this->template get<_aux>();
   }
   //@}
