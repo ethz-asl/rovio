@@ -503,7 +503,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
               if(useSpecialLinearizationPoint_) featureLocationOutput_.CfP() = patchInTargetFrame.get_nor();
               mtState linearizationPoint = state;
               if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
-              if(!useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
+              if(activeCamID == camID && useSpecialLinearizationPoint_) linearizationPoint.CfP(ID) = patchInTargetFrame.get_nor();
+              if(activeCamID == camID || !useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
                 if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
                 if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
