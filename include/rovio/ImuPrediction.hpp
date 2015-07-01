@@ -123,6 +123,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     }
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
+    if(detectInertialMotion(state,meas)){
+      output.aux().timeSinceLastInertialMotion_ = 0;
+    } else {
+      output.aux().timeSinceLastInertialMotion_ = state.aux().output.aux().timeSinceLastInertialMotion_ + dt;
+    }
   }
   void noMeasCase(mtFilterState& filterState, mtMeas& meas, double dt){
     meas.template get<mtMeas::_gyr>() = filterState.state_.gyb();

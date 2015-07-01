@@ -228,6 +228,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     depthMap_.setType(depthTypeInt_);
     activeFeature_ = 0;
     activeCameraCounter_ = 0;
+    timeSinceLastInertialMotion_ = 0.0;
     for(unsigned int i=0;i<nCam;i++){
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
@@ -253,6 +254,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
+  double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
