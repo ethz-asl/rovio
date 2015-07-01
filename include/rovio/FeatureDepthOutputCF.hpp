@@ -42,6 +42,12 @@ class FeatureDepthOutput: public LWF::State<LWF::ScalarElement>{
     this->template getName<_dep>() = "dep";
   }
   ~FeatureDepthOutput(){};
+  inline double& dep(){
+    return this->template get<_dep>();
+  }
+  inline const double& dep() const{
+    return this->template get<_dep>();
+  }
 };
 template<typename STATE>
 class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOutput,true>{
@@ -69,28 +75,27 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     // CrCD = qCB*(BrBD-BrBC)
     // DrDP = qDC*(d_in*nor_in-CrCD)
     // d_out = ||DrDP||
-    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
+    const int& camID = input.aux().camID_[ID_];
     const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
     const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
-    const V3D CrCP = input.get_depth(ID_)*input.template get<mtInput::_nor>(ID_).getVec();
+    const V3D CrCP = input.get_depth(ID_)*input.CfP(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    if (DrDP[2] > 0.0) {                                        // Todo Change this! Should check if bearing vector intersects with image plane!
-      output.template get<mtOutput::_dep>() = DrDP.norm();
+    if (DrDP[2] > 0.0) {                                        // TODO Remove this! Should check if bearing vector intersects with image plane! Do somewhere else...
+      output.dep() = DrDP.norm();
     }
     else {
-      output.template get<mtOutput::_dep>() = 0;
+      output.dep() = 0;
     }
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
     double d, d_p, p_d, p_d_p;
-    input.template get<mtInput::_aux>().depthMap_.map(input.template get<mtInput::_dep>(ID_),d,d_p,p_d,p_d_p);
-    const int& camID = input.template get<mtInput::_aux>().camID_[ID_];
+    input.aux().depthMap_.map(input.dep(ID_),d,d_p,p_d,p_d_p);
+    const int& camID = input.aux().camID_[ID_];
     const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
     const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
-    const V3D CrCP = d*input.template get<mtInput::_nor>(ID_).getVec();
+    const V3D CrCP = d*input.CfP(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    const double d_out = DrDP.norm();
     const LWF::NormalVectorElement nor_out(DrDP);
 
     const Eigen::Matrix<double,1,3> J_d_DrDP = nor_out.getVec().transpose();
@@ -104,13 +109,13 @@ class FeatureDepthOutputCF:public LWF::CoordinateTransform<STATE,FeatureDepthOut
     const Eigen::Matrix<double,3,3> J_CrCD_BrBC = -MPD(input.qCM(camID)).matrix();
     const Eigen::Matrix<double,3,3> J_CrCD_BrBD = MPD(input.qCM(camID)).matrix();
 
-    const Eigen::Matrix<double,3,1> J_CrCP_d = input.template get<mtInput::_nor>(ID_).getVec()*d_p;
-    const Eigen::Matrix<double,3,2> J_CrCP_nor = d*input.template get<mtInput::_nor>(ID_).getM();
+    const Eigen::Matrix<double,3,1> J_CrCP_d = input.CfP(ID_).getVec()*d_p;
+    const Eigen::Matrix<double,3,2> J_CrCP_nor = d*input.CfP(ID_).getM();
 
     J.template block<1,2>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_nor>(ID_)) = J_d_DrDP*J_DrDP_CrCP*J_CrCP_nor;
     J.template block<1,1>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_dep>(ID_)) = J_d_DrDP*J_DrDP_CrCP*J_CrCP_d;
 
-    if(input.template get<mtInput::_aux>().doVECalibration_ && camID != outputCamID_){
+    if(input.aux().doVECalibration_ && camID != outputCamID_){
       J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vea>(camID)) = J_d_DrDP*(J_DrDP_qDC*J_qDC_qCB+J_DrDP_CrCD*J_CrCD_qCB);
       J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vea>(outputCamID_)) = J_d_DrDP*J_DrDP_qDC*J_qDC_qDB;
       J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vep>(camID)) = J_d_DrDP*J_DrDP_CrCD*J_CrCD_BrBC;
