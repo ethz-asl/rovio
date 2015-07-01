@@ -127,12 +127,19 @@ class ImgUpdateMeas : public LWF::State<ImgUpdateMeasAuxiliary<STATE>>
    *  \see ImgUpdateMeasAuxiliary
    *  @return the the auxiliary state of the ImgUpdateMeas.
    */
-  inline Base& aux()
-  {
+//<<<<<<< HEAD
+//  inline Base& aux()
+//  {
+//    return this->template get<_aux>();
+//  }
+//  inline const Base& aux() const
+//  {
+//=======
+  inline ImgUpdateMeasAuxiliary<STATE>& aux(){
     return this->template get<_aux>();
   }
-  inline const Base& aux() const
-  {
+  inline const ImgUpdateMeasAuxiliary<STATE>& aux() const{
+//>>>>>>> master
     return this->template get<_aux>();
   }
   //@}
@@ -413,9 +420,9 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
   void commonPreProcess(mtFilterState& filterState, const mtMeas& meas)
   {
     assert(filterState.t_ == meas.aux().imgTime_);
-    for (int i = 0; i < mtState::nCam_; i++) {
-      if (doFrameVisualisation_) {
-        cvtColor(meas.template get<mtMeas::_aux>().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
+    for(int i=0;i<mtState::nCam_;i++){
+      if(doFrameVisualisation_){
+        cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
       }
     }
     filterState.imgTime_ = filterState.t_;
@@ -500,8 +507,7 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         patchInTargetFrame = *mpFeature;  // TODO: make less costly
         patchInTargetFrame.set_nor(featureLocationOutput_.CfP());  // TODO: do warping
         patchInTargetFrame.camID_ = activeCamID;
-        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,
-                                                        meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
+        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
         mpFeature->status_.inFrame_ = mpFeature->status_.inFrame_ || isInActiveFrame;
 
         if (isInActiveFrame) {
@@ -516,16 +522,12 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
             featureCoordinates.set_c(pixelOutput_.getPoint2f());
             featureCoordinates.camID_ = activeCamID;
             featureCoordinates.setSigmaFromCov(pixelOutputCov_);
-            if (activeCamID == camID) {
-              drawEllipse(filterState.img_[activeCamID], featureCoordinates,
-                          cv::Scalar(0, 175, 175), 2.0, false);
-              drawText(filterState.img_[activeCamID], featureCoordinates, std::to_string(ID),
-                       cv::Scalar(0, 175, 175));
+            if(activeCamID==camID){
+              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(0,175,175), 2.0, false);
+              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(mpFeature->totCount_),cv::Scalar(0,175,175));
             } else {
-              drawEllipse(filterState.img_[activeCamID], featureCoordinates,
-                          cv::Scalar(175, 175, 0), 2.0, false);
-              drawText(filterState.img_[activeCamID], featureCoordinates, std::to_string(ID),
-                       cv::Scalar(175, 175, 0));
+              drawEllipse(filterState.img_[activeCamID], featureCoordinates, cv::Scalar(175,175,0), 2.0, false);
+              drawText(filterState.img_[activeCamID],featureCoordinates,std::to_string(mpFeature->totCount_),cv::Scalar(175,175,0));
             }
           }
 
@@ -547,12 +549,11 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
           }
 
           // Search patch
-          if (!useDirectMethod_ || true) {  // TODO: make adaptive || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_
-            align2DComposed(patchInTargetFrame, meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
+          if(!useDirectMethod_ || true){ // TODO: make adaptive || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_
+            align2DComposed(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           }
-          if (patchInTargetFrame.status_.matchingStatus_ == FOUND) {
-            if (patchInTargetFrame.computeAverageDifferenceReprojection(
-                meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_) {
+          if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
+            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.aux().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_){
               patchInTargetFrame.status_.matchingStatus_ = NOTFOUND;
               if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
             } else {
@@ -582,22 +583,13 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
               if (useSpecialLinearizationPoint_)
                 featureLocationOutput_.CfP() = patchInTargetFrame.get_nor();
               mtState linearizationPoint = state;
-              if (verbose_)
-                std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_
-                    << std::endl;
-              if (!useSpecialLinearizationPoint_
-                  || featureLocationOutputCF_.solveInverseProblemRelaxed(
-                      linearizationPoint, cov, featureLocationOutput_,
-                      Eigen::Matrix2d::Identity() * 1e-5, 1e-4, 199)) {  // TODO: make noide dependent on patch
-                if (verbose_)
-                  std::cout << "    Backprojection: "
-                      << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
-                if (useDirectMethod_ && !useSpecialLinearizationPoint_)
-                  patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
-                if (!useDirectMethod_
-                    || getLinearAlignEquationsReduced(patchInTargetFrame,
-                                                      meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
-                state.aux().A_red_[ID],state.aux().b_red_[ID])) {
+              if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
+              if(activeCamID == camID && useSpecialLinearizationPoint_) linearizationPoint.CfP(ID) = patchInTargetFrame.get_nor();
+              if(activeCamID == camID || !useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
+                if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
+                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
+                if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.aux().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
+                                                                       state.aux().A_red_[ID],state.aux().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
                   state.aux().bearingMeas_[ID] = patchInTargetFrame.get_nor();
                   foundValidMeasurement = true;
@@ -759,13 +751,13 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
           }
 
           // Extract feature patches and update Shi-Tomasi score.
-          if (mpFeature->status_.trackingStatus_ == TRACKED) {
-            if (isMultilevelPatchInFrame(*mpFeature, meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false)) {
+          if(mpFeature->status_.trackingStatus_ == TRACKED){
+            if(isMultilevelPatchInFrame(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false)){
               testFeature.set_c(mpFeature->get_c());
-              extractMultilevelPatchFromImage(testFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+              extractMultilevelPatchFromImage(testFeature,meas.aux().pyr_[camID],startLevel_,true,false);
               testFeature.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
-              if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_) {
-                extractMultilevelPatchFromImage(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+              if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){
+                extractMultilevelPatchFromImage(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false);
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
                 mpFeature->toState();
               }
@@ -819,8 +811,8 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
       if (verbose_)
         std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
-      for (int l = endLevel_; l <= startLevel_; l++) {
-        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
+      for(int l=endLevel_;l<=startLevel_;l++){
+        detectFastCorners(meas.aux().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
       if (verbose_)
@@ -831,13 +823,10 @@ class ImgUpdate : public LWF::Update<ImgInnovation<typename FILTERSTATE::mtState
         pruneCandidates(filterState.mlps_, candidates, searchCamID);
       }
       const double t3 = (double) cv::getTickCount();
-      if (verbose_)
-        std::cout << "== Selected " << candidates.size() << " candidates ("
-                  << (t3 - t2) / cv::getTickFrequency() * 1000 << " ms)" << std::endl;
-      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_, candidates,
-                                                                  meas.template get<mtMeas::_aux>().pyr_[searchCamID],searchCamID,filterState.t_,
-      endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
-      penaltyDistance_, zeroDistancePenalty_,false,0.0);
+      if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
+      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.aux().pyr_[searchCamID],searchCamID,filterState.t_,
+                                                                  endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
+                                                                  penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
       if (verbose_)
         std::cout << "== Got " << filterState.mlps_.getValidCount() << " after adding "

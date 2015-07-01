@@ -61,12 +61,12 @@ Init
         gyb_0 3e-4
         gyb_1 3e-4
         gyb_2 3e-4
-        vep_0 1
-        vep_1 1
-        vep_2 1
-        vep_3 1
-        vep_4 1
-        vep_5 1
+        vep_0 0.01
+        vep_1 0.01
+        vep_2 0.01
+        vep_3 0.01
+        vep_4 0.01
+        vep_5 0.01
         att_0 0.1
         att_1 0.1
         att_2 0.1
@@ -96,11 +96,11 @@ Update0
     beta 2
     kappa 0
     updateVecNormTermination 1e-06
-    initCovFeature_0 100
+    initCovFeature_0 1
     initCovFeature_1 1e-5
     initCovFeature_2 1e-5
     initDepth 1.0
-    startDetectionTh 0.5
+    startDetectionTh 0.6
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100
