@@ -56,8 +56,14 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
   const V3D g_;
+  double inertialMotionRorTh_;
+  double inertialMotionAccTh_;
   ImuPrediction():g_(0,0,-9.81){
     int ind;
+    inertialMotionRorTh_ = 0.1;
+    inertialMotionAccTh_ = 0.1;
+    doubleRegister_.registerScalar("inertialMotionRorTh",inertialMotionRorTh_);
+    doubleRegister_.registerScalar("inertialMotionAccTh",inertialMotionAccTh_);
     for(int i=0;i<mtState::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
       doubleRegister_.removeScalarByVar(prenoiP_(ind,ind));
@@ -235,6 +241,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
               +1.0/d*gSM(state.CfP(i).getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
            )*sqrt(dt)*MPD(state.qCM(camID)).matrix();
     }
+  }
+  bool detectInertialMotion(const mtState& state, const mtMeas& meas){
+    const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.gyb();
+    const V3D imuAcc = meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_);
+    return (imuRor.norm() > inertialMotionRorTh_) | (imuAcc.norm() > inertialMotionAccTh_);
   }
 };
 
