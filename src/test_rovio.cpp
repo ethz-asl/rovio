@@ -69,6 +69,7 @@ int main(int argc, char** argv){
   std::string mFSFileName = rootdir + "/shaders/shader.fs";
   mRovioScene.initScene(argc,argv,mVSFileName,mFSFileName,mpFilter);
   mRovioScene.setIdleFunction(idleFunc);
+  mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.isInitialized_=false;});
   glutMainLoop();
 #else
   ros::spin();
