@@ -229,6 +229,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     activeFeature_ = 0;
     activeCameraCounter_ = 0;
     timeSinceLastInertialMotion_ = 0.0;
+    timeSinceLastImageMotion_ = 0.0;
     for(unsigned int i=0;i<nCam;i++){
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
@@ -255,6 +256,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
+  double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -605,6 +607,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
+  ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
 
   /** \brief Constructor
    */

@@ -369,6 +369,37 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     filterState.state_.aux().activeCameraCounter_ = 0;
 
     // TODO sort feature by covariance and use more accurate ones first
+
+    /* Detect Image changes by looking at the feature patches between curren and previous image (both at the current feature location)
+     * The maximum change of intensity is obtained if the pixel is moved along the strongest gradient.
+     * The maximal singularvalue, which is equivalent to the root of the larger eigenvalue of the Hessian,
+     * gives us range in which intensity change is allowed to be.
+     */
+    if(filterState.imageCounter_>1){
+      double rateOfMovingFeaturesTh_ = 0.5; // TODO param
+      double pixelCoordinateMotionTh_ = 1.0; // TODO param
+      int totCountInFrame = 0;
+      int totCountInMotion = 0;
+      MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> mlp(mpCameras_);
+      for(unsigned int i=0;i<mtState::nMax_;i++){
+        if(filterState.mlps_.isValid_[i]){
+          mlp.set_nor(filterState.state_.CfP(i));
+          mlp.camID_ = filterState.mlps_.features_[i].camID_;
+          if(isMultilevelPatchInFrame(mlp,filterState.prevPyr_[mlp.camID_],startLevel_,true,false)){
+            extractMultilevelPatchFromImage(mlp,filterState.prevPyr_[mlp.camID_],startLevel_,true,false);
+            mlp.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
+            const float avgError = mlp.computeAverageDifferenceReprojection(meas.aux().pyr_[mlp.camID_],endLevel_,startLevel_,false);
+            if(avgError/std::sqrt(mlp.e1_) > static_cast<float>(pixelCoordinateMotionTh_)) totCountInMotion++;
+            totCountInFrame++;
+          }
+        }
+      }
+      if(rateOfMovingFeaturesTh_/totCountInMotion*totCountInFrame < 1.0){
+        filterState.state_.aux().timeSinceLastImageMotion_ = 0.0;
+      }
+    } else {
+      filterState.state_.aux().timeSinceLastImageMotion_ = 0.0;
+    }
   }
 
   /** \brief Pre-Processing for the image update.
@@ -476,7 +507,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             align2DComposed(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           }
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
-            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.aux().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_){
+            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.aux().pyr_[activeCamID],endLevel_,startLevel_,true) > patchRejectionTh_){
               patchInTargetFrame.status_.matchingStatus_ = NOTFOUND;
               if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
             } else {
@@ -754,6 +785,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
       }
     }
+
+    // Copy image pyramid to state
+    for(int i=0;i<mtState::nCam_;i++){
+      filterState.prevPyr_[i] = meas.aux().pyr_[i];
+    }
+    cv::putText(filterState.img_[0],std::to_string(filterState.state_.aux().timeSinceLastImageMotion_),cv::Point2f(50,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,255,0));
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

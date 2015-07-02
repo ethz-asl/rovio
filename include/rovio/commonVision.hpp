@@ -185,6 +185,8 @@ class Patch {
   float dy_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in y-direction for each patch pixel.*/
   Eigen::Matrix3f H_;  /**<Hessian matrix of the patch (necessary for the patch alignment).*/
   float s_;  /**<Shi-Tomasi Score (smaller eigenvalue of H_).*/
+  float e0_;  /**<Smaller eigenvalue of H_.*/
+  float e1_;  /**<Larger eigenvalue of H_.*/
   bool validGradientParameters_;  /**<True, if the gradient parameters (patch gradient components dx_ dy_, Hessian H_, Shi-Thomasi Score s_) have been computed.
                                   \see computeGradientParameters()*/
   /** \brief Constructor
@@ -193,12 +195,14 @@ class Patch {
     static_assert(size%2==0,"Patch size must be a multiple of 2");
     validGradientParameters_ = false;
     s_ = 0.0;
+    e0_ = 0.0;
+    e1_ = 0.0;
   }
   /** \brief Destructor
    */
   ~Patch(){}
 
-  /** \brief Computes the gradient parameters of the patch (patch gradient components dx_ dy_, Hessian H_, Shi-Tomasi Score s_).
+  /** \brief Computes the gradient parameters of the patch (patch gradient components dx_ dy_, Hessian H_, Shi-Tomasi Score s_, Eigenvalues of the Hessian e0_ and e1_).
    *         The expanded patch patchWithBorder_ must be set.
    *         Sets validGradientParameters_ afterwards to true.
    */
@@ -223,8 +227,10 @@ class Patch {
     const float dXX = H_(0,0)/(size*size);
     const float dYY = H_(1,1)/(size*size);
     const float dXY = H_(0,1)/(size*size);
-    // Find and return smaller eigenvalue:
-    s_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+
+    e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+    e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+    s_ = e0_;
     validGradientParameters_ = true;
   }
 
@@ -707,6 +713,8 @@ class MultilevelPatchFeature: public FeatureCoordinates{
   double initTime_;  /**<Time of feature initialization.*/
   double currentTime_;  /**<Time of last featutre measurement.*/
   Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
+  float e0_;  /**<Smaller eigenvalue of H_.*/
+  float e1_;  /**<Larger eigenvalue of H_.*/
   float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation, add mutable */
   int totCount_;  /**<Number of images which have passed since feature initialization.*/
   Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
@@ -793,6 +801,8 @@ class MultilevelPatchFeature: public FeatureCoordinates{
     valid_bearingCorners_ = false;
     valid_affineTransform_ = false;
     H_.setIdentity();
+    e0_ = 0;
+    e1_ = 0;
     s_ = 0;
     totCount_ = 0;
     inFrameCount_ = 0;
@@ -1100,8 +1110,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
       const float dXX = H_(0,0)/(count*patch_size*patch_size);
       const float dYY = H_(1,1)/(count*patch_size*patch_size);
       const float dXY = H_(0,1)/(count*patch_size*patch_size);
-      s_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+      e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+      e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+      s_ = e0_;
     } else {
+      e0_ = 0;
+      e1_ = 0;
       s_ = -1;
     }
   }
@@ -1177,11 +1191,12 @@ class MultilevelPatchFeature: public FeatureCoordinates{
    * @param l2         - End pyramid level (l1<l2)
    * @return the RMSE value for the patches in the set pyramid level interval.
    */
-  float computeAverageDifferenceReprojection(const ImagePyramid<n_levels>& pyr, const int l1, const int l2) const{
+  float computeAverageDifferenceReprojection(const ImagePyramid<n_levels>& pyr, const int l1, const int l2, const bool doWarping = false) const{
     MultilevelPatchFeature<n_levels,patch_size> mlpReprojected;
     mlpReprojected.set_c(get_c());
-    mlpReprojected.set_affineTransfrom(get_affineTransform());
-    extractMultilevelPatchFromImage(mlpReprojected,pyr,l2,false,true);
+    if(doWarping)
+      mlpReprojected.set_affineTransfrom(get_affineTransform());
+    extractMultilevelPatchFromImage(mlpReprojected,pyr,l2,false,doWarping);
     return computeAverageDifference(mlpReprojected,l1,l2);
   }
 };
@@ -1199,7 +1214,7 @@ class MultilevelPatchFeature: public FeatureCoordinates{
  *                      If false, the dimensions of aligned patches are used for the check.
  */
 template<int n_levels,int patch_size>
-bool isMultilevelPatchInFrame(MultilevelPatchFeature<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1,const bool withBorder = false, const bool doWarping = false){
+bool isMultilevelPatchInFrame(const MultilevelPatchFeature<n_levels,patch_size>& mlp,const ImagePyramid<n_levels>& pyr, const int l = n_levels-1,const bool withBorder = false, const bool doWarping = false){
   if(!mlp.isInFront()) return false;
   const cv::Point2f c = levelTranformCoordinates(mlp.get_c(),pyr,0,l);
   if(!doWarping){

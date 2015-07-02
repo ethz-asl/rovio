@@ -126,8 +126,9 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     if(detectInertialMotion(state,meas)){
       output.aux().timeSinceLastInertialMotion_ = 0;
     } else {
-      output.aux().timeSinceLastInertialMotion_ = state.aux().output.aux().timeSinceLastInertialMotion_ + dt;
+      output.aux().timeSinceLastInertialMotion_ = output.aux().timeSinceLastInertialMotion_ + dt;
     }
+    output.aux().timeSinceLastImageMotion_ = output.aux().timeSinceLastImageMotion_ + dt;
   }
   void noMeasCase(mtFilterState& filterState, mtMeas& meas, double dt){
     meas.template get<mtMeas::_gyr>() = filterState.state_.gyb();
@@ -247,7 +248,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
            )*sqrt(dt)*MPD(state.qCM(camID)).matrix();
     }
   }
-  bool detectInertialMotion(const mtState& state, const mtMeas& meas){
+  bool detectInertialMotion(const mtState& state, const mtMeas& meas) const{
     const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuAcc = meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_);
     return (imuRor.norm() > inertialMotionRorTh_) | (imuAcc.norm() > inertialMotionAccTh_);

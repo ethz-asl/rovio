@@ -154,4 +154,6 @@ Prediction
     alpha 0.001
     beta 2
     kappa 0
+    inertialMotionRorTh 0.1
+    inertialMotionAccTh 0.1
 }
