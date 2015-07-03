@@ -181,6 +181,9 @@ class RovioNode{
     }
     featureLocationOutputCFTest.setOutputCameraID(0);
     featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+
+    // Zero Velocity Updates
+    std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
   }
 
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.

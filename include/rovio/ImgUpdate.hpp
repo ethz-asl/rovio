@@ -37,6 +37,7 @@
 #include "rovio/Camera.hpp"
 #include "rovio/PixelOutputCF.hpp"
 #include "rovio/FeatureLocationOutputCF.hpp"
+#include "rovio/ZeroVelocityUpdate.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -150,7 +151,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
   typedef LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
       ImgOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
-  using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
   using Base::boolRegister_;
@@ -190,6 +190,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
   double matchingPixelThreshold_;
+  double rateOfMovingFeaturesTh_; /**<What percentage of feature most be moving for image motion detection*/
+  double pixelCoordinateMotionTh_; /**<Threshold for detecting feature motion*/
+  int minFeatureCountForNoMotionDetection_; /**<Minimum amount of feature for detecting NO image motion*/
   double patchRejectionTh_;
   bool doPatchWarping_;
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
@@ -198,6 +201,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
   double specialLinearizationThreshold_;
+  double minTimeForZeroVelocityUpdate_;  /**<Time until zero velocity update get performed if there is no motion*/
+  ZeroVelocityUpdate<FILTERSTATE> zeroVelocityUpdate_; /**<Zero velocity update, directly integrated into the img update*/
 
   /** \brief Constructor.
    *
@@ -230,6 +235,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     patchRejectionTh_ = 10.0;
     removeNegativeFeatureAfterUpdate_ = true;
     specialLinearizationThreshold_ = 1.0/400;
+    rateOfMovingFeaturesTh_ = 0.5;
+    pixelCoordinateMotionTh_ = 1.0;
+    minFeatureCountForNoMotionDetection_ = 5;
+    minTimeForZeroVelocityUpdate_ = 1.0;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -246,10 +255,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
     doubleRegister_.registerScalar("patchRejectionTh",patchRejectionTh_);
     doubleRegister_.registerScalar("specialLinearizationThreshold",specialLinearizationThreshold_);
+    doubleRegister_.registerScalar("rateOfMovingFeaturesTh",rateOfMovingFeaturesTh_);
+    doubleRegister_.registerScalar("pixelCoordinateMotionTh",pixelCoordinateMotionTh_);
+    doubleRegister_.registerScalar("minTimeForZeroVelocityUpdate",minTimeForZeroVelocityUpdate_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
+    intRegister_.registerScalar("minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -259,6 +272,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(0,0));
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(1,1));
     useImprovedJacobian_ = false; // TODO: adapt/test
+    Base::PropertyHandler::registerSubHandler("ZeroVelocityUpdate",zeroVelocityUpdate_);
+    zeroVelocityUpdate_.outlierDetection_.registerToPropertyHandler(&zeroVelocityUpdate_,"MahalanobisTh");
   };
 
   /** \brief Destructor
@@ -376,8 +391,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
      * gives us range in which intensity change is allowed to be.
      */
     if(filterState.imageCounter_>1){
-      double rateOfMovingFeaturesTh_ = 0.5; // TODO param
-      double pixelCoordinateMotionTh_ = 1.0; // TODO param
       int totCountInFrame = 0;
       int totCountInMotion = 0;
       MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> mlp(mpCameras_);
@@ -394,7 +407,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           }
         }
       }
-      if(rateOfMovingFeaturesTh_/totCountInMotion*totCountInFrame < 1.0){
+      if(rateOfMovingFeaturesTh_/totCountInMotion*totCountInFrame < 1.0 || totCountInFrame < minFeatureCountForNoMotionDetection_){
         filterState.state_.aux().timeSinceLastImageMotion_ = 0.0;
       }
     } else {
@@ -790,7 +803,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     for(int i=0;i<mtState::nCam_;i++){
       filterState.prevPyr_[i] = meas.aux().pyr_[i];
     }
-    cv::putText(filterState.img_[0],std::to_string(filterState.state_.aux().timeSinceLastImageMotion_),cv::Point2f(50,85),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255,255,0));
+
+    // Zero Velocity updates if appropriate
+    if(filterState.state_.aux().timeSinceLastImageMotion_ > minTimeForZeroVelocityUpdate_ && filterState.state_.aux().timeSinceLastInertialMotion_ > minTimeForZeroVelocityUpdate_){
+      cv::putText(filterState.img_[0],"Performing Zero Velocity Updates!",cv::Point2f(150,25),cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0,255,255));
+      zeroVelocityUpdate_.performUpdateEKF(filterState,ZeroVelocityUpdateMeas<mtState>());
+    }
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

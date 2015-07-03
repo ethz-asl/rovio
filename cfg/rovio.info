@@ -116,6 +116,25 @@ Update0
     specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10.0;
     removeNegativeFeatureAfterUpdate true;
+    rateOfMovingFeaturesTh 0.5;
+    pixelCoordinateMotionTh 1.0;
+    minFeatureCountForNoMotionDetection 5;
+    minTimeForZeroVelocityUpdate 1.0;
+    ZeroVelocityUpdate
+    {
+        maxNumIteration 10
+        UpdateNoise
+        {
+            vel_0 0.0001
+            vel_1 0.0001
+            vel_2 0.0001
+        }
+        alpha 0.001
+        beta 2
+        kappa 0
+        updateVecNormTermination 1e-06
+        MahalanobisTh0 7.689997599999999
+    }
 }
 Prediction
 {
@@ -155,5 +174,5 @@ Prediction
     beta 2
     kappa 0
     inertialMotionRorTh 0.1
-    inertialMotionAccTh 0.1
+    inertialMotionAccTh 0.5
 }
