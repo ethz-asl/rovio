@@ -126,9 +126,9 @@ Update0
         maxNumIteration 10
         UpdateNoise
         {
-            vel_0 0.0001
-            vel_1 0.0001
-            vel_2 0.0001
+            vel_0 0.01
+            vel_1 0.01
+            vel_2 0.01
         }
         alpha 0.001
         beta 2
