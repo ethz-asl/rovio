@@ -41,9 +41,10 @@
 #include <rovio/RovioOutput.h>
 #include "rovio/CameraOutputCF.hpp"
 #include "rovio/YprOutputCF.hpp"
-#include "rovio/FeatureLocationOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
+#include "FeatureBearingOutputCF.hpp"
+#include "FeatureLocationOutputCF.hpp"
 
 namespace rovio {
 
@@ -161,18 +162,26 @@ class RovioNode{
       testState.aux().activeCameraCounter_ = 0;
       const int camID = testState.aux().camID_[i];
       int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setFeatureID(i);
-      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
+      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setFeatureID(i);
+      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
       std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
       testState.aux().activeCameraCounter_ = mtState::nCam_-1;
       activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-      std::get<0>(mpFilter_->mUpdates_).featureLocationOutputCF_.setOutputCameraID(activeCamID);
+      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
       std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
     }
 
     // CF
     cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
     attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);
+    rovio::FeatureBearingOutputCF<mtState> featureBearingOutputCFTest;
+    featureBearingOutputCFTest.setFeatureID(0);
+    if(mtState::nCam_>1){
+      featureBearingOutputCFTest.setOutputCameraID(1);
+      featureBearingOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+    }
+    featureBearingOutputCFTest.setOutputCameraID(0);
+    featureBearingOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
     rovio::FeatureLocationOutputCF<mtState> featureLocationOutputCFTest;
     featureLocationOutputCFTest.setFeatureID(0);
     if(mtState::nCam_>1){

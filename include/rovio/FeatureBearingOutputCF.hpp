@@ -26,37 +26,22 @@
 *
 */
 
-#ifndef ROVIO_FEATURELOCATIONOUTPUTCF_HPP_
-#define ROVIO_FEATURELOCATIONOUTPUTCF_HPP_
+#ifndef ROVIO_FEATUREBEARINGOUTPUTCF_HPP_
+#define ROVIO_FEATUREBEARINGOUTPUTCF_HPP_
 
 #include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
 
-class FeatureLocationOutput: public LWF::State<LWF::NormalVectorElement,LWF::ScalarElement>{
+class FeatureBearingOutput: public LWF::State<LWF::NormalVectorElement>{
  public:
   static constexpr unsigned int _nor = 0;
-  static constexpr unsigned int _dep = _nor+1;
-  FeatureLocationOutput(){
-    static_assert(_dep+1==E_,"Error with indices");
-    this->template getName<_dep>() = "dep";
+  FeatureBearingOutput(){
+    static_assert(_nor+1==E_,"Error with indices");
     this->template getName<_nor>() = "nor";
   }
-  ~FeatureLocationOutput(){};
-
-  //@{
-  /** \brief Get the depth of the considered feature.
-   *
-   *  @return the depth of the considered feature.
-   */
-  inline double& dep(){
-    return this->template get<_dep>();
-  }
-  inline const double& dep() const{
-    return this->template get<_dep>();
-  }
-  //@}
+  ~FeatureBearingOutput(){};
 
   //@{
   /** \brief Get the bearing vector (NormalVectorElement) of the considered feature.
@@ -70,18 +55,20 @@ class FeatureLocationOutput: public LWF::State<LWF::NormalVectorElement,LWF::Sca
     return this->template get<_nor>();
   }
   //@}
+
+
 };
 template<typename STATE>
-class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocationOutput,true>{
+class FeatureBearingOutputCF:public LWF::CoordinateTransform<STATE,FeatureBearingOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<STATE,FeatureLocationOutput,true> Base;
+  typedef LWF::CoordinateTransform<STATE,FeatureBearingOutput,true> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtJacInput mtJacInput;
   int ID_;
   int outputCamID_;
-  FeatureLocationOutputCF(){
+  FeatureBearingOutputCF(){
     ID_ = 0;
     outputCamID_ = 0;
   };
@@ -91,7 +78,7 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
   void setOutputCameraID(int camID){
     outputCamID_ = camID;
   }
-  ~FeatureLocationOutputCF(){};
+  ~FeatureBearingOutputCF(){};
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     // D = Destination camera frame.
     // qDC = qDM*qCM^T
@@ -105,7 +92,6 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
     const V3D CrCP = input.get_depth(ID_)*input.CfP(ID_).getVec();
     const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
     output.CfP().setFromVector(DrDP);
-    output.dep() = DrDP.norm();
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     J.setZero();
@@ -136,18 +122,12 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
 
     J.template block<2,2>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_nor>(ID_)) = J_nor_DrDP*J_DrDP_CrCP*J_CrCP_nor;
     J.template block<2,1>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_dep>(ID_)) = J_nor_DrDP*J_DrDP_CrCP*J_CrCP_d;
-    J.template block<1,2>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_nor>(ID_)) = J_d_DrDP*J_DrDP_CrCP*J_CrCP_nor;
-    J.template block<1,1>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_dep>(ID_)) = J_d_DrDP*J_DrDP_CrCP*J_CrCP_d;
 
     if(input.aux().doVECalibration_ && camID != outputCamID_){
       J.template block<2,3>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_vea>(camID)) = J_nor_DrDP*(J_DrDP_qDC*J_qDC_qCB+J_DrDP_CrCD*J_CrCD_qCB);
       J.template block<2,3>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_vea>(outputCamID_)) = J_nor_DrDP*J_DrDP_qDC*J_qDC_qDB;
       J.template block<2,3>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_vep>(camID)) = J_nor_DrDP*J_DrDP_CrCD*J_CrCD_BrBC;
       J.template block<2,3>(mtOutput::template getId<mtOutput::_nor>(),mtInput::template getId<mtInput::_vep>(outputCamID_)) = J_nor_DrDP*J_DrDP_CrCD*J_CrCD_BrBD;
-      J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vea>(camID)) = J_d_DrDP*(J_DrDP_qDC*J_qDC_qCB+J_DrDP_CrCD*J_CrCD_qCB);
-      J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vea>(outputCamID_)) = J_d_DrDP*J_DrDP_qDC*J_qDC_qDB;
-      J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vep>(camID)) = J_d_DrDP*J_DrDP_CrCD*J_CrCD_BrBC;
-      J.template block<1,3>(mtOutput::template getId<mtOutput::_dep>(),mtInput::template getId<mtInput::_vep>(outputCamID_)) = J_d_DrDP*J_DrDP_CrCD*J_CrCD_BrBD;
     }
   }
 };
@@ -155,4 +135,4 @@ class FeatureLocationOutputCF:public LWF::CoordinateTransform<STATE,FeatureLocat
 }
 
 
-#endif /* ROVIO_FEATURELOCATIONOUTPUTCF_HPP_ */
+#endif /* ROVIO_FEATUREBEARINGOUTPUTCF_HPP_ */
