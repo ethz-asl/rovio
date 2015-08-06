@@ -767,7 +767,7 @@ static Scene* mpScene = nullptr;
 static void initGlut(int argc, char** argv, Scene& scene){
   glutInit(&argc, argv);
   glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA);
-  glutInitWindowSize(1000, 800);
+  glutInitWindowSize(1600, 900);
   glutInitWindowPosition(100, 100);
   glutCreateWindow("Scene");
 

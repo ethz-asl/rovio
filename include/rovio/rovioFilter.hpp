@@ -105,6 +105,13 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
+    boolRegister_.registerScalar("Common.plotGroundtruth",init_.plotGroundtruth_);
+    doubleRegister_.registerVector("Common.groundtruth_IrIJ",init_.groundtruth_IrIJ_);
+    doubleRegister_.registerQuaternion("Common.groundtruth_qJI",init_.groundtruth_qJI_);
+    doubleRegister_.registerVector("Common.groundtruth_BrBC",init_.groundtruth_BrBC_);
+    doubleRegister_.registerQuaternion("Common.groundtruth_qCB",init_.groundtruth_qCB_);
+    Eigen::Vector3d groundtruth_IrIJ_;
+    Eigen::Vector3d groundtruth_BrBC_;
     reset(0.0);
   }
 

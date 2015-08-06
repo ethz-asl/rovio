@@ -680,6 +680,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
   ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
+  rot::RotationQuaternionPD groundtruth_qCJ_;
+  rot::RotationQuaternionPD groundtruth_qJI_;
+  rot::RotationQuaternionPD groundtruth_qCB_;
+  Eigen::Vector3d groundtruth_JrJC_;
+  Eigen::Vector3d groundtruth_IrIJ_;
+  Eigen::Vector3d groundtruth_BrBC_;
+  bool plotGroundtruth_;
 
   /** \brief Constructor
    */
@@ -687,6 +694,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
+    groundtruth_qCJ_.setIdentity();
+    groundtruth_JrJC_.setZero();
+    plotGroundtruth_ = true;
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
