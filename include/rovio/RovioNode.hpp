@@ -268,7 +268,7 @@ class RovioNode{
     mpFilter_->safe_.groundtruth_qCJ_ = groundtruth_qCJ_.front();
     mpFilter_->safe_.groundtruth_JrJC_ = groundtruth_JrJC_.front();
 
-    if(groundtruth_qCJ_.size() > groundtruthN_){
+    while(groundtruth_qCJ_.size() > groundtruthN_){
       groundtruth_qCJ_.pop();
       groundtruth_JrJC_.pop();
     }
