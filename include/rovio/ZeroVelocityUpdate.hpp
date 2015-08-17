@@ -110,6 +110,8 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
   typedef LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,
       ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
   using typename Base::eval;
+  using Base::doubleRegister_;
+  using Base::intRegister_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtInnovation mtInnovation;
@@ -123,7 +125,13 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *   Loads and sets the needed parameters.
    */
-  ZeroVelocityUpdate(){};
+  ZeroVelocityUpdate(){
+    intRegister_.removeScalarByStr("maxNumIteration");
+    doubleRegister_.removeScalarByStr("alpha");
+    doubleRegister_.removeScalarByStr("beta");
+    doubleRegister_.removeScalarByStr("kappa");
+    doubleRegister_.removeScalarByStr("updateVecNormTermination");
+  };
 
   /** \brief Destructor
    */

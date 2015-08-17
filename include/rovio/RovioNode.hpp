@@ -29,6 +29,7 @@
 #ifndef ROVIO_ROVIONODE_HPP_
 #define ROVIO_ROVIONODE_HPP_
 
+#include <queue>
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -96,10 +97,8 @@ class RovioNode{
   AttitudeToYprCF::mtOutputCovMat yprOutputCov_;
 
   static const int groundtruthN_ = 3;
-  bool isGroundtruthInitialized_;
-  int groundtruthCounter_;
-  rot::RotationQuaternionPD groundtruth_qCJ_[groundtruthN_];
-  Eigen::Vector3d groundtruth_JrJC_[groundtruthN_];
+  std::queue<rot::RotationQuaternionPD> groundtruth_qCJ_;
+  std::queue<Eigen::Vector3d> groundtruth_JrJC_;
 
   /** \brief Constructor
    */
@@ -118,22 +117,6 @@ class RovioNode{
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("/rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("/rovio/urays", 1 );
 
-//    // p21012_equidist_190215
-//    Eigen::Matrix3d R_CM;
-//    R_CM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
-//            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
-//            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
-//    Eigen::Vector3d CrCM;
-//    CrCM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
-//    // p21012_radtan_190215 (false)
-//    Eigen::Matrix3d R_CM;
-//    R_CM << 0.9999327192366118, -0.0044421301653885, 0.010715618492127002,
-//            0.0043735142886046205, 0.9999698383876616, 0.0064183087897756765,
-//            -0.01074380625488192, -0.006371012050474087, 0.9999219873733199;
-//    Eigen::Vector3d CrCM;
-//    CrCM << -0.03386081589435305, 0.005807520979411451, 0.0005138746353526602;
-//    mpFilter_->mPrediction_.setExtrinsics(R_CM,CrCM);
-
     poseMsg_.header.frame_id = "/world";
     rovioOutputMsg_.header.frame_id = "/world";
     rovioOutputMsg_.points.header.frame_id = "/camera";
@@ -141,7 +124,6 @@ class RovioNode{
     odometryMsg_.child_frame_id = "/camera";
     poseMsgSeq_ = 1;
     isInitialized_ = false;
-    isGroundtruthInitialized_ = false;
   }
 
   /** \brief Destructor
@@ -280,22 +262,16 @@ class RovioNode{
    *  @param transform - Groundtruth message.
    */
   void groundtruthCallback(const geometry_msgs::TransformStamped::ConstPtr& transform){
-    if(!isGroundtruthInitialized_){
-      groundtruthCounter_ = 0;
-      for(int i = 0;i<groundtruthN_;i++){
-        groundtruth_qCJ_[i].setValues(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
-        groundtruth_JrJC_[i] = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
-      }
-      isGroundtruthInitialized_ = true;
+    groundtruth_qCJ_.push(QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z));
+    groundtruth_JrJC_.push(Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z));
+
+    mpFilter_->safe_.groundtruth_qCJ_ = groundtruth_qCJ_.front();
+    mpFilter_->safe_.groundtruth_JrJC_ = groundtruth_JrJC_.front();
+
+    if(groundtruth_qCJ_.size() > groundtruthN_){
+      groundtruth_qCJ_.pop();
+      groundtruth_JrJC_.pop();
     }
-
-    mpFilter_->safe_.groundtruth_qCJ_ = groundtruth_qCJ_[groundtruthCounter_%groundtruthN_];
-    mpFilter_->safe_.groundtruth_JrJC_ = groundtruth_JrJC_[groundtruthCounter_%groundtruthN_];
-
-    groundtruth_qCJ_[groundtruthCounter_%groundtruthN_].setValues(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
-    groundtruth_JrJC_[groundtruthCounter_%groundtruthN_] = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
-
-    groundtruthCounter_++;
   }
 
   /** \brief Executes the update step of the filter and publishes the updated data. @todo check this

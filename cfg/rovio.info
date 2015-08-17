@@ -3,51 +3,6 @@ Common
 	doVECalibration true
 	depthType 1
 	verbose false
-	plotGroundtruth true
-;	groundtruth_IrIJ_x 0.3474625
-;	groundtruth_IrIJ_y -0.05786085
-;	groundtruth_IrIJ_z -1.83597932
-;	groundtruth_qJI_x 0.00678648
-;	groundtruth_qJI_y 0.00079438
-;	groundtruth_qJI_z 0.66660874
-;	groundtruth_qJI_w 0.74537649
-;	groundtruth_BrBC_x 0.037398
-;	groundtruth_BrBC_y -0.01435803
-;	groundtruth_BrBC_z -0.15262337
-;	groundtruth_qCB_x 0.03148538
-;	groundtruth_qCB_y -0.75895418
-;	groundtruth_qCB_z 0.65020308
-;	groundtruth_qCB_w 0.01526989
-
-;	groundtruth_IrIJ_x 0.39889083
-;	groundtruth_IrIJ_y -0.42714651
-;	groundtruth_IrIJ_z -1.79669955
-;	groundtruth_qJI_x -0.00677091
-;	groundtruth_qJI_y 0.00507482
-;	groundtruth_qJI_z 0.65284025
-;	groundtruth_qJI_w 0.75744836
-;	groundtruth_BrBC_x 0.05140955
-;	groundtruth_BrBC_y -0.02567271
-;	groundtruth_BrBC_z -0.14934007
-;	groundtruth_qCB_x 0.74817318
-;	groundtruth_qCB_y 0.20819096
-;	groundtruth_qCB_z 0.1860421
-;	groundtruth_qCB_w 0.60189846
-	
-;	groundtruth_IrIJ_x 0.02491386
-;	groundtruth_IrIJ_y 0.97718927
-;	groundtruth_IrIJ_z -0.10026628
-;	groundtruth_qJI_x 0.003979
-;	groundtruth_qJI_y 0.00218079
-;	groundtruth_qJI_z -0.72867935
-;	groundtruth_qJI_w 0.68484
-;	groundtruth_BrBC_x 0.05699613
-;	groundtruth_BrBC_y -0.07947096
-;	groundtruth_BrBC_z -0.17027369
-;	groundtruth_qCB_x 0.7582607
-;	groundtruth_qCB_y 0.21252338
-;	groundtruth_qCB_z 0.17864383
-;	groundtruth_qCB_w 0.58988212
 }
 Camera0
 {
@@ -128,24 +83,19 @@ Update0
     doPatchWarping true
     doFrameVisualisation true
     useDirectMethod true
-    maxNumIteration 10
     startLevel 3
-    endLevel 0
+    endLevel 1
     nDetectionBuckets 100
     MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
         nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
-    alpha 0.001
-    beta 2
-    kappa 0
-    updateVecNormTermination 1e-06
     initCovFeature_0 0.5
     initCovFeature_1 1e-5
     initCovFeature_2 1e-5
     initDepth 0.5
-    startDetectionTh 0.9
+    startDetectionTh 0.8
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100
@@ -153,7 +103,7 @@ Update0
     trackingLocalVisibilityRange 100
     trackingUpperBound 0.9
     trackingLowerBound 0.1
-    minTrackedAndFreeFeatures 0.7
+    minTrackedAndFreeFeatures 0.5
     minRelativeSTScore 0.75
     minAbsoluteSTScore 5.0
     fastDetectionThreshold 10
@@ -162,24 +112,24 @@ Update0
     patchRejectionTh 10.0;
     removeNegativeFeatureAfterUpdate true;
     maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
-    rateOfMovingFeaturesTh 0.5;
-    pixelCoordinateMotionTh 1.0;
-    minFeatureCountForNoMotionDetection 5;
-    minTimeForZeroVelocityUpdate 1000000.0;
+    MotionDetection
+    {
+    	isEnabled 1
+	    rateOfMovingFeaturesTh 0.5;
+	    pixelCoordinateMotionTh 1.0;
+	    minFeatureCountForNoMotionDetection 5;
+	}
     ZeroVelocityUpdate
     {
-        maxNumIteration 10
         UpdateNoise
         {
             vel_0 0.01
             vel_1 0.01
             vel_2 0.01
         }
-        alpha 0.001
-        beta 2
-        kappa 0
-        updateVecNormTermination 1e-06
         MahalanobisTh0 7.689997599999999
+        minNoMotionTime 1.0
+        isEnabled 1 ; only works if MotionDetection.isEnabled is true
     }
 }
 Prediction
@@ -216,9 +166,27 @@ Prediction
         dep 0.000001 ; m/sqrt(dt)
         nor 0.0001 ; rad/sqrt(dt)
     }
-    alpha 0.001
-    beta 2
-    kappa 0
-    inertialMotionRorTh 0.1
-    inertialMotionAccTh 0.5
+    MotionDetection
+    {
+	    inertialMotionRorTh 0.1
+	    inertialMotionAccTh 0.5
+	}
+}
+Groundtruth
+{
+	doVisualization true
+	IrIJ_x 0.0
+	IrIJ_y 0.0
+	IrIJ_z 0.0
+	qJI_x 0.0
+	qJI_y 0.0
+	qJI_z 0.0
+	qJI_w 1.0
+	BrBC_x 0.0
+	BrBC_y 0.0
+	BrBC_z 0.0
+	qCB_x 0.0
+	qCB_y 0.0
+	qCB_z 0.0
+	qCB_w 1.0
 }

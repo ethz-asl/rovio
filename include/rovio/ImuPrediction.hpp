@@ -55,15 +55,15 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   typedef typename Base::mtNoise mtNoise;
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
-  const V3D g_;
-  double inertialMotionRorTh_;
-  double inertialMotionAccTh_;
+  const V3D g_; /**<Gravity in inertial frame, always aligned with the z-axis.*/
+  double inertialMotionRorTh_; /**<Threshold on the rotational rate for motion detection.*/
+  double inertialMotionAccTh_; /**<Threshold on the acceleration for motion detection.*/
   ImuPrediction():g_(0,0,-9.81){
     int ind;
     inertialMotionRorTh_ = 0.1;
     inertialMotionAccTh_ = 0.1;
-    doubleRegister_.registerScalar("inertialMotionRorTh",inertialMotionRorTh_);
-    doubleRegister_.registerScalar("inertialMotionAccTh",inertialMotionAccTh_);
+    doubleRegister_.registerScalar("MotionDetection.inertialMotionRorTh",inertialMotionRorTh_);
+    doubleRegister_.registerScalar("MotionDetection.inertialMotionAccTh",inertialMotionAccTh_);
     for(int i=0;i<mtState::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
       doubleRegister_.removeScalarByVar(prenoiP_(ind,ind));

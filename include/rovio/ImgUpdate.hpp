@@ -191,7 +191,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
   double matchingPixelThreshold_;
-  double rateOfMovingFeaturesTh_; /**<What percentage of feature most be moving for image motion detection*/
+  bool doVisualMotionDetection_; /**<Do visual motion detection*/
+  double rateOfMovingFeaturesTh_; /**<What percentage of feature must be moving for image motion detection*/
   double pixelCoordinateMotionTh_; /**<Threshold for detecting feature motion*/
   int minFeatureCountForNoMotionDetection_; /**<Minimum amount of feature for detecting NO image motion*/
   double patchRejectionTh_;
@@ -202,6 +203,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
   double specialLinearizationThreshold_;
+  bool isZeroVelocityUpdateEnabled_; /**<Should zero velocity updates be performed*/
   double minTimeForZeroVelocityUpdate_;  /**<Time until zero velocity update get performed if there is no motion*/
   ZeroVelocityUpdate<FILTERSTATE> zeroVelocityUpdate_; /**<Zero velocity update, directly integrated into the img update*/
   double maxUncertaintyToDepthRatioForDepthInitialization_;
@@ -237,6 +239,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     patchRejectionTh_ = 10.0;
     removeNegativeFeatureAfterUpdate_ = true;
     specialLinearizationThreshold_ = 1.0/400;
+    doVisualMotionDetection_ = false;
     rateOfMovingFeaturesTh_ = 0.5;
     pixelCoordinateMotionTh_ = 1.0;
     minFeatureCountForNoMotionDetection_ = 5;
@@ -258,15 +261,15 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
     doubleRegister_.registerScalar("patchRejectionTh",patchRejectionTh_);
     doubleRegister_.registerScalar("specialLinearizationThreshold",specialLinearizationThreshold_);
-    doubleRegister_.registerScalar("rateOfMovingFeaturesTh",rateOfMovingFeaturesTh_);
-    doubleRegister_.registerScalar("pixelCoordinateMotionTh",pixelCoordinateMotionTh_);
-    doubleRegister_.registerScalar("minTimeForZeroVelocityUpdate",minTimeForZeroVelocityUpdate_);
+    doubleRegister_.registerScalar("MotionDetection.rateOfMovingFeaturesTh",rateOfMovingFeaturesTh_);
+    doubleRegister_.registerScalar("MotionDetection.pixelCoordinateMotionTh",pixelCoordinateMotionTh_);
     doubleRegister_.registerScalar("maxUncertaintyToDepthRatioForDepthInitialization",maxUncertaintyToDepthRatioForDepthInitialization_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
-    intRegister_.registerScalar("minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
+    intRegister_.registerScalar("MotionDetection.minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
+    boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -276,8 +279,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(0,0));
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(1,1));
     useImprovedJacobian_ = false; // TODO: adapt/test
+    isZeroVelocityUpdateEnabled_ = false;
     Base::PropertyHandler::registerSubHandler("ZeroVelocityUpdate",zeroVelocityUpdate_);
     zeroVelocityUpdate_.outlierDetection_.registerToPropertyHandler(&zeroVelocityUpdate_,"MahalanobisTh");
+    zeroVelocityUpdate_.doubleRegister_.registerScalar("minNoMotionTime",minTimeForZeroVelocityUpdate_);
+    zeroVelocityUpdate_.boolRegister_.registerScalar("isEnabled",isZeroVelocityUpdateEnabled_);
+    intRegister_.removeScalarByStr("maxNumIteration");
+    doubleRegister_.removeScalarByStr("alpha");
+    doubleRegister_.removeScalarByStr("beta");
+    doubleRegister_.removeScalarByStr("kappa");
+    doubleRegister_.removeScalarByStr("updateVecNormTermination");
   };
 
   /** \brief Destructor
@@ -394,7 +405,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
      * The maximal singularvalue, which is equivalent to the root of the larger eigenvalue of the Hessian,
      * gives us range in which intensity change is allowed to be.
      */
-    if(filterState.imageCounter_>1){
+    if(doVisualMotionDetection_ && filterState.imageCounter_>1){
       int totCountInFrame = 0;
       int totCountInMotion = 0;
       MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> mlp(mpCameras_);
@@ -818,7 +829,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     }
 
     // Zero Velocity updates if appropriate
-    if(filterState.state_.aux().timeSinceLastImageMotion_ > minTimeForZeroVelocityUpdate_ && filterState.state_.aux().timeSinceLastInertialMotion_ > minTimeForZeroVelocityUpdate_){
+    if(isZeroVelocityUpdateEnabled_ && filterState.state_.aux().timeSinceLastImageMotion_ > minTimeForZeroVelocityUpdate_ && filterState.state_.aux().timeSinceLastInertialMotion_ > minTimeForZeroVelocityUpdate_){
       cv::putText(filterState.img_[0],"Performing Zero Velocity Updates!",cv::Point2f(150,25),cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0,255,255));
       zeroVelocityUpdate_.performUpdateEKF(filterState,ZeroVelocityUpdateMeas<mtState>());
     }

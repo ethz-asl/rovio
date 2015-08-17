@@ -680,13 +680,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
   ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
-  rot::RotationQuaternionPD groundtruth_qCJ_;
-  rot::RotationQuaternionPD groundtruth_qJI_;
-  rot::RotationQuaternionPD groundtruth_qCB_;
-  Eigen::Vector3d groundtruth_JrJC_;
-  Eigen::Vector3d groundtruth_IrIJ_;
-  Eigen::Vector3d groundtruth_BrBC_;
-  bool plotGroundtruth_;
+  rot::RotationQuaternionPD groundtruth_qCJ_; /**<Groundtruth attitude measurement.*/
+  rot::RotationQuaternionPD groundtruth_qJI_; /**<Transformtion to groundtruth inertial frame (rotation).*/
+  rot::RotationQuaternionPD groundtruth_qCB_; /**<Transformtion to groundtruth body frame (rotation).*/
+  Eigen::Vector3d groundtruth_JrJC_; /**<Groundtruth position measurement.*/
+  Eigen::Vector3d groundtruth_IrIJ_; /**<Transformtion to groundtruth inertial frame (translation).*/
+  Eigen::Vector3d groundtruth_BrBC_; /**<Transformtion to groundtruth body frame (translation).*/
+  bool plotGroundtruth_; /**<Should the groundtruth be plotted.*/
 
   /** \brief Constructor
    */
@@ -696,6 +696,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     imageCounter_ = 0;
     groundtruth_qCJ_.setIdentity();
     groundtruth_JrJC_.setZero();
+    groundtruth_qJI_.setIdentity();
+    groundtruth_IrIJ_.setZero();
+    groundtruth_qCB_.setIdentity();
+    groundtruth_BrBC_.setZero();
     plotGroundtruth_ = true;
   }
 
