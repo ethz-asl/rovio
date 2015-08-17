@@ -174,7 +174,7 @@ Prediction
 }
 Groundtruth
 {
-	doVisualization true
+	doVisualization false
 	IrIJ_x 0.0
 	IrIJ_y 0.0
 	IrIJ_z 0.0

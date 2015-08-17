@@ -148,18 +148,20 @@ class RovioNode{
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
-    for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
-      testState.aux().activeFeature_ = i;
-      testState.aux().activeCameraCounter_ = 0;
-      const int camID = testState.aux().camID_[i];
-      int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setFeatureID(i);
-      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-      std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
-      testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-      activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-      std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-      std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+    if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
+      for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
+        testState.aux().activeFeature_ = i;
+        testState.aux().activeCameraCounter_ = 0;
+        const int camID = testState.aux().camID_[i];
+        int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
+        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setFeatureID(i);
+        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        testState.aux().activeCameraCounter_ = mtState::nCam_-1;
+        activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
+        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+      }
     }
 
     // CF

@@ -125,9 +125,14 @@ class RovioScene{
     const mtState& state = filterState.state_;
     const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
 
-    mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;
-    mpGroundtruth_->W_r_WB_ = (filterState.groundtruth_IrIJ_ + filterState.groundtruth_qJI_.inverseRotate(filterState.groundtruth_JrJC_)
-                              - (filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_).inverseRotate(filterState.groundtruth_BrBC_)).template cast<float>();
+    if(filterState.plotGroundtruth_){
+      mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;
+      mpGroundtruth_->W_r_WB_ = (filterState.groundtruth_IrIJ_ + filterState.groundtruth_qJI_.inverseRotate(filterState.groundtruth_JrJC_)
+                                - (filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_).inverseRotate(filterState.groundtruth_BrBC_)).template cast<float>();
+      mpGroundtruth_->draw_ = true;
+    } else {
+      mpGroundtruth_->draw_ = false;
+    }
 
     for(unsigned int camID=0;camID<mtState::nCam_;camID++){
       mpSensor_[camID]->W_r_WB_ = state.WrWC(camID).template cast<float>();
