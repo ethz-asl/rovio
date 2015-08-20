@@ -50,8 +50,6 @@ int main(int argc, char** argv){
 
   // Filter
   mtFilter* mpFilter = new mtFilter;
-  mpFilter->readFromInfo(filter_config);
-
   // Force the camera calibration paths to the ones from ROS parameters.
   for (unsigned int camID = 0; camID < nCam_; ++camID) {
     std::string camera_config;
@@ -60,12 +58,10 @@ int main(int argc, char** argv){
       mpFilter->cameraCalibrationFile_[camID] = camera_config;
     }
   }
+  mpFilter->readFromInfo(filter_config);
 
   // Node
   rovio::RovioNode<mtFilter> rovioNode(nh, mpFilter);
-
-
-  //rovioNode.refreshProperties();
   rovioNode.makeTest();
 
   ros::spin();
