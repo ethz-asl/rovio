@@ -74,7 +74,6 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",init_.state_.aux().depthTypeInt_);
     for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
-      cameraCalibrationFile_[camID] = "calib.yaml";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.aux().MrMC_[camID]);
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.aux().qCM_[camID]);
@@ -122,7 +121,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
    */
   void refreshProperties(){
     for(int camID = 0;camID<mtState::nCam_;camID++){
-      cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+      if (!cameraCalibrationFile_[camID].empty()) {
+        cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+      }
     }
     init_.state_.aux().depthMap_.setType(init_.state_.aux().depthTypeInt_);
   };
