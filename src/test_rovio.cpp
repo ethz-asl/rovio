@@ -52,6 +52,7 @@ void idleFunc(){
 int main(int argc, char** argv){
   ros::init(argc, argv, "TestFilter");
   ros::NodeHandle nh;
+  ros::NodeHandle nh_private("~");
   std::string rootdir = ros::package::getPath("rovio");
 
   // Filter
@@ -59,7 +60,7 @@ int main(int argc, char** argv){
   mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
 
   // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh,mpFilter);
+  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
 
 

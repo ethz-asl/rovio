@@ -64,7 +64,7 @@ int main(int argc, char** argv){
   mpFilter->refreshProperties();
 
   // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh, mpFilter);
+  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
 
   ros::spin();

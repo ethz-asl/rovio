@@ -57,6 +57,7 @@ template<typename FILTER>
 class RovioNode{
  public:
   ros::NodeHandle nh_;
+  ros::NodeHandle nh_private_;
   ros::Subscriber subImu_;
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
@@ -107,7 +108,8 @@ class RovioNode{
 
   /** \brief Constructor
    */
-  RovioNode(ros::NodeHandle& nh,FILTER* mpFilter): nh_(nh), mpFilter_(mpFilter){
+  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
@@ -125,9 +127,9 @@ class RovioNode{
     world_frame_ = "/world";
     camera_frame_ = "/camera";
     imu_frame_ = "/imu";
-    nh_.param("world_frame", world_frame_, world_frame_);
-    nh_.param("camera_frame", camera_frame_, camera_frame_);
-    nh_.param("imu_frame", imu_frame_, imu_frame_);
+    nh_private_.param("world_frame", world_frame_, world_frame_);
+    nh_private_.param("camera_frame", camera_frame_, camera_frame_);
+    nh_private_.param("imu_frame", imu_frame_, imu_frame_);
 
     poseMsg_.header.frame_id = world_frame_;
     rovioOutputMsg_.header.frame_id = world_frame_;
