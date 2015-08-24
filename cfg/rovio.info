@@ -1,51 +1,52 @@
 Common
 {
-    doVECalibration true
-    verbose false
-    depthType 1
+	doVECalibration true
+	depthType 1
+	verbose false
 }
 Camera0
 {
-  CalibrationFile init_from_elsewhere.yaml
-  qCM_x  0.0
-  qCM_y  0.0
-  qCM_z  0.0
-  qCM_w  1.0
-  MrMC_x 0
-  MrMC_y 0
-  MrMC_z 0
+	CalibrationFile /home/michael/calibrations/p22035_equidist.yaml ;Sammy11_02_2015_equidist.yaml ;p21012_equidist_190215.yaml; p22035_equidist.yaml
+	qCM_x  0.0
+	qCM_y  0.0
+	qCM_z  0.7071
+	qCM_w  0.7071
+	MrMC_x 0
+	MrMC_y 0
+	MrMC_z 0
 }
 Camera1
 {
-  CalibrationFile init_from_elsewhere.yaml
-  qCM_x  0.0
-  qCM_y  0.0
-  qCM_z  0.0
-  qCM_w  1.0
-  MrMC_x 0
-  MrMC_y 0
-  MrMC_z 0
-}
-Groundtruth
-{
-    doVisualization true
-    qJI_x 0
-    qJI_y 0
-    qJI_z 0
-    qJI_w 1
-    qCB_x 0
-    qCB_y 0
-    qCB_z 0
-    qCB_w 1
-    IrIJ_x 0
-    IrIJ_y 0
-    IrIJ_z 0
-    BrBC_x 0
-    BrBC_y 0
-    BrBC_z 0
+	CalibrationFile /home/michael/calibrations/p22035_equidist_cam1.yaml
+	qCM_x  0.0
+	qCM_y  0.0
+	qCM_z  0.7071
+	qCM_w  0.7071
+	MrMC_x 0
+	MrMC_y 0
+	MrMC_z 0
 }
 Init
 {
+    State
+    {
+        pos_0 0
+        pos_1 0
+        pos_2 0
+        vel_0 0
+        vel_1 0
+        vel_2 0
+        acb_0 0
+        acb_1 0
+        acb_2 0
+        gyb_0 0
+        gyb_1 0
+        gyb_2 0
+        att_x 0
+        att_y 0
+        att_z 0
+        att_w 1
+    }
     Covariance
     {
         pos_0 0.0001
@@ -76,53 +77,25 @@ Init
         vea_4 0.01
         vea_5 0.01
     }
-    State
-    {
-        att_x 0
-        att_y 0
-        att_z 0
-        att_w 1
-        gyb_0 0
-        gyb_1 0
-        gyb_2 0
-        acb_0 0
-        acb_1 0
-        acb_2 0
-        vel_0 0
-        vel_1 0
-        vel_2 0
-        pos_0 0
-        pos_1 0
-        pos_2 0
-    }
 }
 Update0
 {
-    MotionDetection
-    {
-        isEnabled false
-        minFeatureCountForNoMotionDetection 5
-        rateOfMovingFeaturesTh 0.5
-        pixelCoordinateMotionTh 1
-    }
     doPatchWarping true
-    useDirectMethod true
     doFrameVisualisation true
-    removeNegativeFeatureAfterUpdate true
+    useDirectMethod true
     startLevel 3
     endLevel 1
     nDetectionBuckets 100
-    fastDetectionThreshold 10
+    MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
         nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
-    MahalanobisTh 5.8858356
-    initCovFeature_0 1
+    initCovFeature_0 0.5
     initCovFeature_1 1e-5
     initCovFeature_2 1e-5
-    initDepth 1.0
-    startDetectionTh 0.6
+    initDepth 0.5
+    startDetectionTh 0.8
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100
@@ -133,21 +106,30 @@ Update0
     minTrackedAndFreeFeatures 0.5
     minRelativeSTScore 0.75
     minAbsoluteSTScore 5.0
+    fastDetectionThreshold 10
     matchingPixelThreshold 0.0
-    patchRejectionTh 10
-    specialLinearizationThreshold 0.0025
-    maxUncertaintyToDepthRatioForDepthInitialization 0.3
+    specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
+    patchRejectionTh 10.0;
+    removeNegativeFeatureAfterUpdate true;
+    maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
+    MotionDetection
+    {
+    	isEnabled 1
+	    rateOfMovingFeaturesTh 0.5;
+	    pixelCoordinateMotionTh 1.0;
+	    minFeatureCountForNoMotionDetection 5;
+	}
     ZeroVelocityUpdate
     {
-        isEnabled false
         UpdateNoise
         {
-            vel_0 0.0001
-            vel_1 0.0001
-            vel_2 0.0001
+            vel_0 0.01
+            vel_1 0.01
+            vel_2 0.01
         }
-        minNoMotionTime 1
         MahalanobisTh0 7.689997599999999
+        minNoMotionTime 1.0
+        isEnabled 1 ; only works if MotionDetection.isEnabled is true
     }
 }
 Prediction
@@ -166,12 +148,12 @@ Prediction
         gyb_0 3.8e-7
         gyb_1 3.8e-7
         gyb_2 3.8e-7
-        vep_0 1e-4
-        vep_1 1e-4
-        vep_2 1e-4
-        vep_3 1e-4
-        vep_4 1e-4
-        vep_5 1e-4
+        vep_0 1e-8
+        vep_1 1e-8
+        vep_2 1e-8
+        vep_3 1e-8
+        vep_4 1e-8
+        vep_5 1e-8
         att_0 7.6e-6 ;7.6e-7
         att_1 7.6e-6
         att_2 7.6e-6
@@ -186,7 +168,25 @@ Prediction
     }
     MotionDetection
     {
-        inertialMotionRorTh 0.1
-        inertialMotionAccTh 0.1
-    }
+	    inertialMotionRorTh 0.1
+	    inertialMotionAccTh 0.5
+	}
+}
+Groundtruth
+{
+	doVisualization false
+	IrIJ_x 0.0
+	IrIJ_y 0.0
+	IrIJ_z 0.0
+	qJI_x 0.0
+	qJI_y 0.0
+	qJI_z 0.0
+	qJI_w 1.0
+	BrBC_x 0.0
+	BrBC_y 0.0
+	BrBC_z 0.0
+	qCB_x 0.0
+	qCB_y 0.0
+	qCB_z 0.0
+	qCB_w 1.0
 }
