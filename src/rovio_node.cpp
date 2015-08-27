@@ -30,51 +30,44 @@
 
 #include "rovio/rovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
-#ifdef MAKE_SCENE
-#include "rovio/RovioScene.hpp"
-#endif
 
+// TODO(helenol): expose these as ROS params as well?
 static constexpr unsigned int nMax_ = 25;    // Maximal number of considered features in the filter state.
 static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
 static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
 static constexpr int nCam_ = 1;              // Used total number of cameras.
 typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
 
-#ifdef MAKE_SCENE
-rovio::RovioScene<mtFilter> mRovioScene;
-
-void idleFunc(){
-  ros::spinOnce();
-  mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
-}
-#endif
-
 int main(int argc, char** argv){
-  ros::init(argc, argv, "TestFilter");
+  ros::init(argc, argv, "rovio");
   ros::NodeHandle nh;
   ros::NodeHandle nh_private("~");
-  std::string rootdir = ros::package::getPath("rovio");
+
+  std::string filter_config = ros::package::getPath("rovio") +
+      "/cfg/rovio.info";
+
+  nh_private.param("filter_config", filter_config, filter_config);
 
   // Filter
   mtFilter* mpFilter = new mtFilter;
-  mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
+
+  mpFilter->readFromInfo(filter_config);
+
+  // Force the camera calibration paths to the ones from ROS parameters.
+  for (unsigned int camID = 0; camID < nCam_; ++camID) {
+    std::string camera_config;
+    if (nh_private.getParam("camera" + std::to_string(camID)
+                            + "_config", camera_config)) {
+      mpFilter->cameraCalibrationFile_[camID] = camera_config;
+    }
+  }
+  mpFilter->refreshProperties();
 
   // Node
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
 
-
-#ifdef MAKE_SCENE
-  // Scene
-  std::string mVSFileName = rootdir + "/shaders/shader.vs";
-  std::string mFSFileName = rootdir + "/shaders/shader.fs";
-  mRovioScene.initScene(argc,argv,mVSFileName,mFSFileName,mpFilter);
-  mRovioScene.setIdleFunction(idleFunc);
-  mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.isInitialized_=false;});
-  glutMainLoop();
-#else
   ros::spin();
-#endif
 
   delete mpFilter;
   return 0;

@@ -57,6 +57,7 @@ template<typename FILTER>
 class RovioNode{
  public:
   ros::NodeHandle nh_;
+  ros::NodeHandle nh_private_;
   ros::Subscriber subImu_;
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
@@ -100,28 +101,41 @@ class RovioNode{
   std::queue<rot::RotationQuaternionPD> groundtruth_qCJ_;
   std::queue<Eigen::Vector3d> groundtruth_JrJC_;
 
+  // ROS names for output tf frames.
+  std::string world_frame_;
+  std::string camera_frame_;
+  std::string imu_frame_;
+
   /** \brief Constructor
    */
-  RovioNode(ros::NodeHandle& nh,FILTER* mpFilter): nh_(nh), mpFilter_(mpFilter){
+  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
-    subImu_ = nh_.subscribe("/imu0", 1000, &RovioNode::imuCallback,this);
-    subImg0_ = nh_.subscribe("/cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
-    subImg1_ = nh_.subscribe("/cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
-    subGroundtruth_ = nh_.subscribe("/vicon/auk/auk", 1000, &RovioNode::groundtruthCallback,this);
-    pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("/rovio/pose", 1);
-    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/rovio/transform", 1);
-    pubRovioOutput_ = nh_.advertise<RovioOutput>("/rovio/output", 1);
-    pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("/rovio/odometry", 1);
-    pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("/rovio/pcl", 1);
-    pubURays_ = nh_.advertise<visualization_msgs::Marker>("/rovio/urays", 1 );
+    subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
+    subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
+    subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
+    subGroundtruth_ = nh_.subscribe("vrpn_client/pose", 1000, &RovioNode::groundtruthCallback,this);
+    pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("rovio/pose", 1);
+    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
+    pubRovioOutput_ = nh_.advertise<RovioOutput>("rovio/output", 1);
+    pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
+    pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
+    pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
 
-    poseMsg_.header.frame_id = "/world";
-    rovioOutputMsg_.header.frame_id = "/world";
-    rovioOutputMsg_.points.header.frame_id = "/camera";
-    odometryMsg_.header.frame_id = "/world";
-    odometryMsg_.child_frame_id = "/camera";
+    world_frame_ = "/world";
+    camera_frame_ = "/camera";
+    imu_frame_ = "/imu";
+    nh_private_.param("world_frame", world_frame_, world_frame_);
+    nh_private_.param("camera_frame", camera_frame_, camera_frame_);
+    nh_private_.param("imu_frame", imu_frame_, imu_frame_);
+
+    poseMsg_.header.frame_id = world_frame_;
+    rovioOutputMsg_.header.frame_id = world_frame_;
+    rovioOutputMsg_.points.header.frame_id = camera_frame_;
+    odometryMsg_.header.frame_id = world_frame_;
+    odometryMsg_.child_frame_id = camera_frame_;
     poseMsgSeq_ = 1;
     isInitialized_ = false;
   }
@@ -331,8 +345,8 @@ class RovioNode{
 
         // Send camera pose.
         tf::StampedTransform tf_transform_v;
-        tf_transform_v.frame_id_ = "world";
-        tf_transform_v.child_frame_id_ = "camera";
+        tf_transform_v.frame_id_ = world_frame_;
+        tf_transform_v.child_frame_id_ = camera_frame_;
         tf_transform_v.stamp_ = ros::Time(mpFilter_->safe_.t_);
         tf_transform_v.setOrigin(tf::Vector3(WrWC(0),WrWC(1),WrWC(2)));
         tf_transform_v.setRotation(tf::Quaternion(qCW.x(),qCW.y(),qCW.z(),qCW.w()));
@@ -340,8 +354,8 @@ class RovioNode{
 
         // Send IMU pose.
         tf::StampedTransform tf_transform;
-        tf_transform.frame_id_ = "world";
-        tf_transform.child_frame_id_ = "imu";
+        tf_transform.frame_id_ = world_frame_;
+        tf_transform.child_frame_id_ = imu_frame_;
         tf_transform.stamp_ = ros::Time(mpFilter_->safe_.t_);
         Eigen::Vector3d WrWM = state.WrWM();
         rot::RotationQuaternionPD qMW = state.qWM().inverted();
@@ -468,7 +482,7 @@ class RovioNode{
         sensor_msgs::PointCloud2 pcl_msg;
         pcl_msg.header.seq = poseMsgSeq_;
         pcl_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        pcl_msg.header.frame_id = "camera";
+        pcl_msg.header.frame_id = camera_frame_;
         pcl_msg.height = 1;               // Unordered point cloud.
         pcl_msg.width  = mtState::nMax_;  // Number of features/points.
         pcl_msg.fields.resize(4);
@@ -504,7 +518,7 @@ class RovioNode{
 
         // Marker message (Uncertainty rays).
         visualization_msgs::Marker marker_msg;
-        marker_msg.header.frame_id = "camera";
+        marker_msg.header.frame_id = camera_frame_;
         marker_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
         marker_msg.id = 0;
         marker_msg.type = visualization_msgs::Marker::LINE_LIST;

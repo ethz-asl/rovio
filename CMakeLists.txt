@@ -16,12 +16,12 @@ if(MAKE_SCENE)
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMAKE_SCENE=1")
 	find_package(GLEW REQUIRED)
 	include_directories(${GLEW_INCLUDE_DIRS})
-	
+
 	find_package(GLUT REQUIRED)
 	include_directories(${GLUT_INCLUDE_DIRS})
 	link_directories(${GLUT_LIBRARY_DIRS})
 	add_definitions(${GLUT_DEFINITIONS})
-	
+
 	find_package(OpenGL REQUIRED)
 	include_directories(${OpenGL_INCLUDE_DIRS})
 	link_directories(${OpenGL_LIBRARY_DIRS})
@@ -61,7 +61,7 @@ catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
     LIBRARIES ${PROJECT_NAME}
 	CATKIN_DEPENDS
-	lightweight_filtering 
+	lightweight_filtering
   	kindr
 	roscpp
 	roslib
@@ -78,6 +78,9 @@ include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(test_rovio src/test_rovio.cpp)
 target_link_libraries(test_rovio ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
+
+add_executable(rovio_node src/rovio_node.cpp)
+target_link_libraries(rovio_node ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
 
 add_executable(feature_tracker_node src/feature_tracker_node.cpp)
 target_link_libraries(feature_tracker_node ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
