@@ -109,7 +109,6 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
   typedef LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,
       ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
-  using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
   typedef typename Base::mtState mtState;
