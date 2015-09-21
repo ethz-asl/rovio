@@ -81,13 +81,13 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} $
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(test_rovio src/test_rovio.cpp)
-target_link_libraries(test_rovio ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
+target_link_libraries(test_rovio ${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
 
 add_executable(rovio_node src/rovio_node.cpp)
-target_link_libraries(rovio_node ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
+target_link_libraries(rovio_node ${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
 
 add_executable(feature_tracker_node src/feature_tracker_node.cpp)
-target_link_libraries(feature_tracker_node ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
+target_link_libraries(feature_tracker_node ${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS})
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/")
 	message(STATUS "Building GTests!")
