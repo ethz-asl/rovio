@@ -34,6 +34,8 @@
 #include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
+
+#include "FeatureLocationOutputCF.hpp"
 #include "rovio/commonVision.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -67,6 +69,14 @@ class DepthMap{
    */
   void setType(const DepthType& type){
     type_ = type;
+  }
+
+  /** \brief Get the set \ref DepthType.
+   *
+   *  @return the set \ref DepthType.
+   */
+  DepthType getType() {
+    return type_;
   }
 
   /** \brief Set the \ref DepthType type_ using the integer value of the enum \ref DepthType.
@@ -124,6 +134,65 @@ class DepthMap{
         mapRegular(p,d,d_p,p_d,p_d_p);
         break;
     }
+  }
+
+  /** \brief Converts a value of a specific \ref DepthType into a value of another \ref DepthType.
+   *
+   *  @param type_p     - Input \ref DepthType, belonging to p.
+   *  @param p          - Value of the input \ref DepthType.
+   *  @param type_dep   - Output \ref DepthType, belonging to dep.
+   *  @param dep        - Value of the output \ref DepthType.
+   */
+  static void convertDepthType(const DepthType& type_p, const double& p, const DepthType& type_dep, double& dep) {
+    dep = p;
+    // Source type is REGULAR.
+    if (type_p == REGULAR) {
+      if (type_dep == INVERSE) {
+        dep = 1.0 / p;
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(p);
+      }
+    }
+    // Source type is INVERSE.
+    else if (type_p == INVERSE) {
+      if (type_dep == REGULAR) {
+        dep = 1.0 / p;
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(1.0/p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(1.0/p);
+      }
+    }
+    // Source type is LOG.
+    else if (type_p == LOG) {
+      if (type_dep == REGULAR) {
+        dep = std::exp(p);
+      }
+      else if (type_dep == INVERSE) {
+        dep = 1.0 / std::exp(p);
+      }
+      else if (type_dep == HYPERBOLIC) {
+        dep = std::asinh(std::exp(p));
+      }
+    }
+    // Source type is HYPERBOLIC.
+    else if (type_p == HYPERBOLIC) {
+      if (type_dep == REGULAR) {
+        dep = std::sinh(p);
+      }
+      else if (type_dep == INVERSE) {
+        dep = 1.0 / std::sinh(p);
+      }
+      else if (type_dep == LOG) {
+        dep = std::log(std::sinh(p));
+      }
+    };
   }
 
   /** \brief Computes some depth parameterization values, given a depth value p = d.
@@ -228,6 +297,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
     depthMap_.setType(depthTypeInt_);
     activeFeature_ = 0;
     activeCameraCounter_ = 0;
+    timeSinceLastInertialMotion_ = 0.0;
+    timeSinceLastImageMotion_ = 0.0;
     for(unsigned int i=0;i<nCam;i++){
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
@@ -253,6 +324,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
+  double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
+  double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -599,10 +672,21 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
   MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
+  FeatureLocationOutputCF<mtState> featureLocationOutputCF_;
+  FeatureLocationOutput featureLocationOutput_;
+  typename FeatureLocationOutputCF<mtState>::mtOutputCovMat featureLocationOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
+  ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
+  rot::RotationQuaternionPD groundtruth_qCJ_; /**<Groundtruth attitude measurement.*/
+  rot::RotationQuaternionPD groundtruth_qJI_; /**<Transformtion to groundtruth inertial frame (rotation).*/
+  rot::RotationQuaternionPD groundtruth_qCB_; /**<Transformtion to groundtruth body frame (rotation).*/
+  Eigen::Vector3d groundtruth_JrJC_; /**<Groundtruth position measurement.*/
+  Eigen::Vector3d groundtruth_IrIJ_; /**<Transformtion to groundtruth inertial frame (translation).*/
+  Eigen::Vector3d groundtruth_BrBC_; /**<Transformtion to groundtruth body frame (translation).*/
+  bool plotGroundtruth_; /**<Should the groundtruth be plotted.*/
 
   /** \brief Constructor
    */
@@ -610,6 +694,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
+    groundtruth_qCJ_.setIdentity();
+    groundtruth_JrJC_.setZero();
+    groundtruth_qJI_.setIdentity();
+    groundtruth_IrIJ_.setZero();
+    groundtruth_qCB_.setIdentity();
+    groundtruth_BrBC_.setZero();
+    plotGroundtruth_ = true;
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
@@ -673,6 +764,57 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_nor>(i),0).setZero();
     cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)).setIdentity();
     cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
+  }
+
+  /** \brief Get the median depth parameter values of the state features for each camera.
+   *
+   *  \note The depth parameter type depends on the set \ref DepthType.
+   *  @param initDepthParameter     - Depth parameter value which is set, if no median depth parameter could be
+   *                                  computed from the state features for a specific camera.
+   *  @param medianDepthParameters  - Array, containing the median depth parameter values for each camera.
+   * */
+  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters, const float maxUncertaintyToDepthRatio) {
+    // Fill array with initialization value.
+    // The initialization value is set, if no median depth value can be computed for a given camera frame.
+    medianDepthParameters->fill(initDepthParameter);
+    // Collect the depth values of the features for each camera frame.
+    std::vector<double> depthValueCollection[nCam];
+    unsigned int camID, activeCamCounter, activeCamID;
+    double depth, sigmaDepth;
+    for (unsigned int i = 0; i < nMax; i++) {
+      if (mlps_.isValid_[i]) {
+        activeCamCounter = 0;
+        camID = mlps_.features_[i].camID_;
+        featureLocationOutputCF_.setFeatureID(i);
+        while (activeCamCounter != nCam) {
+          activeCamID = (activeCamCounter + camID)%nCam;
+          featureLocationOutputCF_.setOutputCameraID(activeCamID);
+          featureLocationOutputCF_.transformCovMat(state_, cov_, featureLocationOutputCov_);
+          sigmaDepth = std::sqrt(featureLocationOutputCov_(FeatureLocationOutput::_dep,FeatureLocationOutput::_dep));
+          featureLocationOutputCF_.transformState(state_, featureLocationOutput_);
+          depth = featureLocationOutput_.dep();
+          if (featureLocationOutput_.CfP().getVec()(2) <= 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
+            activeCamCounter++;
+            continue;
+          }
+          // Collect depth data if uncertainty-depth ratio small enough.
+          if (sigmaDepth/depth <= maxUncertaintyToDepthRatio) {
+            depthValueCollection[activeCamID].push_back(depth);
+          }
+          activeCamCounter++;
+        }
+      }
+    }
+    // Compute and store the median depth parameter.
+    int size;
+    for (unsigned int i = 0; i < nCam; i++) {
+      size = depthValueCollection[i].size();
+      if(size > 2) { // Require a minimum of three features
+        std::nth_element(depthValueCollection[i].begin(), depthValueCollection[i].begin() + size / 2, depthValueCollection[i].end());
+        DepthMap::convertDepthType(DepthMap::REGULAR, depthValueCollection[i][size/2],
+                                   state_.aux().depthMap_.getType(), (*medianDepthParameters)[i]);
+      }
+    }
   }
 };
 

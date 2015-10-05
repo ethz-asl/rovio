@@ -31,8 +31,9 @@
 
 #include "rovio/FilterStates.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
+
+#include "FeatureBearingOutputCF.hpp"
 #include "rovio/Camera.hpp"
-#include "rovio/FeatureLocationOutputCF.hpp"
 
 namespace rovio {
 
@@ -86,9 +87,9 @@ class PixelOutputCF:public LWF::CoordinateTransform<STATE,PixelOutput,true>{
   }
 };
 
-class PixelOutputFromNorCF:public LWF::CoordinateTransform<FeatureLocationOutput,PixelOutput,true>{
+class PixelOutputFromNorCF:public LWF::CoordinateTransform<FeatureBearingOutput,PixelOutput,true>{
  public:
-  typedef LWF::CoordinateTransform<FeatureLocationOutput,PixelOutput,true> Base;
+  typedef LWF::CoordinateTransform<FeatureBearingOutput,PixelOutput,true> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   typedef typename Base::mtMeas mtMeas;

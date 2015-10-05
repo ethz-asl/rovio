@@ -74,7 +74,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",init_.state_.aux().depthTypeInt_);
     for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
-      cameraCalibrationFile_[camID] = "calib.yaml";
+      cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.aux().MrMC_[camID]);
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.aux().qCM_[camID]);
@@ -105,6 +105,16 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
+    mPrediction_.doubleRegister_.removeScalarByStr("alpha");
+    mPrediction_.doubleRegister_.removeScalarByStr("beta");
+    mPrediction_.doubleRegister_.removeScalarByStr("kappa");
+    boolRegister_.registerScalar("Groundtruth.doVisualization",init_.plotGroundtruth_);
+    doubleRegister_.registerVector("Groundtruth.IrIJ",init_.groundtruth_IrIJ_);
+    doubleRegister_.registerQuaternion("Groundtruth.qJI",init_.groundtruth_qJI_);
+    doubleRegister_.registerVector("Groundtruth.BrBC",init_.groundtruth_BrBC_);
+    doubleRegister_.registerQuaternion("Groundtruth.qCB",init_.groundtruth_qCB_);
+    Eigen::Vector3d groundtruth_IrIJ_;
+    Eigen::Vector3d groundtruth_BrBC_;
     reset(0.0);
   }
 
@@ -112,7 +122,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
    */
   void refreshProperties(){
     for(int camID = 0;camID<mtState::nCam_;camID++){
-      cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+      if (!cameraCalibrationFile_[camID].empty()) {
+        cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+      }
     }
     init_.state_.aux().depthMap_.setType(init_.state_.aux().depthTypeInt_);
   };

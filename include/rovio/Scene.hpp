@@ -157,6 +157,7 @@ class SceneObject{
     lineWidth_ = 2.0f;
     pointSize_ = 5.0f;
     useTexture_ = false;
+    draw_ = true;
   }
   void setTexture(const int& cols, const int& rows, const float* ptr){
     glBindTexture(GL_TEXTURE_2D, textureID_);
@@ -441,6 +442,7 @@ class SceneObject{
   float lineWidth_;
   float pointSize_;
   bool useTexture_;
+  bool draw_;
 };
 
 class Scene{
@@ -553,33 +555,35 @@ class Scene{
     C_TF_W_ = InitTransform(W_r_WC_,q_CW_);
 
     for(int i=0;i<mSceneObjects_.size();i++){
-      mSceneObjects_[i]->loadOptions();
+      if(mSceneObjects_[i]->draw_){
+        mSceneObjects_[i]->loadOptions();
 
-      glUniform1i(useTexture_location_,mSceneObjects_[i]->useTexture_);
-      if(mSceneObjects_[i]->useTexture_){
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D,mSceneObjects_[i]->textureID_);
-        glUniform1i(sampler_location_, 0);
+        glUniform1i(useTexture_location_,mSceneObjects_[i]->useTexture_);
+        if(mSceneObjects_[i]->useTexture_){
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D,mSceneObjects_[i]->textureID_);
+          glUniform1i(sampler_location_, 0);
+        }
+
+        W_TF_B_ = mSceneObjects_[i]->GetWorldTrans();
+        V_TF_B_ = V_TF_C_*C_TF_W_*W_TF_B_;
+
+        glUniformMatrix4fv(V_TF_B_location_, 1, GL_FALSE, (const GLfloat*)V_TF_B_.data());
+        glUniformMatrix4fv(W_TF_B_location_, 1, GL_FALSE, (const GLfloat*)W_TF_B_.data());
+
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+        glBindBuffer(GL_ARRAY_BUFFER, mSceneObjects_[i]->VBO_);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)12);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)24);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mSceneObjects_[i]->IBO_);
+        glDrawElements(mSceneObjects_[i]->mode_, mSceneObjects_[i]->indices_.size(), GL_UNSIGNED_INT, 0);
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
       }
-
-      W_TF_B_ = mSceneObjects_[i]->GetWorldTrans();
-      V_TF_B_ = V_TF_C_*C_TF_W_*W_TF_B_;
-
-      glUniformMatrix4fv(V_TF_B_location_, 1, GL_FALSE, (const GLfloat*)V_TF_B_.data());
-      glUniformMatrix4fv(W_TF_B_location_, 1, GL_FALSE, (const GLfloat*)W_TF_B_.data());
-
-      glEnableVertexAttribArray(0);
-      glEnableVertexAttribArray(1);
-      glEnableVertexAttribArray(2);
-      glBindBuffer(GL_ARRAY_BUFFER, mSceneObjects_[i]->VBO_);
-      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)0);
-      glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)12);
-      glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)24);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mSceneObjects_[i]->IBO_);
-      glDrawElements(mSceneObjects_[i]->mode_, mSceneObjects_[i]->indices_.size(), GL_UNSIGNED_INT, 0);
-      glDisableVertexAttribArray(0);
-      glDisableVertexAttribArray(1);
-      glDisableVertexAttribArray(2);
     }
     glutSwapBuffers();
   }
@@ -767,7 +771,7 @@ static Scene* mpScene = nullptr;
 static void initGlut(int argc, char** argv, Scene& scene){
   glutInit(&argc, argv);
   glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA);
-  glutInitWindowSize(1000, 800);
+  glutInitWindowSize(1600, 900);
   glutInitWindowPosition(100, 100);
   glutCreateWindow("Scene");
 

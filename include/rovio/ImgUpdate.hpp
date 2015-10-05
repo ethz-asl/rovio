@@ -33,10 +33,12 @@
 #include <Eigen/Dense>
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
+#include "FeatureBearingOutputCF.hpp"
 #include "rovio/FilterStates.hpp"
 #include "rovio/Camera.hpp"
 #include "rovio/PixelOutputCF.hpp"
 #include "rovio/FeatureLocationOutputCF.hpp"
+#include "rovio/ZeroVelocityUpdate.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -106,10 +108,10 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
    *  \see ImgUpdateMeasAuxiliary
    *  @return the the auxiliary state of the ImgUpdateMeas.
    */
-  inline Base& aux(){
+  inline ImgUpdateMeasAuxiliary<STATE>& aux(){
     return this->template get<_aux>();
   }
-  inline const Base& aux() const{
+  inline const ImgUpdateMeasAuxiliary<STATE>& aux() const{
     return this->template get<_aux>();
   }
   //@}
@@ -150,7 +152,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
   typedef LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
       ImgOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
-  using typename Base::eval;
   using Base::doubleRegister_;
   using Base::intRegister_;
   using Base::boolRegister_;
@@ -172,10 +173,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   PixelOutput pixelOutput_;
   typename PixelOutputCF<typename FILTERSTATE::mtState>::mtOutputCovMat pixelOutputCov_;
   PixelOutputFromNorCF pixelOutputFromNorCF_;
-  mutable rovio::FeatureLocationOutputCF<mtState> featureLocationOutputCF_;
-  mutable FeatureLocationOutput featureLocationOutput_;
-  mutable typename rovio::FeatureLocationOutputCF<mtState>::mtOutputCovMat featureLocationCov_;
-  mutable typename rovio::FeatureLocationOutputCF<mtState>::mtJacInput featureLocationOutputJac_;
+  mutable rovio::FeatureBearingOutputCF<mtState> featureBearingOutputCF_;
+  mutable FeatureBearingOutput featureBearingOutput_;
+  mutable typename rovio::FeatureBearingOutputCF<mtState>::mtOutputCovMat featureBearingCov_;
+  mutable typename rovio::FeatureBearingOutputCF<mtState>::mtJacInput featureBearingOutputJac_;
   int startLevel_;
   int endLevel_;
   double startDetectionTh_;
@@ -190,6 +191,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
   double matchingPixelThreshold_;
+  bool doVisualMotionDetection_; /**<Do visual motion detection*/
+  double rateOfMovingFeaturesTh_; /**<What percentage of feature must be moving for image motion detection*/
+  double pixelCoordinateMotionTh_; /**<Threshold for detecting feature motion*/
+  int minFeatureCountForNoMotionDetection_; /**<Minimum amount of feature for detecting NO image motion*/
   double patchRejectionTh_;
   bool doPatchWarping_;
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
@@ -198,6 +203,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
   double specialLinearizationThreshold_;
+  bool isZeroVelocityUpdateEnabled_; /**<Should zero velocity updates be performed*/
+  double minTimeForZeroVelocityUpdate_;  /**<Time until zero velocity update get performed if there is no motion*/
+  ZeroVelocityUpdate<FILTERSTATE> zeroVelocityUpdate_; /**<Zero velocity update, directly integrated into the img update*/
+  double maxUncertaintyToDepthRatioForDepthInitialization_;
 
   /** \brief Constructor.
    *
@@ -230,6 +239,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     patchRejectionTh_ = 10.0;
     removeNegativeFeatureAfterUpdate_ = true;
     specialLinearizationThreshold_ = 1.0/400;
+    doVisualMotionDetection_ = false;
+    rateOfMovingFeaturesTh_ = 0.5;
+    pixelCoordinateMotionTh_ = 1.0;
+    minFeatureCountForNoMotionDetection_ = 5;
+    minTimeForZeroVelocityUpdate_ = 1.0;
+    maxUncertaintyToDepthRatioForDepthInitialization_ = 0.3;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -246,10 +261,15 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("matchingPixelThreshold",matchingPixelThreshold_);
     doubleRegister_.registerScalar("patchRejectionTh",patchRejectionTh_);
     doubleRegister_.registerScalar("specialLinearizationThreshold",specialLinearizationThreshold_);
+    doubleRegister_.registerScalar("MotionDetection.rateOfMovingFeaturesTh",rateOfMovingFeaturesTh_);
+    doubleRegister_.registerScalar("MotionDetection.pixelCoordinateMotionTh",pixelCoordinateMotionTh_);
+    doubleRegister_.registerScalar("maxUncertaintyToDepthRatioForDepthInitialization",maxUncertaintyToDepthRatioForDepthInitialization_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
+    intRegister_.registerScalar("MotionDetection.minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
+    boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
     boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -259,6 +279,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(0,0));
     doubleRegister_.registerScalar("UpdateNoise.nor",updnoiP_(1,1));
     useImprovedJacobian_ = false; // TODO: adapt/test
+    isZeroVelocityUpdateEnabled_ = false;
+    Base::PropertyHandler::registerSubHandler("ZeroVelocityUpdate",zeroVelocityUpdate_);
+    zeroVelocityUpdate_.outlierDetection_.registerToPropertyHandler(&zeroVelocityUpdate_,"MahalanobisTh");
+    zeroVelocityUpdate_.doubleRegister_.registerScalar("minNoMotionTime",minTimeForZeroVelocityUpdate_);
+    zeroVelocityUpdate_.boolRegister_.registerScalar("isEnabled",isZeroVelocityUpdateEnabled_);
+    intRegister_.removeScalarByStr("maxNumIteration");
+    doubleRegister_.removeScalarByStr("alpha");
+    doubleRegister_.removeScalarByStr("beta");
+    doubleRegister_.removeScalarByStr("kappa");
+    doubleRegister_.removeScalarByStr("updateVecNormTermination");
   };
 
   /** \brief Destructor
@@ -301,10 +331,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     if(useDirectMethod_){
       y.template get<mtInnovation::_nor>() = state.aux().b_red_[ID]+noise.template get<mtNoise::_nor>();
     } else {
-      featureLocationOutputCF_.setFeatureID(ID);
-      featureLocationOutputCF_.setOutputCameraID(activeCamID);
-      featureLocationOutputCF_.eval(featureLocationOutput_,state,state);
-      featureLocationOutput_.CfP().boxMinus(state.aux().bearingMeas_[ID],y.template get<mtInnovation::_nor>()); // 0 = m - m_meas + n
+      featureBearingOutputCF_.setFeatureID(ID);
+      featureBearingOutputCF_.setOutputCameraID(activeCamID);
+      featureBearingOutputCF_.eval(featureBearingOutput_,state,state);
+      featureBearingOutput_.CfP().boxMinus(state.aux().bearingMeas_[ID],y.template get<mtInnovation::_nor>()); // 0 = m - m_meas + n
       y.template get<mtInnovation::_nor>() += noise.template get<mtNoise::_nor>();
     }
   }
@@ -325,19 +355,19 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     const int& activeCamCounter = state.aux().activeCameraCounter_;
     const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
     F.setZero();
-    featureLocationOutputCF_.setFeatureID(ID);
-    featureLocationOutputCF_.setOutputCameraID(activeCamID);
-    featureLocationOutputCF_.eval(featureLocationOutput_,state,state);
-    featureLocationOutputCF_.jacInput(featureLocationOutputJac_,state,state);
+    featureBearingOutputCF_.setFeatureID(ID);
+    featureBearingOutputCF_.setOutputCameraID(activeCamID);
+    featureBearingOutputCF_.eval(featureBearingOutput_,state,state);
+    featureBearingOutputCF_.jacInput(featureBearingOutputJac_,state,state);
     if(useDirectMethod_){
       cv::Point2f c_temp;
       Eigen::Matrix2d c_J;
-      mpCameras_[activeCamID].bearingToPixel(featureLocationOutput_.CfP(),c_temp,c_J);
-      F = -state.aux().A_red_[ID]*c_J*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
+      mpCameras_[activeCamID].bearingToPixel(featureBearingOutput_.CfP(),c_temp,c_J);
+      F = -state.aux().A_red_[ID]*c_J*featureBearingOutputJac_.template block<2,mtState::D_>(0,0);
     } else {
       F = state.aux().bearingMeas_[ID].getN().transpose()
-                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureLocationOutput_.CfP(),state.aux().bearingMeas_[ID])
-      *featureLocationOutput_.CfP().getM()*featureLocationOutputJac_.template block<2,mtState::D_>(0,0);
+                *-LWF::NormalVectorElement::getRotationFromTwoNormalsJac(featureBearingOutput_.CfP(),state.aux().bearingMeas_[ID])
+      *featureBearingOutput_.CfP().getM()*featureBearingOutputJac_.template block<2,mtState::D_>(0,0);
     }
   }
 
@@ -359,7 +389,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     assert(filterState.t_ == meas.aux().imgTime_);
     for(int i=0;i<mtState::nCam_;i++){
       if(doFrameVisualisation_){
-        cvtColor(meas.template get<mtMeas::_aux>().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
+        cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
       }
     }
     filterState.imgTime_ = filterState.t_;
@@ -369,6 +399,35 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     filterState.state_.aux().activeCameraCounter_ = 0;
 
     // TODO sort feature by covariance and use more accurate ones first
+
+    /* Detect Image changes by looking at the feature patches between curren and previous image (both at the current feature location)
+     * The maximum change of intensity is obtained if the pixel is moved along the strongest gradient.
+     * The maximal singularvalue, which is equivalent to the root of the larger eigenvalue of the Hessian,
+     * gives us range in which intensity change is allowed to be.
+     */
+    if(doVisualMotionDetection_ && filterState.imageCounter_>1){
+      int totCountInFrame = 0;
+      int totCountInMotion = 0;
+      MultilevelPatchFeature<mtState::nLevels_,mtState::patchSize_> mlp(mpCameras_);
+      for(unsigned int i=0;i<mtState::nMax_;i++){
+        if(filterState.mlps_.isValid_[i]){
+          mlp.set_nor(filterState.state_.CfP(i));
+          mlp.camID_ = filterState.mlps_.features_[i].camID_;
+          if(isMultilevelPatchInFrame(mlp,filterState.prevPyr_[mlp.camID_],startLevel_,true,false)){
+            extractMultilevelPatchFromImage(mlp,filterState.prevPyr_[mlp.camID_],startLevel_,true,false);
+            mlp.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
+            const float avgError = mlp.computeAverageDifferenceReprojection(meas.aux().pyr_[mlp.camID_],endLevel_,startLevel_,false);
+            if(avgError/std::sqrt(mlp.e1_) > static_cast<float>(pixelCoordinateMotionTh_)) totCountInMotion++;
+            totCountInFrame++;
+          }
+        }
+      }
+      if(rateOfMovingFeaturesTh_/totCountInMotion*totCountInFrame < 1.0 || totCountInFrame < minFeatureCountForNoMotionDetection_){
+        filterState.state_.aux().timeSinceLastImageMotion_ = 0.0;
+      }
+    } else {
+      filterState.state_.aux().timeSinceLastImageMotion_ = 0.0;
+    }
   }
 
   /** \brief Pre-Processing for the image update.
@@ -425,23 +484,23 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         }
 
         // Get normal in target frame
-        featureLocationOutputCF_.setFeatureID(ID);
-        featureLocationOutputCF_.setOutputCameraID(activeCamID);
-        featureLocationOutputCF_.transformState(state,featureLocationOutput_);
-        featureLocationOutputCF_.transformCovMat(state,cov,featureLocationCov_);
-        if(verbose_) std::cout << "    Normal in camera frame: " << featureLocationOutput_.CfP().getVec().transpose() << std::endl;
+        featureBearingOutputCF_.setFeatureID(ID);
+        featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        featureBearingOutputCF_.transformState(state,featureBearingOutput_);
+        featureBearingOutputCF_.transformCovMat(state,cov,featureBearingCov_);
+        if(verbose_) std::cout << "    Normal in camera frame: " << featureBearingOutput_.CfP().getVec().transpose() << std::endl;
 
         // Make patch feature in target frame
         patchInTargetFrame = *mpFeature; // TODO: make less costly
-        patchInTargetFrame.set_nor(featureLocationOutput_.CfP()); // TODO: do warping
+        patchInTargetFrame.set_nor(featureBearingOutput_.CfP()); // TODO: do warping
         patchInTargetFrame.camID_ = activeCamID;
-        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
+        bool isInActiveFrame = isMultilevelPatchInFrame(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,false,doPatchWarping_);
         mpFeature->status_.inFrame_ = mpFeature->status_.inFrame_ || isInActiveFrame;
 
         if(isInActiveFrame){
           pixelOutputFromNorCF_.setCameraID(activeCamID);
-          pixelOutputFromNorCF_.transformState(featureLocationOutput_,pixelOutput_);
-          pixelOutputFromNorCF_.transformCovMat(featureLocationOutput_,featureLocationCov_,pixelOutputCov_);
+          pixelOutputFromNorCF_.transformState(featureBearingOutput_,pixelOutput_);
+          pixelOutputFromNorCF_.transformCovMat(featureBearingOutput_,featureBearingCov_,pixelOutputCov_);
 
           // Visualization
           if(doFrameVisualisation_){
@@ -473,10 +532,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           // Search patch
           if(!useDirectMethod_ || true){ // TODO: make adaptive || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_
-            align2DComposed(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
+            align2DComposed(patchInTargetFrame,meas.aux().pyr_[activeCamID],startLevel_,endLevel_,startLevel_-endLevel_,doPatchWarping_);
           }
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
-            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_) > patchRejectionTh_){
+            if(patchInTargetFrame.computeAverageDifferenceReprojection(meas.aux().pyr_[activeCamID],endLevel_,startLevel_,true) > patchRejectionTh_){
               patchInTargetFrame.status_.matchingStatus_ = NOTFOUND;
               if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
             } else {
@@ -493,21 +552,21 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           if(patchInTargetFrame.status_.matchingStatus_ == FOUND){
             // Compute deviation of expected
-            patchInTargetFrame.get_nor().boxMinus(featureLocationOutput_.CfP(),bearingError);
-            const double weightedBearingError = (bearingError.transpose()*featureLocationCov_.template block<2,2>(FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>(),FeatureLocationOutput::template getId<FeatureLocationOutput::_nor>()).inverse()*bearingError)(0,0);
+            patchInTargetFrame.get_nor().boxMinus(featureBearingOutput_.CfP(),bearingError);
+            const double weightedBearingError = (bearingError.transpose()*featureBearingCov_.template block<2,2>(FeatureBearingOutput::template getId<FeatureBearingOutput::_nor>(),FeatureBearingOutput::template getId<FeatureBearingOutput::_nor>()).inverse()*bearingError)(0,0);
 
             // Determine linearization mode
             useSpecialLinearizationPoint_ = bearingError.norm() > specialLinearizationThreshold_;
 
             if(weightedBearingError < 5.886){ // TODO: param
-              if(useSpecialLinearizationPoint_) featureLocationOutput_.CfP() = patchInTargetFrame.get_nor();
+              if(useSpecialLinearizationPoint_) featureBearingOutput_.CfP() = patchInTargetFrame.get_nor();
               mtState linearizationPoint = state;
               if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
               if(activeCamID == camID && useSpecialLinearizationPoint_) linearizationPoint.CfP(ID) = patchInTargetFrame.get_nor();
-              if(activeCamID == camID || !useSpecialLinearizationPoint_ || featureLocationOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureLocationOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
+              if(activeCamID == camID || !useSpecialLinearizationPoint_ || featureBearingOutputCF_.solveInverseProblemRelaxed(linearizationPoint,cov,featureBearingOutput_,Eigen::Matrix2d::Identity()*1e-5,1e-4,199)){ // TODO: make noide dependent on patch
                 if(verbose_) std::cout << "    Backprojection: " << linearizationPoint.CfP(ID).getVec().transpose() << std::endl;
-                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureLocationOutput_.CfP());
-                if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.template get<mtMeas::_aux>().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
+                if(useDirectMethod_ && !useSpecialLinearizationPoint_) patchInTargetFrame.set_nor(featureBearingOutput_.CfP());
+                if(!useDirectMethod_ || getLinearAlignEquationsReduced(patchInTargetFrame,meas.aux().pyr_[activeCamID],endLevel_,startLevel_,doPatchWarping_,
                                                                        state.aux().A_red_[ID],state.aux().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint.boxMinus(state,filterState.difVecLin_);
                   state.aux().bearingMeas_[ID] = patchInTargetFrame.get_nor();
@@ -575,10 +634,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       drawPatch.set_nor(filterState.state_.CfP(ID));
       drawPatch.camID_ = activeCamID;
       if(doFrameVisualisation_ && activeCamID != camID){
-        featureLocationOutputCF_.setFeatureID(ID);
-        featureLocationOutputCF_.setOutputCameraID(activeCamID);
-        featureLocationOutputCF_.transformState(filterState.state_,featureLocationOutput_);
-        drawPatch.set_nor(featureLocationOutput_.CfP());
+        featureBearingOutputCF_.setFeatureID(ID);
+        featureBearingOutputCF_.setOutputCameraID(activeCamID);
+        featureBearingOutputCF_.transformState(filterState.state_,featureBearingOutput_);
+        drawPatch.set_nor(featureBearingOutput_.CfP());
       }
       if(!outlierDetection.isOutlier(0)){
         filterState.mlps_.features_[ID].status_.trackingStatus_ = TRACKED;
@@ -658,12 +717,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           // Extract feature patches and update Shi-Tomasi score.
           if(mpFeature->status_.trackingStatus_ == TRACKED){
-            if(isMultilevelPatchInFrame(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false)){
+            if(isMultilevelPatchInFrame(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false)){
               testFeature.set_c(mpFeature->get_c());
-              extractMultilevelPatchFromImage(testFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+              extractMultilevelPatchFromImage(testFeature,meas.aux().pyr_[camID],startLevel_,true,false);
               testFeature.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
               if(testFeature.s_ >= static_cast<float>(minAbsoluteSTScore_) || testFeature.s_ >= static_cast<float>(minRelativeSTScore_)*mpFeature->s_){
-                extractMultilevelPatchFromImage(*mpFeature,meas.template get<mtMeas::_aux>().pyr_[camID],startLevel_,true,false);
+                extractMultilevelPatchFromImage(*mpFeature,meas.aux().pyr_[camID],startLevel_,true,false);
                 mpFeature->computeMultilevelShiTomasiScore(endLevel_,startLevel_);
                 mpFeature->toState();
               }
@@ -710,11 +769,20 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     const int searchCamID = rand()%mtState::nCam_;
     averageScore = filterState.mlps_.getAverageScore(); // TODO
     if(filterState.mlps_.getValidCount() < startDetectionTh_*mtState::nMax_){
+      // Compute the median depth parameters for each camera, using the state features.
+      std::array<double, mtState::nCam_> medianDepthParameters;
+      if(maxUncertaintyToDepthRatioForDepthInitialization_>0){
+        filterState.getMedianDepthParameters(initDepth_, &medianDepthParameters,maxUncertaintyToDepthRatioForDepthInitialization_);
+      } else {
+        medianDepthParameters.fill(initDepth_);
+      }
+
+      // Get Candidates
       std::list<cv::Point2f> candidates;
       if(verbose_) std::cout << "Adding keypoints" << std::endl;
       const double t1 = (double) cv::getTickCount();
       for(int l=endLevel_;l<=startLevel_;l++){
-        detectFastCorners(meas.template get<mtMeas::_aux>().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
+        detectFastCorners(meas.aux().pyr_[searchCamID],candidates,l,fastDetectionThreshold_);
       }
       const double t2 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Detected " << candidates.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
@@ -723,7 +791,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
       const double t3 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Selected " << candidates.size() << " candidates (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
-      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.template get<mtMeas::_aux>().pyr_[searchCamID],searchCamID,filterState.t_,
+      std::unordered_set<unsigned int> newSet = addBestCandidates(filterState.mlps_,candidates,meas.aux().pyr_[searchCamID],searchCamID,filterState.t_,
                                                                   endLevel_,startLevel_,mtState::nMax_-filterState.mlps_.getValidCount(),nDetectionBuckets_, scoreDetectionExponent_,
                                                                   penaltyDistance_, zeroDistancePenalty_,false,0.0);
       const double t4 = (double) cv::getTickCount();
@@ -733,7 +801,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         filterState.mlps_.features_[*it].status_.inFrame_ = true;
         filterState.mlps_.features_[*it].status_.matchingStatus_ = FOUND;
         filterState.mlps_.features_[*it].status_.trackingStatus_ = TRACKED;
-        filterState.initializeFeatureState(*it,filterState.mlps_.features_[*it].get_nor().getVec(),initDepth_,initCovFeature_);
+        filterState.initializeFeatureState(*it, filterState.mlps_.features_[*it].get_nor().getVec(), medianDepthParameters[searchCamID], initCovFeature_); // TODO: adapt covariance to initial depth
         filterState.mlps_.features_[*it].linkToState(&state.template get<mtState::_aux>().camID_[*it],&state.template get<mtState::_nor>(*it),&state.template get<mtState::_aux>().bearingCorners_[*it]);
         filterState.mlps_.features_[*it].toState();
       }
@@ -753,6 +821,17 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         std::cout << filterState.state_.qCM(i) << std::endl;
         std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
       }
+    }
+
+    // Copy image pyramid to state
+    for(int i=0;i<mtState::nCam_;i++){
+      filterState.prevPyr_[i] = meas.aux().pyr_[i];
+    }
+
+    // Zero Velocity updates if appropriate
+    if(isZeroVelocityUpdateEnabled_ && filterState.state_.aux().timeSinceLastImageMotion_ > minTimeForZeroVelocityUpdate_ && filterState.state_.aux().timeSinceLastInertialMotion_ > minTimeForZeroVelocityUpdate_){
+      cv::putText(filterState.img_[0],"Performing Zero Velocity Updates!",cv::Point2f(150,25),cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0,255,255));
+      zeroVelocityUpdate_.performUpdateEKF(filterState,ZeroVelocityUpdateMeas<mtState>());
     }
   }
 

@@ -55,9 +55,15 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   typedef typename Base::mtNoise mtNoise;
   typedef typename Base::mtJacInput mtJacInput;
   typedef typename Base::mtJacNoise mtJacNoise;
-  const V3D g_;
+  const V3D g_; /**<Gravity in inertial frame, always aligned with the z-axis.*/
+  double inertialMotionRorTh_; /**<Threshold on the rotational rate for motion detection.*/
+  double inertialMotionAccTh_; /**<Threshold on the acceleration for motion detection.*/
   ImuPrediction():g_(0,0,-9.81){
     int ind;
+    inertialMotionRorTh_ = 0.1;
+    inertialMotionAccTh_ = 0.1;
+    doubleRegister_.registerScalar("MotionDetection.inertialMotionRorTh",inertialMotionRorTh_);
+    doubleRegister_.registerScalar("MotionDetection.inertialMotionAccTh",inertialMotionAccTh_);
     for(int i=0;i<mtState::nMax_;i++){
       ind = mtNoise::template getId<mtNoise::_nor>(i);
       doubleRegister_.removeScalarByVar(prenoiP_(ind,ind));
@@ -117,6 +123,12 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     }
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
+    if(detectInertialMotion(state,meas)){
+      output.aux().timeSinceLastInertialMotion_ = 0;
+    } else {
+      output.aux().timeSinceLastInertialMotion_ = output.aux().timeSinceLastInertialMotion_ + dt;
+    }
+    output.aux().timeSinceLastImageMotion_ = output.aux().timeSinceLastImageMotion_ + dt;
   }
   void noMeasCase(mtFilterState& filterState, mtMeas& meas, double dt){
     meas.template get<mtMeas::_gyr>() = filterState.state_.gyb();
@@ -235,6 +247,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
               +1.0/d*gSM(state.CfP(i).getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
            )*sqrt(dt)*MPD(state.qCM(camID)).matrix();
     }
+  }
+  bool detectInertialMotion(const mtState& state, const mtMeas& meas) const{
+    const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.gyb();
+    const V3D imuAcc = meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_);
+    return (imuRor.norm() > inertialMotionRorTh_) | (imuAcc.norm() > inertialMotionAccTh_);
   }
 };
 

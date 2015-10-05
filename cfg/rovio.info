@@ -83,7 +83,6 @@ Update0
     doPatchWarping true
     doFrameVisualisation true
     useDirectMethod true
-    maxNumIteration 10
     startLevel 3
     endLevel 1
     nDetectionBuckets 100
@@ -92,15 +91,11 @@ Update0
     {
         nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
     }
-    alpha 0.001
-    beta 2
-    kappa 0
-    updateVecNormTermination 1e-06
-    initCovFeature_0 1
+    initCovFeature_0 0.5
     initCovFeature_1 1e-5
     initCovFeature_2 1e-5
-    initDepth 1.0
-    startDetectionTh 0.6
+    initDepth 0.5
+    startDetectionTh 0.8
     scoreDetectionExponent 0.25
     penaltyDistance 100
     zeroDistancePenalty 100
@@ -116,6 +111,26 @@ Update0
     specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10.0;
     removeNegativeFeatureAfterUpdate true;
+    maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
+    MotionDetection
+    {
+    	isEnabled 1
+	    rateOfMovingFeaturesTh 0.5;
+	    pixelCoordinateMotionTh 1.0;
+	    minFeatureCountForNoMotionDetection 5;
+	}
+    ZeroVelocityUpdate
+    {
+        UpdateNoise
+        {
+            vel_0 0.01
+            vel_1 0.01
+            vel_2 0.01
+        }
+        MahalanobisTh0 7.689997599999999
+        minNoMotionTime 1.0
+        isEnabled 1 ; only works if MotionDetection.isEnabled is true
+    }
 }
 Prediction
 {
@@ -133,12 +148,12 @@ Prediction
         gyb_0 3.8e-7
         gyb_1 3.8e-7
         gyb_2 3.8e-7
-        vep_0 1e-4
-        vep_1 1e-4
-        vep_2 1e-4
-        vep_3 1e-4
-        vep_4 1e-4
-        vep_5 1e-4
+        vep_0 1e-8
+        vep_1 1e-8
+        vep_2 1e-8
+        vep_3 1e-8
+        vep_4 1e-8
+        vep_5 1e-8
         att_0 7.6e-6 ;7.6e-7
         att_1 7.6e-6
         att_2 7.6e-6
@@ -151,7 +166,27 @@ Prediction
         dep 0.000001 ; m/sqrt(dt)
         nor 0.0001 ; rad/sqrt(dt)
     }
-    alpha 0.001
-    beta 2
-    kappa 0
+    MotionDetection
+    {
+	    inertialMotionRorTh 0.1
+	    inertialMotionAccTh 0.5
+	}
+}
+Groundtruth
+{
+	doVisualization false
+	IrIJ_x 0.0
+	IrIJ_y 0.0
+	IrIJ_z 0.0
+	qJI_x 0.0
+	qJI_y 0.0
+	qJI_z 0.0
+	qJI_w 1.0
+	BrBC_x 0.0
+	BrBC_y 0.0
+	BrBC_z 0.0
+	qCB_x 0.0
+	qCB_y 0.0
+	qCB_z 0.0
+	qCB_w 1.0
 }

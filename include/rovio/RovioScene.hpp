@@ -48,6 +48,7 @@ class RovioScene{
 
   rovio::Scene mScene;
   SceneObject* mpSensor_[mtState::nCam_];
+  SceneObject* mpGroundtruth_;
   SceneObject* mpLines_[mtState::nCam_];
   SceneObject* mpDepthVar_[mtState::nCam_];
   SceneObject* mpPatches_[mtState::nMax_];
@@ -55,6 +56,7 @@ class RovioScene{
     mpFilter_ = nullptr;
     for(int camID=0;camID<mtState::nCam_;camID++){
       mpSensor_[camID] = nullptr;
+      mpGroundtruth_ = nullptr;
       mpLines_[camID] = nullptr;
       mpDepthVar_[camID] = nullptr;
     }
@@ -98,6 +100,17 @@ class RovioScene{
       mpDepthVar_[camID]->lineWidth_ = 3.0f;
       mpDepthVar_[camID]->mode_ = GL_LINES;
     }
+    mpGroundtruth_ = mScene.addSceneObject();
+    mpGroundtruth_->makeCoordinateFrame(1.0f);
+    mpGroundtruth_->lineWidth_ = 5.0f;
+    Eigen::Vector4f color;
+    for(int i=0;i<3;i++){
+      color = Eigen::Vector4f(0.0f,0.0f,0.0f,1.0f);
+      color(i) = 0.6f;
+      mpGroundtruth_->vertices_[i*2].color_.fromEigen(color);
+      mpGroundtruth_->vertices_[i*2+1].color_.fromEigen(color);
+    }
+    mpGroundtruth_->allocateBuffer();
     for(int i=0;i<mtState::nMax_;i++){
       mpPatches_[i] = mScene.addSceneObject();
     }
@@ -111,6 +124,15 @@ class RovioScene{
   void drawScene(mtFilterState& filterState){
     const mtState& state = filterState.state_;
     const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+
+    if(filterState.plotGroundtruth_){
+      mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;
+      mpGroundtruth_->W_r_WB_ = (filterState.groundtruth_IrIJ_ + filterState.groundtruth_qJI_.inverseRotate(filterState.groundtruth_JrJC_)
+                                - (filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_).inverseRotate(filterState.groundtruth_BrBC_)).template cast<float>();
+      mpGroundtruth_->draw_ = true;
+    } else {
+      mpGroundtruth_->draw_ = false;
+    }
 
     for(unsigned int camID=0;camID<mtState::nCam_;camID++){
       mpSensor_[camID]->W_r_WB_ = state.WrWC(camID).template cast<float>();
