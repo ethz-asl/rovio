@@ -37,14 +37,14 @@ namespace rovio{
 /** \brief A multilevel patch class.
  *
  *    @tparam nLevels   - Number of pyramid levels on which the feature is defined.
- *    @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!.
+ *    @tparam patchSize - Edge length of the patches in pixels. Value must be a multiple of 2!.
  *                         Note: The patches edge length (in pixels) is the same for each patch, independently from the pyramid level.
  */
-template<int nLevels,int patch_size>
+template<int nLevels,int patchSize>
 class MultilevelPatch{
  public:
   static const int nLevels_ = nLevels;  /**<Number of pyramid levels on which the feature is defined.*/
-  Patch<patch_size> patches_[nLevels_];  /**<Array, holding the patches on each pyramid level.*/
+  Patch<patchSize> patches_[nLevels_];  /**<Array, holding the patches on each pyramid level.*/
   bool isValidPatch_[nLevels_];  /**<Array, specifying if there is a valid patch stored at the corresponding location in \ref patches_.*/
   mutable Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
   mutable float e0_;  /**<Smaller eigenvalue of H_.*/
@@ -55,12 +55,6 @@ class MultilevelPatch{
   /** Constructor
    */
   MultilevelPatch(){
-    reset();
-  }
-
-  /** Constructor
-   */
-  MultilevelPatch(const Camera* mpCameras){
     reset();
   }
 
@@ -98,9 +92,9 @@ class MultilevelPatch{
       }
     }
     if(count > 0){
-      const float dXX = H_(0,0)/(count*patch_size*patch_size);
-      const float dYY = H_(1,1)/(count*patch_size*patch_size);
-      const float dXY = H_(0,1)/(count*patch_size*patch_size);
+      const float dXX = H_(0,0)/(count*patchSize*patchSize);
+      const float dYY = H_(1,1)/(count*patchSize*patchSize);
+      const float dXY = H_(0,1)/(count*patchSize*patchSize);
       e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
       e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
       s_ = e0_;
@@ -134,7 +128,7 @@ class MultilevelPatch{
   void drawMultilevelPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
     for(int l=nLevels_-1;l>=0;l--){
       if(isValidPatch_[l]){
-        cv::Point2i corner = cv::Point2i((patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)),(patch_size/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)));
+        cv::Point2i corner = cv::Point2i((patchSize/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)),(patchSize/2+(int)withBorder)*(pow(2,nLevels_-1)-pow(2,l)));
         patches_[l].drawPatch(drawImg,c+corner,stretch*pow(2,l),withBorder);
       }
     }
@@ -158,29 +152,29 @@ class MultilevelPatch{
    * @param l2         - End pyramid level (l1<l2)
    * @return the RMSE value for the patches in the set pyramid level interval.
    */
-  float computeAverageDifference(const MultilevelPatch<nLevels,patch_size>& mlp, const int l1, const int l2) const{
+  float computeAverageDifference(const MultilevelPatch<nLevels,patchSize>& mlp, const int l1, const int l2) const{
     float offset = 0.0f;
     for(int l = l1; l <= l2; l++){
       const float* it_patch = patches_[l].patch_;
       const float* it_patch_in = mlp.patches_[l].patch_;
-      for(int y=0; y<patch_size; ++y){
-        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_in){
+      for(int y=0; y<patchSize; ++y){
+        for(int x=0; x<patchSize; ++x, ++it_patch, ++it_patch_in){
           offset += *it_patch - *it_patch_in;
         }
       }
     }
-    offset = offset/(patch_size*patch_size*(l2-l1+1));
+    offset = offset/(patchSize*patchSize*(l2-l1+1));
     float error = 0.0f;
     for(int l = l1; l <= l2; l++){
       const float* it_patch = patches_[l].patch_;
       const float* it_patch_in = mlp.patches_[l].patch_;
-      for(int y=0; y<patch_size; ++y){
-        for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_in){
+      for(int y=0; y<patchSize; ++y){
+        for(int x=0; x<patchSize; ++x, ++it_patch, ++it_patch_in){
           error += std::pow(*it_patch - *it_patch_in - offset,2);
         }
       }
     }
-    error = error/(patch_size*patch_size*(l2-l1+1));
+    error = error/(patchSize*patchSize*(l2-l1+1));
     return std::sqrt(error);
   }
 

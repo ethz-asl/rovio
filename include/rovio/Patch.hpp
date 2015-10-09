@@ -36,18 +36,18 @@
 
 namespace rovio{
 
-/** \brief %Patch with selectable size.
+/** \brief %Patch with selectable patchSize.
  *
- *   @tparam size - Edge length of the patch in pixels. Value must be a multiple of 2!
+ *   @tparam patchSize - Edge length of the patch in pixels. Value must be a multiple of 2!
  */
-template<int size>
+template<int patchSize>
 class Patch {
  public:
-  float patch_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the patch.*/
-  float patchWithBorder_[(size+2)*(size+2)] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the expanded patch.
+  float patch_[patchSize*patchSize] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the patch.*/
+  float patchWithBorder_[(patchSize+2)*(patchSize+2)] __attribute__ ((aligned (16)));  /**<Array, containing the intensity values of the expanded patch.
                                                                                  This expanded patch is necessary for the intensity gradient calculation.*/
-  mutable float dx_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in x-direction for each patch pixel.*/
-  mutable float dy_[size*size] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in y-direction for each patch pixel.*/
+  mutable float dx_[patchSize*patchSize] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in x-direction for each patch pixel.*/
+  mutable float dy_[patchSize*patchSize] __attribute__ ((aligned (16)));  /**<Array, containing the intensity gradient component in y-direction for each patch pixel.*/
   mutable Eigen::Matrix3f H_;  /**<Hessian matrix of the patch (necessary for the patch alignment).*/
   mutable float s_;  /**<Shi-Tomasi Score (smaller eigenvalue of H_).*/
   mutable float e0_;  /**<Smaller eigenvalue of H_.*/
@@ -57,7 +57,7 @@ class Patch {
   /** \brief Constructor
    */
   Patch(){
-    static_assert(size%2==0,"Patch size must be a multiple of 2");
+    static_assert(patchSize%2==0,"Patch patchSize must be a multiple of 2");
     validGradientParameters_ = false;
     s_ = 0.0;
     e0_ = 0.0;
@@ -73,14 +73,14 @@ class Patch {
    */
   void computeGradientParameters() const{
     H_.setZero();
-    const int refStep = size+2;
+    const int refStep = patchSize+2;
     float* it_dx = dx_;
     float* it_dy = dy_;
     const float* it;
     Eigen::Vector3f J;
-    for(int y=0; y<size; ++y){
+    for(int y=0; y<patchSize; ++y){
       it = patchWithBorder_ + (y+1)*refStep + 1;
-      for(int x=0; x<size; ++x, ++it, ++it_dx, ++it_dy){
+      for(int x=0; x<patchSize; ++x, ++it, ++it_dx, ++it_dy){
         J[0] = 0.5 * (it[1] - it[-1]);
         J[1] = 0.5 * (it[refStep] - it[-refStep]);
         J[2] = 1;
@@ -89,9 +89,9 @@ class Patch {
         H_ += J*J.transpose();
       }
     }
-    const float dXX = H_(0,0)/(size*size);
-    const float dYY = H_(1,1)/(size*size);
-    const float dXY = H_(0,1)/(size*size);
+    const float dXX = H_(0,0)/(patchSize*patchSize);
+    const float dYY = H_(1,1)/(patchSize*patchSize);
+    const float dXY = H_(0,1)/(patchSize*patchSize);
 
     e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
     e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
@@ -105,9 +105,9 @@ class Patch {
   void extractPatchFromPatchWithBorder(){
     float* it_patch = patch_;
     float* it_patchWithBorder;
-    for(int y=1; y<size+1; ++y, it_patch += size){
-      it_patchWithBorder = patchWithBorder_ + y*(size+2) + 1;
-      for(int x=0; x<size; ++x)
+    for(int y=1; y<patchSize+1; ++y, it_patch += patchSize){
+      it_patchWithBorder = patchWithBorder_ + y*(patchSize+2) + 1;
+      for(int x=0; x<patchSize; ++x)
         it_patch[x] = it_patchWithBorder[x];
     }
   }
@@ -150,9 +150,9 @@ class Patch {
     } else {
       it_patch = patch_;
     }
-    for(int y=0; y<size+2*(int)withBorder; ++y, it_patch += size+2*(int)withBorder){
+    for(int y=0; y<patchSize+2*(int)withBorder; ++y, it_patch += patchSize+2*(int)withBorder){
       img_ptr = (uint8_t*) drawImg.data + (c.y+y*stretch)*refStep + c.x;
-      for(int x=0; x<size+2*(int)withBorder; ++x)
+      for(int x=0; x<patchSize+2*(int)withBorder; ++x)
         for(int i=0;i<stretch;++i){
           for(int j=0;j<stretch;++j){
             img_ptr[x*stretch+i*refStep+j] = (uint8_t)(it_patch[x]);
@@ -170,7 +170,7 @@ class Patch {
    * @param color       - Line color.
    */
   void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
-    const int halfpatch_size = size/2;
+    const int halfpatch_size = patchSize/2;
     Eigen::Matrix2f A;
     if(mpWarp == nullptr){
       A.setIdentity();
@@ -199,13 +199,13 @@ class Patch {
    *   @param img        - Reference Image.
    *   @param c          - Coordinates of the patch in the reference image.
    *   @param mpWarp     - Affine warping matrix. If nullptr not warping is considered.
-   *   @param withBorder - Check, using either the patch-size of Patch::patch_ (withBorder = false) or the patch-size
+   *   @param withBorder - Check, using either the patch-patchSize of Patch::patch_ (withBorder = false) or the patch-patchSize
    *                       of the expanded patch Patch::patchWithBorder_ (withBorder = true).
    *   @return true, if the patch is completely located within the reference image.
    */
   static bool isPatchInFrame(const cv::Mat& img,const FeatureCoordinates& c,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false){
     if(!c.isInFront()) return false;
-    const int halfpatch_size = size/2+(int)withBorder;
+    const int halfpatch_size = patchSize/2+(int)withBorder;
     if(mpWarp == nullptr){
       if(c.get_c().x < halfpatch_size || c.get_c().y < halfpatch_size || c.get_c().x > img.cols-halfpatch_size || c.get_c().y > img.rows-halfpatch_size){
         return false;
@@ -241,7 +241,7 @@ class Patch {
    */
   void extractPatchFromImage(const cv::Mat& img,const FeatureCoordinates& c,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false){
     assert(isPatchInFrame(img,c,mpWarp,withBorder));
-    const int halfpatch_size = size/2+(int)withBorder;
+    const int halfpatch_size = patchSize/2+(int)withBorder;
     const int refStep = img.step.p[0];
 
     // Get Pointers

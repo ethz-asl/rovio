@@ -34,23 +34,22 @@
 #include "rovio/FeatureWarping.hpp"
 #include "rovio/FeatureStatistics.hpp"
 #include "rovio/MultilevelPatch.hpp"
+#include "rovio/MultiCamera.hpp"
 
 namespace rovio{
 
 /** \brief A feature manager class.
  *
  *    @tparam nLevels    - Number of pyramid levels on which the feature is defined.
- *    @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!.
+ *    @tparam patchSize - Edge length of the patches in pixels. Value must be a multiple of 2!.
  *                         Note: The patches edge length (in pixels) is the same for each patch, independently from the pyramid level.
  *    @tparam nCam       - Number of cameras
  */
-template<int nLevels,int patch_size, int nCam>
+template<int nLevels,int patchSize, int nCam>
 class FeatureManager{
  public:
   int idx_;  /**<Feature ID.*/
-  Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
-  Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
-  Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
+  int camID_; /**<Camera ID.*/
 
   FeatureCoordinates log_previous_;
   FeatureCoordinates log_prediction_;
@@ -65,12 +64,13 @@ class FeatureManager{
   FeatureDistance* mpDistance_;
   FeatureWarping* mpWarping_;
   FeatureStatistics<nCam>* mpStatistics_;
-  MultilevelPatch<nLevels,patch_size>* mpMultilevelPatch_;
+  MultilevelPatch<nLevels,patchSize>* mpMultilevelPatch_;
 
   /** Constructor
    */
   FeatureManager(){
     idx_ = -1;
+    camID_ = -1;
     mpCoordinates_ = nullptr;
     mpDistance_ = nullptr;
     mpWarping_ = nullptr;
@@ -105,7 +105,7 @@ class FeatureManager{
    * @return the RMSE value for the patches in the set pyramid level interval.
    */
   float computeAverageDifferenceReprojection(const ImagePyramid<nLevels>& pyr, const int l1, const int l2, const bool doWarping = false) const{
-    MultilevelPatch<nLevels,patch_size> mlpReprojected;
+    MultilevelPatch<nLevels,patchSize> mlpReprojected;
     extractMultilevelPatchFromImage(mlpReprojected,pyr,l2,false,doWarping);
     return computeAverageDifference(mlpReprojected,l1,l2);
   }
@@ -115,16 +115,17 @@ class FeatureManager{
 /** \brief Class, storing and handling multiple features
  *
  * @tparam nLevels   - Total number of pyramid levels for each MultilevelPatchFeature in the set.
- * @tparam patch_size - Edge length of the patches in pixels. Value must be a multiple of 2!
+ * @tparam patchSize - Edge length of the patches in pixels. Value must be a multiple of 2!
  * @tparam nCam       - Number of cameras.
  * @tparam nMax       - Maximum number of MultilevelPatchFeature in the set.
  */
-template<int nLevels,int patch_size, int nCam,int nMax>
+template<int nLevels,int patchSize, int nCam,int nMax>
 class FeatureSetManager{
  public:
-  FeatureManager<nLevels,patch_size,nCam> features_[nMax];  /**<Array of features.*/
+  FeatureManager<nLevels,patchSize,nCam> features_[nMax];  /**<Array of features.*/
   bool isValid_[nMax];  /**<Array, defining if there is a valid MultilevelPatchFeature at the considered array index. */
   int maxIdx_;  /**<Current maximum array/set index. Number of MultilevelPatchFeature, which have already been inserted into the set. */
+  const MultiCamera<nCam>* mpMultiCamera_;
 
   /** \brief Constructor
    */
@@ -204,7 +205,184 @@ class FeatureSetManager{
     if(count>0) averageScore /= count;
     return averageScore;
   }
+
+  /** \brief Adds the best MultilevelPatchFeature%s from a candidates list to an existing MultilevelPatchSet.
+   *
+   *  This function takes a given feature candidate list and builds, in a first step,
+   *  MultilevelPatchFeature%s out of it using a given image pyramid. For each MultilevelPatchFeature the
+   *  corresponding Shi-Tomasi Score is computed.
+   *  In a second step, the candidate MultilevelPatchFeature%s are sorted and
+   *  placed into buckets, depending on their individual Shi-Tomasi Score. MultilevelPatchFeature%s in a high bucket
+   *  (high bucket index) have higher Shi-Tomasi Scores than MultilevelPatchFeature%s which have been placed into a
+   *  low bucket.
+   *  In a third step, the MultilevelPatchFeature%s in the buckets are reordered, depending on their distance
+   *  to already existing features in the given MultilevelPatchSet. A small distance to an existing feature is punished,
+   *  by moving the concerned candidate MultilevelPatchFeature into a lower bucket.
+   *  Finally the existing MultilevelPatchSet is expanded with the best (high bucket index) candidate MultilevelPatchFeature%s.
+   *
+   * @param candidates             - List of candidate feature coordinates.
+   * @param pyr                    - Image pyramid used to extract the MultilevelPatchFeature%s from the candidates list.
+   * @param camID                  - %Camera ID
+   * @param initTime               - Current time (time at which the MultilevelPatchFeature%s are created from the candidates list).
+   * @param l1                     - Start pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
+   * @param l2                     - End pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
+   * @param maxN                   - Maximal number of features which should be added to the mlpSet.
+   * @param nDetectionBuckets      - Number of buckets.
+   * @param scoreDetectionExponent - Choose it between [0 1]. 1 : Candidate features are sorted linearly into the buckets, depending on their Shi-Tomasi score.
+   *                                                          0 : All candidate features are filled into the highest bucket.
+   *                                 A small scoreDetectionExponent forces more candidate features into high buckets.
+   * @param penaltyDistance        - If a candidate feature has a smaller distance to an existing feature in the mlpSet, it is punished (shifted in an lower bucket) dependent of its actual distance to the existing feature.
+   * @param zeroDistancePenalty    - A candidate feature in a specific bucket is shifted zeroDistancePenalty-buckets back to a lower bucket if it has zero distance to an existing feature in the mlpSet.
+   * @param requireMax             - Should the adding of maxN be enforced?
+   * @param minScore               - Shi-Tomasi Score threshold for the best (highest Shi-Tomasi Score) MultilevelPatchFeature extracted from the candidates list.
+   *                                 If the best MultilevelPatchFeature has a Shi-Tomasi Score less than or equal this threshold, the function aborts and returns an empty map.
+   *
+   * @return an unordered_set, holding the indizes of the MultilevelPatchSet, at which the new MultilevelPatchFeature%s have been added (from the candidates list).
+   */
+  // TODO: work more on bearing vectors (in general)
+  // TODO: add corner motion dependency
+  // TODO: check inFrame, only if COVARIANCE not too large
+  std::unordered_set<unsigned int> addBestCandidates(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
+                                                     const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
+                                                     const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
+    std::unordered_set<unsigned int> newSet;
+    std::vector<MultilevelPatch<nLevels,patchSize>> multilevelPatches;
+    multilevelPatches.reserve(candidates.size());
+
+    // Create MultilevelPatches from the candidates list and compute their Shi-Tomasi Score.
+    float maxScore = -1.0;
+    for(int i=0;i<candidates.size();i++){
+      multilevelPatches.emplace_back();
+      if(multilevelPatches.back().isMultilevelPatchInFrame(pyr,candidates[i],l2,nullptr,true)){
+        multilevelPatches.back().extractMultilevelPatchFromImage(pyr,candidates[i],l2,nullptr,true);
+        multilevelPatches.back().computeMultilevelShiTomasiScore(l1,l2);
+        if(multilevelPatches.back().s_ > maxScore) maxScore = multilevelPatches.back().s_;
+      } else {
+        multilevelPatches.back().s_ = -1;
+      }
+    }
+    if(maxScore <= minScore){
+      return newSet;
+    }
+
+    // Make buckets and fill based on score
+    std::vector<std::unordered_set<int>> buckets(nDetectionBuckets,std::unordered_set<int>());
+    unsigned int newBucketID;
+    float relScore;
+    for(int i=0;i<candidates.size();i++){
+      relScore = (multilevelPatches[i].s_-minScore)/(maxScore-minScore);
+      if(relScore > 0.0){
+        newBucketID = std::ceil((nDetectionBuckets-1)*(pow(relScore,static_cast<float>(scoreDetectionExponent))));
+        if(newBucketID>nDetectionBuckets-1) newBucketID = nDetectionBuckets-1;
+        buckets[newBucketID].insert(i);
+      }
+    }
+
+    // Move buckets based on current features
+    double d2;
+    double t2 = pow(penaltyDistance,2);
+    bool doDelete;
+    FeatureCoordinates featureCoordinates;
+    featureCoordinates.mpCamera_ = &mpMultiCamera_->cameras_[camID];
+    for(unsigned int i=0;i<nMax;i++){
+      if(isValid_[i]){
+        mpMultiCamera_->transformBearing(features_[i].camID_,camID,*(features_[i].mpFeatureCoordinates),*(features_[i].mpFeatureDistance),featureCoordinates);
+        if(featureCoordinates.isInFront()){
+          for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
+            for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
+              doDelete = false;
+              d2 = std::pow(featureCoordinates.get_c().x - candidates[*it_cand].get_c().x,2) + std::pow(featureCoordinates.get_c().y - candidates[*it_cand].get_c().y,2);  // Squared distance between the existing feature and the candidate feature.
+              if(d2<t2){
+                newBucketID = std::max((int)(bucketID - (t2-d2)/t2*zeroDistancePenalty),0);
+                if(bucketID != newBucketID){
+                  buckets[newBucketID].insert(*it_cand);
+                  doDelete = true;
+                }
+              }
+              if(doDelete){
+                buckets[bucketID].erase(it_cand++);
+              } else {
+                ++it_cand;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Incrementally add features and update candidate buckets (Check distance of candidates with respect to the newly inserted feature).
+    int addedCount = 0;
+    for (int bucketID = nDetectionBuckets-1;bucketID >= 0+static_cast<int>(!requireMax);bucketID--) {
+      while(!buckets[bucketID].empty() && addedCount < maxN && getValidCount() != nMax) {
+        const int nf = *(buckets[bucketID].begin());
+        buckets[bucketID].erase(nf);
+        const int ind = makeNewFeature(camID);
+        features_[ind].mpStatistics_.camID_ = camID;
+        *(features_[ind].mpCoordinates_) = candidates[nf];
+        *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
+        features_[ind].mpDistance_.reset();
+        features_[ind].mpWarping_.reset();
+        features_[ind].mpWarping_.set_affineTransfrom(Eigen::Matrix2f::Identity());
+        if(ind >= 0){
+          newSet.insert(ind);
+        }
+        addedCount++;
+        for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
+          for (auto it_cand = buckets[bucketID2].begin();it_cand != buckets[bucketID2].end();) {
+            doDelete = false;
+            d2 = std::pow(candidates[nf].get_c().x - candidates[*it_cand].get_c().x,2) + std::pow(candidates[nf].get_c().y - candidates[*it_cand].get_c().y,2);
+            if(d2<t2){
+              newBucketID = std::max((int)(bucketID2 - (t2-d2)/t2*zeroDistancePenalty),0);
+              if(bucketID2 != newBucketID){
+                buckets[newBucketID].insert(*it_cand);
+                doDelete = true;
+              }
+            }
+            if(doDelete){
+              buckets[bucketID2].erase(it_cand++);
+            } else {
+              ++it_cand;
+            }
+          }
+        }
+      }
+    }
+    return newSet;
+  }
 };
+
+///** \brief Prunes the (corner/feature) candidate list by erasing candidates, which are too close to an existing feature. // TODO: overthink
+// *
+// * @param mlpSet             - MultilevelPatchSet, containing the existing MultilevelPatchFeature%s .
+// * @param candidates         - List of extracted corner coordinates/candidates (defined on pyramid level 0).
+// * @param candidateID        - Camera ID, in which the candidates have been extracted.
+// */
+//void pruneCandidates(const MultilevelPatchSet<nLevels,patchSize,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int candidateID){
+//  constexpr float t2 = patchSize*patchSize;  // TODO: param
+//  bool prune;
+//  const MultilevelPatchFeature<nLevels,patchSize>* mpFeature;
+//  FeatureCoordinates featureCoordinates;
+//  for (auto it = candidates.begin(); it != candidates.end();) {
+//    prune = false;
+//    for(unsigned int i=0;i<nMax;i++){
+//      if(mlpSet.isValid_[i]){
+//        mpFeature = &mlpSet.features_[i];
+//        featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
+//        featureCoordinates.set_nor(featureCoordinates.get_nor_other(candidateID));
+//        featureCoordinates.camID_ = candidateID;
+//        if(featureCoordinates.isInFront() && pow(it->x-featureCoordinates.get_c().x,2) + pow(it->y-featureCoordinates.get_c().y,2) < t2){
+//          prune = true;
+//          break;
+//        }
+//      }
+//    }
+//    if(prune){
+//      it = candidates.erase(it);
+//    } else {
+//      it++;
+//    }
+//  }
+//}
 
 }
 

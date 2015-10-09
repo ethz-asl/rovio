@@ -33,6 +33,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include "lightweight_filtering/State.hpp"
 #include "rovio/Camera.hpp"
+#include "rovio/FeatureDistance.hpp"
 
 namespace rovio{
 
@@ -53,6 +54,28 @@ class FeatureCoordinates{
   FeatureCoordinates(){
     mpCamera_ = nullptr;
     resetCoordinates();
+  }
+
+  /** \brief Constructor based on given pixel coordinates
+   *
+   *  @param pixel - the pixel coordinates the feature should be set to.
+   */
+  FeatureCoordinates(const cv::Point2f& pixel){
+    mpCamera_ = nullptr;
+    resetCoordinates();
+    c_ = pixel;
+    valid_c_ = true;
+  }
+
+  /** \brief Constructor based on given pixel coordinates
+   *
+   *  @param nor - the bearing vector the feature should be set to.
+   */
+  FeatureCoordinates(const LWF::NormalVectorElement& nor){
+    mpCamera_ = nullptr;
+    resetCoordinates();
+    nor_ = nor;
+    valid_nor_ = true;
   }
 
   /** \brief Constructor
@@ -188,7 +211,7 @@ class FeatureCoordinates{
    *  @param color       - Color of the line.
    *  @param thickness   - Thickness of the line.
    */
-  void drawLine(cv::Mat& drawImg, FeatureCoordinates& other, const cv::Scalar& color, int thickness = 2) const{
+  void drawLine(cv::Mat& drawImg, const FeatureCoordinates& other, const cv::Scalar& color, int thickness = 2) const{
     cv::line(drawImg,get_c(),other.get_c(),color,thickness);
   }
 
@@ -200,6 +223,68 @@ class FeatureCoordinates{
    */
   void drawText(cv::Mat& drawImg, const std::string& s, const cv::Scalar& color) const{
     cv::putText(drawImg,s,get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
+  }
+
+  /** \brief Get the depth value from the triangulation of two bearing vectors (this is in C1, other is in C2).
+   *
+   *  @param other   - Bearing vector in another frame C2 (unit length!).
+   *  @param C2rC2C1 - Position vector, pointing from C2 to C1, expressed in coordinates of C2.
+   *  @param qC2C1   - Quaternion, expressing the orientation of C1 in the C2.
+   *  @param d       - Triangulated depth value along the bearing vector C1fP.
+   *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
+   *
+   *  todo: compare woth d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
+   */
+  bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
+    Eigen::Matrix<double,3,2> B;
+    B <<  qC2C1.rotate(get_nor().getVec()), other.get_nor().getVec();
+    const Eigen::Matrix2d BtB = B.transpose() * B;
+    if(BtB.determinant() < 0.000001){ // Projection rays almost parallel.
+      return false;
+    }
+    const Eigen::Vector2d dv = - BtB.inverse() * B.transpose() * C2rC2C1;
+    d.setParameter(fabs(dv[0]));
+    return true;
+  }
+
+  /** \brief Get the depth uncertainty tau of a triangulated depth value (this is in C1, other is in C2).
+   *
+   *  Consider a bearing vector C1fP in a reference frame and a bearing vector C2fP in a partner frame have been used
+   *  to triangulate a depth value d (along the bearing vector C1fP). Let's call the so gained 3D landmark position P.
+   *  In order to get depth uncertainty value of d (along the bearing vector C1fP), a constant pixel error
+   *  of the detection of C2fP can be projected to the ray of C1fP (to the side which is farther to the reference frame).
+   *  Let's call 3D point corresponding to the maximal pixel error P_plus.
+   *  The depth uncertainty tau is then defined as \f$tau=|(P\_plus - P)|\f$.
+   *
+   *  @param C1rC1C2        - Position vector, pointing from C1 to C2, expressed in coordinates of C1.
+   *  @param d              - Triangulated depth value along the bearing vector C1fP.
+   *  @param px_error_angle - Angle between the bearing vector C2fP and the bearing vector corresponding to the maximal
+   *                          pixel error. <br>
+   *                          Compute it as: <br>
+   *                           \f$px\_error\_angle = 2 \cdot \arctan{\frac{px\_error}{2 \cdot fx}}\f$ <br>
+   *                          ,where px_error is the assumed pixel error (e.g. 1 pixel) and
+   *                          fx the focal length (expressed in pixel) of the camera belonging to C2fP.
+   * @return the depth uncertainty value \f$tau=|(P\_plus - P)|\f$.
+   *
+   * todo: rethink
+   */
+  float getDepthUncertaintyTau(const V3D& C1rC1C2, const float d, const float px_error_angle)
+  {
+    const V3D C1fP = get_nor().getVec();
+    float t_0 = C1rC1C2(0);
+    float t_1 = C1rC1C2(1);
+    float t_2 = C1rC1C2(2);
+    float a_0 = C1fP(0) * d - t_0;
+    float a_1 = C1fP(1) * d - t_1;
+    float a_2 = C1fP(2) * d - t_2;
+    float t_norm = std::sqrt(t_0 * t_0 + t_1 * t_1 + t_2 * t_2);
+    float a_norm = std::sqrt(a_0 * a_0 + a_1 * a_1 + a_2 * a_2);
+    float alpha = std::acos((C1fP(0) * t_0 + C1fP(1) * t_1 + C1fP(2) * t_2) / t_norm);
+    float beta = std::acos(( a_0 * (-t_0) + a_1 * (-t_1) + a_2 * (-t_2) ) / (t_norm * a_norm));
+    float beta_plus = beta + px_error_angle;
+    float gamma_plus = M_PI - alpha - beta_plus;                             // Triangle angles sum to PI.
+    float d_plus = t_norm * std::sin(beta_plus) / std::sin(gamma_plus);      // Law of sines.
+    return (d_plus - d);                                                     // Tau.
   }
 };
 

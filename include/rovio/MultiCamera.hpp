@@ -78,14 +78,30 @@ class MultiCamera{
    *   @param i - Camera index of input frame
    *   @param i - Camera index of output frame
    *   @param vecIn - Bearing vector to be transformed
-   *   @param depth - Corresponding depth
+   *   @param depth - Corresponding distance
    *   @param vecOut - Transformed bearing vector
    */
-  void transformBearing(const int i, const int j, const Eigen::Vector3d& vecIn, const double& depth, Eigen::Vector3d& vecOut) const{
+  void transformBearing(const int i, const int j, const Eigen::Vector3d& vecIn, const double& d, Eigen::Vector3d& vecOut) const{
     const QPD qDC = qCB_[j]*qCB_[i].inverted(); // TODO: avoid double computation
     const V3D CrCD = qCB_[i].rotate(V3D(BrBC_[j]-BrBC_[i]));
-    const V3D CrCP = depth*vecIn;
+    const V3D CrCP = d*vecIn;
     vecOut = qDC.rotate(V3D(CrCP-CrCD));
+  }
+  /** \brief Transforms feature coordinates from one camera frame to another
+   *
+   *   @param i - Camera index of input frame
+   *   @param i - Camera index of output frame
+   *   @param cIn - Feature coordinates to be transformed
+   *   @param depth - Corresponding distance
+   *   @param cOut - Transformed feature coordinates
+   */
+  void transformBearing(const int i, const int j, const FeatureCoordinates& vecIn, const FeatureDistance& d, FeatureCoordinates& vecOut) const{
+    const QPD qDC = qCB_[j]*qCB_[i].inverted(); // TODO: avoid double computation
+    const V3D CrCD = qCB_[i].rotate(V3D(BrBC_[j]-BrBC_[i]));
+    const V3D CrCP = d.getDistance()*vecIn.get_nor().getVec();
+    vecOut.nor_.setFromVector(qDC.rotate(V3D(CrCP-CrCD)));
+    vecOut.valid_c_ = false;
+    vecOut.valid_nor_ = true;
   }
 };
 
