@@ -52,19 +52,26 @@ class FeatureManager{
   int camID_; /**<Camera ID.*/
 
   FeatureCoordinates log_previous_;
-  FeatureCoordinates log_prediction_;
-  FeatureCoordinates log_predictionC0_;
-  FeatureCoordinates log_predictionC1_;
-  FeatureCoordinates log_predictionC2_;
-  FeatureCoordinates log_predictionC3_;
-  FeatureCoordinates log_meas_;
-  FeatureCoordinates log_current_;
+//  FeatureCoordinates log_prediction_;
+//  FeatureCoordinates log_predictionC0_;
+//  FeatureCoordinates log_predictionC1_;
+//  FeatureCoordinates log_predictionC2_;
+//  FeatureCoordinates log_predictionC3_;
+//  FeatureCoordinates log_meas_;
+//  FeatureCoordinates log_current_;
 
   FeatureCoordinates* mpCoordinates_;
   FeatureDistance* mpDistance_;
   FeatureWarping* mpWarping_;
   FeatureStatistics<nCam>* mpStatistics_;
   MultilevelPatch<nLevels,patchSize>* mpMultilevelPatch_;
+
+  // Internal objects, only used if no external objects are linked
+  FeatureCoordinates* _mpCoordinates;
+  FeatureDistance* _mpDistance;
+  FeatureWarping* _mpWarping;
+  FeatureStatistics<nCam>* _mpStatistics;
+  MultilevelPatch<nLevels,patchSize>* _mpMultilevelPatch;
 
   /** Constructor
    */
@@ -76,24 +83,46 @@ class FeatureManager{
     mpWarping_ = nullptr;
     mpStatistics_ = nullptr;
     mpMultilevelPatch_ = nullptr;
+    _mpCoordinates = nullptr;
+    _mpDistance = nullptr;
+    _mpWarping = nullptr;
+    _mpStatistics = nullptr;
+    _mpMultilevelPatch = nullptr;
   }
 
   /** Destructor
    */
-  ~FeatureManager(){}
+  ~FeatureManager(){
+    delete _mpCoordinates;
+    delete _mpDistance;
+    delete _mpWarping;
+    delete _mpStatistics;
+    delete _mpMultilevelPatch;
+  }
 
-  /** \brief Resets the FeatureManager.
-   *
-   * @param idx - feature ID
-   * @initTime  - Time at initialization.
+  /** \brief Allocates all pointer which are still nullptr
    */
-  void reset(const int idx = -1, const double initTime = 0.0){
-    idx_ = idx;
-    mpCoordinates_->resetCoordinates();
-    mpDistance_->reset();
-    mpWarping_->reset();
-    mpStatistics_->resetStatistics(initTime);
-    mpMultilevelPatch_->reset();
+  void allocateMissing(){
+    if(mpCoordinates_ == nullptr){
+      _mpCoordinates = new FeatureCoordinates();
+      mpCoordinates_ = _mpCoordinates;
+    }
+    if(mpDistance_ == nullptr){
+      _mpDistance = new FeatureDistance();
+      mpDistance_ = _mpDistance;
+    }
+    if(mpWarping_ == nullptr){
+      _mpWarping = new FeatureWarping();
+      mpWarping_ = _mpWarping;
+    }
+    if(mpStatistics_ == nullptr){
+      _mpStatistics = new FeatureStatistics<nCam>();
+      mpStatistics_ = _mpStatistics;
+    }
+    if(mpMultilevelPatch_ == nullptr){
+      _mpMultilevelPatch = new MultilevelPatch<nLevels,patchSize>();
+      mpMultilevelPatch_ = _mpMultilevelPatch;
+    }
   }
 
   /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patch extracted from the reference image
@@ -136,6 +165,14 @@ class FeatureSetManager{
   /** \brief Destructor
      */
   ~FeatureSetManager(){}
+
+  /** \brief Allocates all pointer which are still nullptr
+   */
+  void allocateMissing(){
+    for(unsigned int i=0;i<nMax;i++){
+      features_[i].allocateMissing();
+    }
+  }
 
   /** \brief Resets the MultilevelPatchSet.
    */
@@ -286,7 +323,7 @@ class FeatureSetManager{
     featureCoordinates.mpCamera_ = &mpMultiCamera_->cameras_[camID];
     for(unsigned int i=0;i<nMax;i++){
       if(isValid_[i]){
-        mpMultiCamera_->transformBearing(features_[i].camID_,camID,*(features_[i].mpFeatureCoordinates),*(features_[i].mpFeatureDistance),featureCoordinates);
+        mpMultiCamera_->transformBearing(features_[i].camID_,camID,*(features_[i].mpCoordinates_),*(features_[i].mpDistance_),featureCoordinates);
         if(featureCoordinates.isInFront()){
           for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
             for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
@@ -317,12 +354,14 @@ class FeatureSetManager{
         const int nf = *(buckets[bucketID].begin());
         buckets[bucketID].erase(nf);
         const int ind = makeNewFeature(camID);
-        features_[ind].mpStatistics_.camID_ = camID;
+        features_[ind].camID_ = camID;
         *(features_[ind].mpCoordinates_) = candidates[nf];
+        features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
-        features_[ind].mpDistance_.reset();
-        features_[ind].mpWarping_.reset();
-        features_[ind].mpWarping_.set_affineTransfrom(Eigen::Matrix2f::Identity());
+        features_[ind].mpDistance_->reset();
+        features_[ind].mpWarping_->reset();
+        features_[ind].mpWarping_->set_affineTransfrom(Eigen::Matrix2f::Identity());
+        features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         if(ind >= 0){
           newSet.insert(ind);
         }
@@ -347,6 +386,7 @@ class FeatureSetManager{
         }
       }
     }
+
     return newSet;
   }
 };

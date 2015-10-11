@@ -82,7 +82,7 @@ class FeatureWarping{
 
   /** \brief Constructor
    */
-  FeatureWarping(const float warpDistance,const Camera* mpCamera = nullptr, const FeatureCoordinates* mpCoordinates = nullptr): mpCamera_(mpCamera), mpCoordinates_(mpCoordinates), warpDistance_(warpDistance){
+  FeatureWarping(const float warpDistance = 1.0,const Camera* mpCamera = nullptr, const FeatureCoordinates* mpCoordinates = nullptr): mpCamera_(mpCamera), mpCoordinates_(mpCoordinates), warpDistance_(warpDistance){
     reset();
   }
 

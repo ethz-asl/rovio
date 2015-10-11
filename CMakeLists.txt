@@ -85,9 +85,9 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
 #
 #add_executable(rovio_node src/rovio_node.cpp)
 #target_link_libraries(rovio_node ${PROJECT_NAME})
-#
-#add_executable(feature_tracker_node src/feature_tracker_node.cpp)
-#target_link_libraries(feature_tracker_node ${PROJECT_NAME})
+
+add_executable(feature_tracker_node src/feature_tracker_node.cpp)
+target_link_libraries(feature_tracker_node ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/")
 	message(STATUS "Building GTests!")
