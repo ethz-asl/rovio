@@ -42,6 +42,7 @@ class MultilevelPatchAlignment {
   Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
   Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
   Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
+  Eigen::JacobiSVD<Eigen::MatrixXf> svd_;
 
   /** \brief Get the raw linear align equations (A*x=b), given by the [(#pixel)x2] Matrix  A (float) and the [(#pixel)x1] vector b (float).
    *
@@ -60,6 +61,8 @@ class MultilevelPatchAlignment {
    */
   bool getLinearAlignEquations(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const FeatureWarping* mpWarp, const int l1, const int l2,
                                Eigen::MatrixXf& A, Eigen::MatrixXf& b){
+    A.resize(0,0);
+    b.resize(0,0);
     Eigen::Matrix2f affInv;
     if(mpWarp != nullptr){
       affInv = mpWarp->get_affineTransform().inverse(); // TODO: catch if too distorted
@@ -68,60 +71,52 @@ class MultilevelPatchAlignment {
     }
     int numLevel = 0;
     FeatureCoordinates c_level;
-    for(int l = l1; l <= l2; l++){
-      pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
-        mp.patches_[l].computeGradientParameters();
-        if(mp.patches_[l].validGradientParameters_){
-          numLevel++;
-        }
-      }
-    }
-    if(numLevel==0){
-      return false;
-    }
-    A.resize(numLevel*patch_size*patch_size,2);
-    b.resize(numLevel*patch_size*patch_size,1);
     const int halfpatch_size = patch_size/2;
     float mean_diff = 0;
     float mean_diff_dx = 0;
     float mean_diff_dy = 0;
     Patch<patch_size> extractedPatch;
-
-    int count = 0;
-    for(int l = l1; l <= l2; l++, count++){
+    for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false) && mp.patches_[l].validGradientParameters_){
-        const int refStep = pyr.imgs_[l].step.p[0];
-
-        const float* it_patch = mp.patches_[l].patch_;
-        const float* it_dx = mp.patches_[l].dx_;
-        const float* it_dy = mp.patches_[l].dy_;
-        extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level,mpWarp,false);
-        const float* it_patch_extracted = extractedPatch.patch_;
-        for(int y=0; y<patch_size; ++y){
-          for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
-            const float res = *it_patch_extracted - *it_patch;
-            const float Jx = -pow(0.5,l)*(*it_dx);
-            const float Jy = -pow(0.5,l)*(*it_dy);
-            mean_diff += res;
-            b(count*patch_size*patch_size+y*patch_size+x,0) = res;
-            if(mpWarp == nullptr){
-              mean_diff_dx += Jx;
-              mean_diff_dy += Jy;
-              A(count*patch_size*patch_size+y*patch_size+x,0) = Jx;
-              A(count*patch_size*patch_size+y*patch_size+x,1) = Jy;
-            } else {
-              const float Jx_warp = Jx*affInv(0,0)+Jy*affInv(1,0);
-              const float Jy_warp = Jx*affInv(0,1)+Jy*affInv(1,1);
-              mean_diff_dx += Jx_warp;
-              mean_diff_dy += Jy_warp;
-              A(count*patch_size*patch_size+y*patch_size+x,0) = Jx_warp;
-              A(count*patch_size*patch_size+y*patch_size+x,1) = Jy_warp;
+      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
+        mp.patches_[l].computeGradientParameters();
+        if(mp.patches_[l].validGradientParameters_){
+          numLevel++;
+          A.conservativeResize(numLevel*patch_size*patch_size,2);
+          b.conservativeResize(numLevel*patch_size*patch_size,1);
+          const int refStep = pyr.imgs_[l].step.p[0];
+          const float* it_patch = mp.patches_[l].patch_;
+          const float* it_dx = mp.patches_[l].dx_;
+          const float* it_dy = mp.patches_[l].dy_;
+          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level,mpWarp,false);
+          const float* it_patch_extracted = extractedPatch.patch_;
+          for(int y=0; y<patch_size; ++y){
+            for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
+              const float res = *it_patch_extracted - *it_patch;
+              const float Jx = -pow(0.5,l)*(*it_dx);
+              const float Jy = -pow(0.5,l)*(*it_dy);
+              mean_diff += res;
+              b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = res;
+              if(mpWarp == nullptr){
+                mean_diff_dx += Jx;
+                mean_diff_dy += Jy;
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = Jy;
+              } else {
+                const float Jx_warp = Jx*affInv(0,0)+Jy*affInv(1,0);
+                const float Jy_warp = Jx*affInv(0,1)+Jy*affInv(1,1);
+                mean_diff_dx += Jx_warp;
+                mean_diff_dy += Jy_warp;
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx_warp;
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = Jy_warp;
+              }
             }
           }
         }
       }
+    }
+    if(numLevel==0){
+      return false;
     }
     mean_diff = mean_diff/static_cast<float>(numLevel*patch_size*patch_size);
     mean_diff_dx = mean_diff_dx/static_cast<float>(numLevel*patch_size*patch_size);
@@ -343,7 +338,7 @@ class MultilevelPatchAlignment {
     return converged;
   }
 
-  /** \brief 2D patch alignment.
+  /** \brief 2D patch alignment. No guarantee that final coordinates are fully in the frame.
    *
    * @param cOut        - Estimated coordinates for the patch alignment.
    * @param pyr         - Considered image pyramid.
@@ -372,7 +367,11 @@ class MultilevelPatchAlignment {
       if(!getLinearAlignEquations(pyr,mp,cOut,mpWarp,l1,l2,A_,b_)){
         return false;
       }
-      update = A_.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b_);
+      svd_.compute(A_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+      if(svd_.nonzeroSingularValues()<2){
+        return false;
+      }
+      update = svd_.solve(b_);
       cOut.set_c(cv::Point2f(cOut.get_c().x + update[0],cOut.get_c().y + update[1]));
 
       if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
@@ -411,13 +410,14 @@ class MultilevelPatchAlignment {
    */
   bool align2DComposed(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp,
                        const int lowest_level,const int highest_level, const int start_level){
-    bool success = true;
+    cOut = cInit;
     for(int l = start_level;l>=highest_level;--l){
-      if(!align2D(cOut,pyr,mp,cInit,mpWarp,l,lowest_level)){
+      if(!align2D(cOut,pyr,mp,cOut,mpWarp,l,lowest_level)){
+        return false;
         break;
       }
     }
-    return success;
+    return true;
   }
 };
 

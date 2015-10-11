@@ -36,6 +36,7 @@
 #include <sensor_msgs/Imu.h>
 #include "rovio/Camera.hpp"
 #include "rovio/FeatureManager.hpp"
+#include "rovio/MultilevelPatchAlignment.hpp"
 
 namespace rovio{
 
@@ -49,7 +50,7 @@ class FeatureTrackerNode{
   static constexpr int nMax_ = 100;  /**<Maximum number of MultilevelPatchFeature%s in a MultilevelPatchSet.*/
   static constexpr int patchSize_ = 8;  /**<Edge length of the patches in pixels. Value must be a multiple of 2!*/
   static constexpr int nLevels_ = 4;  /**<Total number of image pyramid levels.*/
-  static constexpr int nCam_ = 1;  /**<Total number of image pyramid levels.*/
+  static constexpr int nCam_ = 1;  /**<Total number of image pyramid levels. Only 1 camera supported so far.*/
   cv::Mat draw_image_, img_, draw_patches_;
   unsigned int min_feature_count_;  /**<New MultilevelPatchFeature%s are added to the existing MultilevelPatchSet,
                                         if the number of valid MultilevelPatchFeature%s in the set is smaller
@@ -57,6 +58,7 @@ class FeatureTrackerNode{
   unsigned int max_feature_count_;  /**<Maximal number of features, which are added at a time (not total). See rovio::addBestCandidates().*/
   ImagePyramid<nLevels_> pyr_;
   class FeatureSetManager<nLevels_,patchSize_,nCam_,nMax_> fsm_;
+  class MultilevelPatchAlignment<nLevels_,patchSize_> alignment_;
   static constexpr int nDetectionBuckets_ = 100;  /**<See rovio::addBestCandidates().*/
   static constexpr double scoreDetectionExponent_ = 0.25;  /**<See rovio::addBestCandidates().*/
   static constexpr double penaltyDistance_ = 20;  /**<See rovio::addBestCandidates().*/
@@ -142,85 +144,91 @@ class FeatureTrackerNode{
         }
         fsm_.features_[i].mpStatistics_->increaseStatistics(current_time);
         for(int j=0;j<nCam_;j++){
-          fsm_.features_[i].mpStatistics_->status_[j] = TRACKED;
+          fsm_.features_[i].mpStatistics_->status_[j] = UNKNOWN;
         }
       }
     }
 
-//    // Track valid features
-//    const double t1 = (double) cv::getTickCount();
-//    for(unsigned int i=0;i<nMax_;i++){
-//      if(mlps_.isValid_[i]){
-//        mlps_.features_[i].log_prediction_.set_c(mlps_.features_[i].get_c());
-//        align2DComposed(mlps_.features_[i],pyr_,l2,l1,l2-l1,false);
-//      }
-//    }
-//    const double t2 = (double) cv::getTickCount();
-//    ROS_INFO_STREAM(" Matching " << mlps_.getValidCount() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
-//    for(unsigned int i=0;i<nMax_;i++){
-//      if(mlps_.isValid_[i]){
-//        if(mlps_.features_[i].status_.matchingStatus_ == FOUND){
-//          mlps_.features_[i].status_.trackingStatus_ = TRACKED;
-//          mlps_.features_[i].log_meas_.set_c(mlps_.features_[i].get_c());
-//          drawPoint(draw_image_,mlps_.features_[i].log_meas_,cv::Scalar(0,255,255));
-//          drawLine(draw_image_,mlps_.features_[i].log_meas_,mlps_.features_[i].log_prediction_,cv::Scalar(0,255,255));
-//          drawText(draw_image_,mlps_.features_[i].log_meas_,std::to_string(mlps_.features_[i].idx_),cv::Scalar(0,255,255));
-//        } else {
-//          mlps_.features_[i].status_.trackingStatus_ = FAILED;
-//          if(drawNotFound_){
-//            drawPoint(draw_image_,mlps_.features_[i].log_prediction_,cv::Scalar(0,0,255));
-//            drawText(draw_image_,mlps_.features_[i].log_prediction_,std::to_string(mlps_.features_[i].idx_),cv::Scalar(0,0,255));
-//          }
-//        }
-//      }
-//    }
-//    MultilevelPatchFeature<nLevels_,patchSize_> mlp;
-//    for(unsigned int i=0;i<numPatchesPlot;i++){
-//      if(mlps_.isValid_[i]){
-//        mlps_.features_[i].drawMultilevelPatch(draw_patches_,cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
-//        mlp.set_c(mlps_.features_[i].log_prediction_.get_c());
-//        extractMultilevelPatchFromImage(mlp,pyr_,nLevels_-1,false);
-//        mlp.drawMultilevelPatch(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+6,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
-//        if(mlps_.features_[i].status_.matchingStatus_ == FOUND){
-//          mlp.set_c(mlps_.features_[i].get_c());
-//          extractMultilevelPatchFromImage(mlp,pyr_,nLevels_-1,false);
-//          mlp.drawMultilevelPatch(draw_patches_,cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+10,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
-//          cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
-//          cv::rectangle(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+4,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+7,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
-//        } else {
-//          cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(0),2,8,0);
-//          cv::rectangle(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+4,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+7,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(0),2,8,0);
-//        }
-//        cv::putText(draw_patches_,std::to_string(mlps_.features_[i].idx_),cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)+10),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
-//      }
-//    }
-//
-//    // Prune
-//    // Check the MultilevelPatchFeature%s in the MultilevelPatchSet for their quality (isGoodFeature(...)).
-//    // If a bad quality of a MultilevelPatchFeature is recognized, it is set to invalid. New MultilevelPatchFeature%s
-//    // replace the array places of invalid MultilevelPatchFeature%s in the MultilevelPatchSet.
-//    int prune_count = 0;
-//    for(unsigned int i=0;i<nMax_;i++){
-//      if(mlps_.isValid_[i]){
-//        if(!mlps_.features_[i].isGoodFeature(6,1,0.5,0.5)){
-//          mlps_.isValid_[i] = false;
-//          prune_count++;
-//        }
-//      }
-//    }
-//    ROS_INFO_STREAM(" Pruned " << prune_count << " features");
-//
-//    // Extract feature patches
-//    // Extract new MultilevelPatchFeature%s at the current tracked feature positions.
-//    // Extracted multilevel patches are aligned with the image axes.
-//    for(unsigned int i=0;i<nMax_;i++){
-//      if(mlps_.isValid_[i]){
-//        if(mlps_.features_[i].status_.matchingStatus_ == FOUND && isMultilevelPatchInFrame(mlps_.features_[i],pyr_,nLevels_-1,true)){
-//          extractMultilevelPatchFromImage(mlps_.features_[i],pyr_,nLevels_-1,true);
-//        }
-//      }
-//    }
-//
+    // Track valid features
+    FeatureCoordinates alignedCoordinates;
+    const double t1 = (double) cv::getTickCount();
+    for(unsigned int i=0;i<nMax_;i++){
+      if(fsm_.isValid_[i]){
+        fsm_.features_[i].log_prediction_ = *(fsm_.features_[i].mpCoordinates_);
+        if(alignment_.align2DComposed(alignedCoordinates,pyr_,*fsm_.features_[i].mpMultilevelPatch_,*fsm_.features_[i].mpCoordinates_,nullptr,l2,l1,l1)){
+          fsm_.features_[i].mpStatistics_->status_[0] = TRACKED;
+          fsm_.features_[i].mpCoordinates_->set_c(alignedCoordinates.get_c());
+          fsm_.features_[i].log_previous_ = *(fsm_.features_[i].mpCoordinates_);
+          fsm_.features_[i].mpCoordinates_->drawPoint(draw_image_,cv::Scalar(0,255,255));
+          fsm_.features_[i].mpCoordinates_->drawLine(draw_image_,fsm_.features_[i].log_prediction_,cv::Scalar(0,255,255));
+          fsm_.features_[i].mpCoordinates_->drawText(draw_image_,std::to_string(i),cv::Scalar(0,255,255));
+          if(i==18){
+            for(int j=0;j<nLevels_;j++){
+//              std::cout << fsm_.features_[i].mpMultilevelPatch_->isValidPatch_[j] << std::endl;
+//              std::cout << fsm_.features_[i].mpMultilevelPatch_->patches_[j].dx_[0] << std::endl;
+            }
+//            std::cout << alignment_.A_.transpose() << std::endl;
+//            std::cout << alignment_.b_.transpose() << std::endl;
+          }
+
+        } else {
+          fsm_.features_[i].mpStatistics_->status_[0] = FAILED_ALIGNEMENT;
+          fsm_.features_[i].mpCoordinates_->drawPoint(draw_image_,cv::Scalar(0,0,255));
+          fsm_.features_[i].mpCoordinates_->drawText(draw_image_,std::to_string(fsm_.features_[i].idx_),cv::Scalar(0,0,255));
+        }
+      }
+    }
+    const double t2 = (double) cv::getTickCount();
+    ROS_INFO_STREAM(" Matching " << fsm_.getValidCount() << " patches (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)");
+    MultilevelPatch<nLevels_,patchSize_> mp;
+    for(unsigned int i=0;i<numPatchesPlot;i++){
+      if(fsm_.isValid_[i+10]){
+        fsm_.features_[i+10].mpMultilevelPatch_->drawMultilevelPatch(draw_patches_,cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
+        if(mp.isMultilevelPatchInFrame(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,nullptr,false)){
+          mp.extractMultilevelPatchFromImage(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,nullptr,false);
+          mp.drawMultilevelPatch(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+6,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
+        }
+        if(fsm_.features_[i+10].mpStatistics_->status_[0] == TRACKED
+            && mp.isMultilevelPatchInFrame(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,nullptr,false)){
+          mp.extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,nullptr,false);
+          mp.drawMultilevelPatch(draw_patches_,cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+10,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
+          cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
+          cv::rectangle(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+4,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+7,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
+        } else {
+          cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(0),2,8,0);
+          cv::rectangle(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+4,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+7,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(0),2,8,0);
+        }
+        cv::putText(draw_patches_,std::to_string(fsm_.features_[i+10].idx_),cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)+10),cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
+      }
+    }
+
+    // Prune
+    // Check the MultilevelPatchFeature%s in the MultilevelPatchSet for their quality (isGoodFeature(...)).
+    // If a bad quality of a MultilevelPatchFeature is recognized, it is set to invalid. New MultilevelPatchFeature%s
+    // replace the array places of invalid MultilevelPatchFeature%s in the MultilevelPatchSet.
+    int prune_count = 0;
+    for(unsigned int i=0;i<nMax_;i++){
+      if(fsm_.isValid_[i]){
+        if(fsm_.features_[i].mpStatistics_->status_[0] == FAILED_ALIGNEMENT){
+          fsm_.isValid_[i] = false;
+          prune_count++;
+        }
+      }
+    }
+    ROS_INFO_STREAM(" Pruned " << prune_count << " features");
+
+    // Extract feature patches
+    // Extract new MultilevelPatchFeature%s at the current tracked feature positions.
+    // Extracted multilevel patches are aligned with the image axes.
+    for(unsigned int i=0;i<nMax_;i++){
+      if(fsm_.isValid_[i]){
+        if(fsm_.features_[i].mpStatistics_->status_[0] == TRACKED
+            && fsm_.features_[i].mpMultilevelPatch_->isMultilevelPatchInFrame(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,nullptr,true)){
+          fsm_.features_[i].mpMultilevelPatch_->extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,nullptr,true);
+        }
+      }
+    }
+
     // Get new features, if there are too little valid MultilevelPatchFeature%s in the MultilevelPatchSet.
     if(fsm_.getValidCount() < min_feature_count_){
       std::vector<FeatureCoordinates> candidates;
@@ -244,13 +252,6 @@ class FeatureTrackerNode{
         for(int j=0;j<nCam_;j++){
           fsm_.features_[*it].mpStatistics_->status_[j] = TRACKED;
         }
-      }
-    }
-
-    for(unsigned int i=0;i<nMax_;i++){
-      if(fsm_.isValid_[i]){
-        fsm_.features_[i].mpCoordinates_->drawPoint(draw_image_,cv::Scalar(0,255,255));
-//        fsm_.isValid_[i] = false;
       }
     }
 

@@ -72,31 +72,33 @@ class Patch {
    *         Sets validGradientParameters_ afterwards to true.
    */
   void computeGradientParameters() const{
-    H_.setZero();
-    const int refStep = patchSize+2;
-    float* it_dx = dx_;
-    float* it_dy = dy_;
-    const float* it;
-    Eigen::Vector3f J;
-    for(int y=0; y<patchSize; ++y){
-      it = patchWithBorder_ + (y+1)*refStep + 1;
-      for(int x=0; x<patchSize; ++x, ++it, ++it_dx, ++it_dy){
-        J[0] = 0.5 * (it[1] - it[-1]);
-        J[1] = 0.5 * (it[refStep] - it[-refStep]);
-        J[2] = 1;
-        *it_dx = J[0];
-        *it_dy = J[1];
-        H_ += J*J.transpose();
+    if(!validGradientParameters_){
+      H_.setZero();
+      const int refStep = patchSize+2;
+      float* it_dx = dx_;
+      float* it_dy = dy_;
+      const float* it;
+      Eigen::Vector3f J;
+      for(int y=0; y<patchSize; ++y){
+        it = patchWithBorder_ + (y+1)*refStep + 1;
+        for(int x=0; x<patchSize; ++x, ++it, ++it_dx, ++it_dy){
+          J[0] = 0.5 * (it[1] - it[-1]);
+          J[1] = 0.5 * (it[refStep] - it[-refStep]);
+          J[2] = 1;
+          *it_dx = J[0];
+          *it_dy = J[1];
+          H_ += J*J.transpose();
+        }
       }
-    }
-    const float dXX = H_(0,0)/(patchSize*patchSize);
-    const float dYY = H_(1,1)/(patchSize*patchSize);
-    const float dXY = H_(0,1)/(patchSize*patchSize);
+      const float dXX = H_(0,0)/(patchSize*patchSize);
+      const float dYY = H_(1,1)/(patchSize*patchSize);
+      const float dXY = H_(0,1)/(patchSize*patchSize);
 
-    e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
-    e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
-    s_ = e0_;
-    validGradientParameters_ = true;
+      e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+      e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
+      s_ = e0_;
+      validGradientParameters_ = true;
+    }
   }
 
   /** \brief Extracts and sets the patch intensity values (patch_) from the intensity values of the
@@ -119,7 +121,7 @@ class Patch {
    *   @return the Shi-Tomasi Score s_ ( smaller eigenvalue of the Hessian H_ ).
    */
   float getScore() const{
-    if(!validGradientParameters_) computeGradientParameters();
+    computeGradientParameters();
     return s_;
   }
 
@@ -129,7 +131,7 @@ class Patch {
    *   @return the Hessian Matrix H_ .
    */
   Eigen::Matrix3f getHessian() const{
-    if(!validGradientParameters_) computeGradientParameters();
+    computeGradientParameters();
     return H_;
   }
 
@@ -302,6 +304,7 @@ class Patch {
     if(withBorder){
       extractPatchFromPatchWithBorder();
     }
+    validGradientParameters_ = false;
   }
 };
 

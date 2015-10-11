@@ -52,7 +52,7 @@ class FeatureManager{
   int camID_; /**<Camera ID.*/
 
   FeatureCoordinates log_previous_;
-//  FeatureCoordinates log_prediction_;
+  FeatureCoordinates log_prediction_;
 //  FeatureCoordinates log_predictionC0_;
 //  FeatureCoordinates log_predictionC1_;
 //  FeatureCoordinates log_predictionC2_;
