@@ -146,10 +146,10 @@ class RovioNode{
   /** \brief Tests the functionality of the rovio node.
    */
   void makeTest(){
-    FeatureSetManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_,mtState::nMax_> fsmTest(&mpFilter_->multiCamera_);
-    mtState testState = mpFilter_->init_.state_;
-    testState.initFeatureManagers(fsmTest);
-    fsmTest.allocateMissing();
+    mtFilterState testFilterState;
+    testFilterState = mpFilter_->init_;
+    testFilterState.setCamera(&mpFilter_->multiCamera_);
+    mtState& testState = testFilterState.state_;
     unsigned int s = 2;
     testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
     predictionMeas_.setRandom(s);
@@ -165,27 +165,23 @@ class RovioNode{
       testState.aux().warping_[i].set_bearingCorners(bearingCorners);
     }
     testState.CfP(0).camID_ = mtState::nCam_-1;
-    fsmTest.setAllCameraPointers();
+    testFilterState.fsm_.setAllCameraPointers();
 
     // Prediction
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
-//    // Update
-//    if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
-//      for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
-//        testState.aux().activeFeature_ = i;
-//        testState.aux().activeCameraCounter_ = 0;
-//        const int camID = testState.aux().camID_[i];
-//        int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-//        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setFeatureID(i);
-//        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-//        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
-//        testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-//        activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-//        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-//        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
-//      }
-//    }
+    // Update
+    if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
+      for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
+        testState.aux().activeFeature_ = i;
+        testState.aux().activeCameraCounter_ = 0;
+        const int camID = testState.CfP(i).camID_;
+        int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
+        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        testState.aux().activeCameraCounter_ = mtState::nCam_-1;
+        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+      }
+    }
 
     // CF
 //    cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);

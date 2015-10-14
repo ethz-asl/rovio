@@ -171,7 +171,7 @@ class Patch {
    * @param s           - Scaling factor.
    * @param color       - Line color.
    */
-  void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
+  void drawPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
     const int halfpatch_size = patchSize/2;
     Eigen::Matrix2f A;
     if(mpWarp == nullptr){

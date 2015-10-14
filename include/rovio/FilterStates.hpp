@@ -455,9 +455,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
   FeatureSetManager<nLevels,patchSize,nCam,nMax> fsm_;
-  FeatureOutputCT<mtState> featureOutputCT_;
-  FeatureOutput featureOutput_;
-  typename FeatureOutputCT<mtState>::mtOutputCovMat featureOutputCov__;
+  mutable rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
+  mutable FeatureOutput featureOutput_;
+  mutable typename rovio::FeatureOutputCT<mtState>::mtOutputCovMat featureOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
@@ -473,7 +473,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
 
   /** \brief Constructor
    */
-  FilterState():fsm_(nullptr){
+  FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr){
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
@@ -484,6 +484,15 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     groundtruth_qCB_.setIdentity();
     groundtruth_BrBC_.setZero();
     plotGroundtruth_ = true;
+    state_.initFeatureManagers(fsm_);
+    fsm_.allocateMissing();
+  }
+
+  /** \brief @todo
+   */
+  void setCamera(MultiCamera<nCam>* mpMultiCamera){
+    fsm_.setCamera(mpMultiCamera);
+    transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
@@ -515,14 +524,14 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
    *  @param initCov - Initialization 3x3 Covariance-Matrix.
    */
   void resetFeatureCovariance(unsigned int i,const Eigen::Matrix<double,3,3>& initCov){
-    cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_dep>(i)+2).setZero();
-    cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_dep>(i)+2,0).setZero();
-    cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_nor>(i)).setZero();
-    cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_nor>(i),0).setZero();
-    cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i)+2,mtState::template getId<mtState::_dep>(i)+2) = initCov.block<1,1>(0,0);
-    cov_.template block<1,2>(mtState::template getId<mtState::_dep>(i)+2,mtState::template getId<mtState::_nor>(i)) = initCov.block<1,2>(0,1);
-    cov_.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)+2) = initCov.block<2,1>(1,0);
-    cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) = initCov.block<2,2>(1,1);
+    cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_fea>(i)+2).setZero();
+    cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_fea>(i)+2,0).setZero();
+    cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_fea>(i)).setZero();
+    cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_fea>(i),0).setZero();
+    cov_.template block<1,1>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = initCov.block<1,1>(0,0);
+    cov_.template block<1,2>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)) = initCov.block<1,2>(0,1);
+    cov_.template block<2,1>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)+2) = initCov.block<2,1>(1,0);
+    cov_.template block<2,2>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)) = initCov.block<2,2>(1,1);
   }
 
   /** \brief Get the median distance parameter values of the state features for each camera.
@@ -542,13 +551,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     for (unsigned int i = 0; i < nMax; i++) {
       if (fsm_.isValid_[i]) {
         for(int camID = 0;camID<nCam;camID++){
-          featureOutputCT_.setFeatureID(i);
-          featureOutputCT_.setOutputCameraID(camID);
-          featureOutputCT_.transformState(state_, featureOutput_);
+          transformFeatureOutputCT_.setFeatureID(i);
+          transformFeatureOutputCT_.setOutputCameraID(camID);
+          transformFeatureOutputCT_.transformState(state_, featureOutput_);
           if(featureOutput_.c().isInFront()){
-            featureOutputCT_.transformCovMat(state_, cov_, featureOutputCov__);
-            const double uncertainty = sqrt(featureOutputCov__(2,2))*featureOutput_.d().getDistanceDerivative();
-            const double depth = fsm_.features_[i].mpDistance_.getDistance();
+            transformFeatureOutputCT_.transformCovMat(state_, cov_, featureOutputCov_);
+            const double uncertainty = sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative();
+            const double depth = fsm_.features_[i].mpDistance_->getDistance();
             if(uncertainty/depth > maxUncertaintyToDistanceRatio){
               distanceParameterCollection[camID].push_back(featureOutput_.d().p_);
             }

@@ -52,12 +52,11 @@ class FeatureManager{
 
   FeatureCoordinates log_previous_;
   FeatureCoordinates log_prediction_;
-//  FeatureCoordinates log_predictionC0_;
-//  FeatureCoordinates log_predictionC1_;
-//  FeatureCoordinates log_predictionC2_;
-//  FeatureCoordinates log_predictionC3_;
-//  FeatureCoordinates log_meas_;
-//  FeatureCoordinates log_current_;
+  FeatureCoordinates log_predictionC0_;
+  FeatureCoordinates log_predictionC1_;
+  FeatureCoordinates log_predictionC2_;
+  FeatureCoordinates log_predictionC3_;
+  FeatureCoordinates log_meas_;
 
   FeatureCoordinates* mpCoordinates_;
   FeatureDistance* mpDistance_;
@@ -98,6 +97,17 @@ class FeatureManager{
     delete _mpMultilevelPatch;
   }
 
+  FeatureManager& operator= (const FeatureManager &other){
+    idx_ = other.idx_;
+    log_previous_ = other.log_previous_;
+    log_prediction_ = other.log_prediction_;
+    log_predictionC0_ = other.log_predictionC0_;
+    log_predictionC1_ = other.log_predictionC1_;
+    log_predictionC2_ = other.log_predictionC2_;
+    log_predictionC3_ = other.log_predictionC3_;
+    return *this;
+  }
+
   /** \brief Allocates all pointer which are still nullptr
    */
   void allocateMissing(){
@@ -121,20 +131,6 @@ class FeatureManager{
       _mpMultilevelPatch = new MultilevelPatch<nLevels,patchSize>();
       mpMultilevelPatch_ = _mpMultilevelPatch;
     }
-  }
-
-  /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patch extracted from the reference image
-   *         for an specific pyramid level interval.
-   *
-   * @param pyr        - Image pyramid of reference image
-   * @param l1         - Start pyramid level (l1<l2)
-   * @param l2         - End pyramid level (l1<l2)
-   * @return the RMSE value for the patches in the set pyramid level interval.
-   */
-  float computeAverageDifferenceReprojection(const ImagePyramid<nLevels>& pyr, const int l1, const int l2, const bool doWarping = false) const{
-    MultilevelPatch<nLevels,patchSize> mlpReprojected;
-    extractMultilevelPatchFromImage(mlpReprojected,pyr,l2,false,doWarping);
-    return computeAverageDifference(mlpReprojected,l1,l2);
   }
 };
 
@@ -183,6 +179,12 @@ class FeatureSetManager{
         features_[i].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[0];
       }
     }
+  }
+
+  /** \brief @todo
+   */
+  void setCamera(MultiCamera<nCam>* mpMultiCamera){
+    mpMultiCamera_ = mpMultiCamera;
   }
 
   /** \brief Resets the MultilevelPatchSet.
@@ -246,7 +248,7 @@ class FeatureSetManager{
     int count = 0;
     for(unsigned int i=0;i<nMax;i++){
       if(isValid_[i] == true){
-        averageScore += std::max(features_[i].mpMultilevelPatch_.s_,0.0f);
+        averageScore += std::max(features_[i].mpMultilevelPatch_->s_,0.0f);
         ++count;
       }
     }
@@ -372,8 +374,6 @@ class FeatureSetManager{
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
         features_[ind].mpDistance_->reset();
         features_[ind].mpWarping_->reset();
-        features_[ind].mpWarping_->set_affineTransfrom(Eigen::Matrix2f::Identity());
-        features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         if(ind >= 0){
           newSet.insert(ind);
         }

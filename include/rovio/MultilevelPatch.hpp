@@ -141,22 +141,22 @@ class MultilevelPatch{
    * @param color       - Line color.
    */
   void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
-    patches_[0].drawMultilevelPatchBorder(drawImg,c,mpWarp,s*pow(2.0,nLevels),color);
+    patches_[0].drawPatchBorder(drawImg,c,s*pow(2.0,nLevels),color,mpWarp);
   }
 
   /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patches of an other MultilevelPatch
    *         for an specific pyramid level interval.
    *
-   * @param mlp        - \ref MultilevelPatch, which patches should be used for the RMSE computation.
+   * @param mp        - \ref MultilevelPatch, which patches should be used for the RMSE computation.
    * @param l1         - Start pyramid level (l1<l2)
    * @param l2         - End pyramid level (l1<l2)
    * @return the RMSE value for the patches in the set pyramid level interval.
    */
-  float computeAverageDifference(const MultilevelPatch<nLevels,patchSize>& mlp, const int l1, const int l2) const{
+  float computeAverageDifference(const MultilevelPatch<nLevels,patchSize>& mp, const int l1, const int l2) const{
     float offset = 0.0f;
     for(int l = l1; l <= l2; l++){
       const float* it_patch = patches_[l].patch_;
-      const float* it_patch_in = mlp.patches_[l].patch_;
+      const float* it_patch_in = mp.patches_[l].patch_;
       for(int y=0; y<patchSize; ++y){
         for(int x=0; x<patchSize; ++x, ++it_patch, ++it_patch_in){
           offset += *it_patch - *it_patch_in;
@@ -167,7 +167,7 @@ class MultilevelPatch{
     float error = 0.0f;
     for(int l = l1; l <= l2; l++){
       const float* it_patch = patches_[l].patch_;
-      const float* it_patch_in = mlp.patches_[l].patch_;
+      const float* it_patch_in = mp.patches_[l].patch_;
       for(int y=0; y<patchSize; ++y){
         for(int x=0; x<patchSize; ++x, ++it_patch, ++it_patch_in){
           error += std::pow(*it_patch - *it_patch_in - offset,2);
