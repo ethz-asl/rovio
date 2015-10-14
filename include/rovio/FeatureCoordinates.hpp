@@ -34,6 +34,7 @@
 #include "lightweight_filtering/State.hpp"
 #include "rovio/Camera.hpp"
 #include "rovio/FeatureDistance.hpp"
+#include "rovio/exceptions.hpp"
 
 namespace rovio{
 
@@ -48,6 +49,7 @@ class FeatureCoordinates{
   double sigma2_;  /**<Standard deviation in the direction of the semi-major axis of the uncertainty ellipse belonging to \ref c_.*/
   double sigmaAngle_; /**<Angle between the x-axis and the major axis of the uncertainty ellipse belonging to \ref c_.*/
   Eigen::EigenSolver<Eigen::Matrix2d> es_; /**<Solver for computing the geometry of the pixel uncertainty.*/
+  int camID_; /**<Camera ID.*/
 
   /** \brief Constructor
    */
@@ -94,6 +96,7 @@ class FeatureCoordinates{
     sigma1_ = 0.0;
     sigma2_ = 0.0;
     sigmaAngle_ = 0.0;
+    camID_ = -1;
   }
 
   /** \brief Get the feature's pixel coordinates \ref c_.
@@ -104,7 +107,7 @@ class FeatureCoordinates{
    */
   const cv::Point2f& get_c() const{
     if(!valid_c_){
-      if(mpCamera_ == nullptr) throw cameraNullPtrException;
+      if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
       if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
         valid_c_ = true;
       } else {
@@ -112,6 +115,20 @@ class FeatureCoordinates{
       }
     }
     return c_;
+  }
+
+  /** \brief Get the feature's pixel coordinates Jacobian
+   *
+   *  @return The Jacobian of the pixel output w.r.t. the bearing vector
+   */
+  Eigen::Matrix<double,2,2> get_J() const{
+    if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+    Eigen::Matrix<double,2,2> J;
+    if(!mpCamera_->bearingToPixel(get_nor(),c_,J)){
+      J.setZero();
+      std::cout << "ERROR: No valid coordinate data!" << std::endl;
+    }
+    return J;
   }
 
   /** \brief Get the feature's bearing vector \ref nor_.
@@ -122,7 +139,7 @@ class FeatureCoordinates{
    */
   const LWF::NormalVectorElement& get_nor() const{
     if(!valid_nor_){
-      if(mpCamera_ == nullptr) throw cameraNullPtrException;
+      if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
       if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
         valid_nor_ = true;
       } else {

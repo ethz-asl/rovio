@@ -177,7 +177,7 @@ class Patch {
     if(mpWarp == nullptr){
       A.setIdentity();
     } else {
-      A = mpWarp->get_affineTransform();
+      A = mpWarp->get_affineTransform(&c);
     }
     const cv::Point2f& center = c.get_c();
     FeatureCoordinates fc1;
@@ -219,8 +219,8 @@ class Patch {
         for(int y = 0;y<2;y++){
           const float dx = halfpatch_size*(2*x-1);
           const float dy = halfpatch_size*(2*y-1);
-          const float wdx = mpWarp->get_affineTransform()(0,0)*dx + mpWarp->get_affineTransform()(0,1)*dy;
-          const float wdy = mpWarp->get_affineTransform()(1,0)*dx + mpWarp->get_affineTransform()(1,1)*dy;
+          const float wdx = mpWarp->get_affineTransform(&c)(0,0)*dx + mpWarp->get_affineTransform(&c)(0,1)*dy;
+          const float wdy = mpWarp->get_affineTransform(&c)(1,0)*dx + mpWarp->get_affineTransform(&c)(1,1)*dy;
           const float c_x = c.get_c().x + wdx;
           const float c_y = c.get_c().y + wdy;
           if(c_x < 0 || c_y < 0 || c_x > img.cols || c_y > img.rows){
@@ -281,8 +281,8 @@ class Patch {
         for(int x=0; x<2*halfpatch_size; ++x, ++patch_ptr){
           const float dx = x - halfpatch_size + 0.5;
           const float dy = y - halfpatch_size + 0.5;
-          const float wdx = mpWarp->get_affineTransform()(0,0)*dx + mpWarp->get_affineTransform()(0,1)*dy;
-          const float wdy = mpWarp->get_affineTransform()(1,0)*dx + mpWarp->get_affineTransform()(1,1)*dy;
+          const float wdx = mpWarp->get_affineTransform(&c)(0,0)*dx + mpWarp->get_affineTransform(&c)(0,1)*dy;
+          const float wdy = mpWarp->get_affineTransform(&c)(1,0)*dx + mpWarp->get_affineTransform(&c)(1,1)*dy;
           const float u_pixel = c.get_c().x+wdx - 0.5;
           const float v_pixel = c.get_c().y+wdy - 0.5;
           const int u_r = floor(u_pixel);

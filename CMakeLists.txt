@@ -76,13 +76,13 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
 
-#add_library(${PROJECT_NAME} src/test_rovio.cpp)
-#target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
-#add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
-#
-#add_executable(test_rovio src/test_rovio.cpp)
-#target_link_libraries(test_rovio ${PROJECT_NAME})
-#
+add_library(${PROJECT_NAME} src/test_rovio.cpp)
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
+add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_executable(test_rovio src/test_rovio.cpp)
+target_link_libraries(test_rovio ${PROJECT_NAME})
+
 #add_executable(rovio_node src/rovio_node.cpp)
 #target_link_libraries(rovio_node ${PROJECT_NAME})
 

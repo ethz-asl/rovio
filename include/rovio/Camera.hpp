@@ -29,22 +29,12 @@
 #ifndef ROVIO_CAMERA_HPP_
 #define ROVIO_CAMERA_HPP_
 
-#include <iostream>
-#include <exception>
 #include <Eigen/Dense>
 #include <opencv2/features2d/features2d.hpp>
 #include "lightweight_filtering/State.hpp"
 #include "yaml-cpp/yaml.h"
 
 namespace rovio{
-
-struct CameraNullPtrException : public std::exception
-{
-  const char * what () const throw ()
-  {
-    return "Camera pointer is null!";
-  }
-} cameraNullPtrException;
 
 class Camera{
  public:

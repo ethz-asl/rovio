@@ -33,6 +33,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include "lightweight_filtering/State.hpp"
 #include "rovio/FeatureCoordinates.hpp"
+#include "rovio/exceptions.hpp"
 
 namespace rovio{
 
@@ -69,9 +70,7 @@ struct BearingCorners{
  */
 class FeatureWarping{
  public:
-  const Camera* mpCamera_;  /**<Pointer to the associated camera object.*/
-  const FeatureCoordinates* mpCoordinates_;  /**<Pointer to the feature coordinates.*/
-  const float warpDistance_; /**<Distance used for computing the affine matrix numerically.*/
+  float warpDistance_; /**<Distance used for computing the affine matrix numerically.*/
   mutable PixelCorners pixelCorners_;  /**<Vectors, pointing from the feature coordinates to the midpoint of the patch edges.*/
   mutable bool valid_pixelCorners_;  /**<Specifies if the current pixel corners \ref pixelCorners_ are valid.*/
   mutable BearingCorners bearingCorners_;  /**<Vectors, pointing from the feature's bearing vector to the bearing vectors
@@ -82,7 +81,7 @@ class FeatureWarping{
 
   /** \brief Constructor
    */
-  FeatureWarping(const float warpDistance = 1.0,const Camera* mpCamera = nullptr, const FeatureCoordinates* mpCoordinates = nullptr): mpCamera_(mpCamera), mpCoordinates_(mpCoordinates), warpDistance_(warpDistance){
+  FeatureWarping(const float warpDistance = 1.0): warpDistance_(warpDistance){
     reset();
   }
 
@@ -90,28 +89,28 @@ class FeatureWarping{
    *
    */
   void reset(){
+    affineTransform_.setIdentity();
     valid_pixelCorners_ = false;
     valid_bearingCorners_ = false;
-    valid_affineTransform_ = false;
+    valid_affineTransform_ = true;
   }
-
 
   /** \brief Get the PixelCorners of the MultilevelPatchFeature.
    *
    * @return the valid PixelCorners.
    */
-  const PixelCorners& get_pixelCorners() const{
+  const PixelCorners& get_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_pixelCorners_){
       if(valid_bearingCorners_){
-        if(mpCamera_ == nullptr) throw cameraNullPtrException;
+        if(mpCoordinates->mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
         cv::Point2f tempPixel;
         LWF::NormalVectorElement tempNormal;
         for(unsigned int i=0;i<2;i++){
-          mpCoordinates_->get_nor().boxPlus(bearingCorners_[i],tempNormal);
-          if(!mpCamera_->bearingToPixel(tempNormal,tempPixel)){
+          mpCoordinates->get_nor().boxPlus(bearingCorners_[i],tempNormal);
+          if(!mpCoordinates->mpCamera_->bearingToPixel(tempNormal,tempPixel)){
             std::cout << "ERROR: Problem during bearing corner to pixel mapping!" << std::endl;
           }
-          pixelCorners_[i] = tempPixel - mpCoordinates_->get_c();
+          pixelCorners_[i] = tempPixel - mpCoordinates->get_c();
         }
         valid_pixelCorners_ = true;
       } else if(valid_affineTransform_) {
@@ -131,18 +130,18 @@ class FeatureWarping{
    *
    * @return the valid BearingCorners.
    */
-  const BearingCorners& get_bearingCorners() const{
+  const BearingCorners& get_bearingCorners(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_bearingCorners_){
-      if(mpCamera_ == nullptr) throw cameraNullPtrException;
+      if(mpCoordinates->mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
-      get_pixelCorners();
+      get_pixelCorners(mpCoordinates);
       for(unsigned int i=0;i<2;i++){
-        tempPixel = mpCoordinates_->get_c()+pixelCorners_[i];
-        if(!mpCamera_->pixelToBearing(tempPixel,tempNormal)){
+        tempPixel = mpCoordinates->get_c()+pixelCorners_[i];
+        if(!mpCoordinates->mpCamera_->pixelToBearing(tempPixel,tempNormal)){
           std::cout << "ERROR: Problem during pixel corner to bearing mapping!" << std::endl;
         }
-        tempNormal.boxMinus(mpCoordinates_->get_nor(),bearingCorners_[i]);
+        tempNormal.boxMinus(mpCoordinates->get_nor(),bearingCorners_[i]);
       }
       valid_bearingCorners_ = true;
     }
@@ -154,9 +153,9 @@ class FeatureWarping{
    *
    * @return the affine transformation matrix \ref affineTransform_.
    */
-  const Eigen::Matrix2f& get_affineTransform() const{
+  const Eigen::Matrix2f& get_affineTransform(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_affineTransform_){
-      get_pixelCorners();
+      get_pixelCorners(mpCoordinates);
       for(unsigned int i=0;i<2;i++){
         affineTransform_(0,i) = pixelCorners_[i].x/warpDistance_;
         affineTransform_(1,i) = pixelCorners_[i].y/warpDistance_;

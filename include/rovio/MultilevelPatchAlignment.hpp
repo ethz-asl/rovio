@@ -65,7 +65,7 @@ class MultilevelPatchAlignment {
     b.resize(0,0);
     Eigen::Matrix2f affInv;
     if(mpWarp != nullptr){
-      affInv = mpWarp->get_affineTransform().inverse(); // TODO: catch if too distorted
+      affInv = mpWarp->get_affineTransform(&c).inverse(); // TODO: catch if too distorted
     } else {
       affInv.setIdentity();
     }
@@ -219,7 +219,7 @@ class MultilevelPatchAlignment {
     }
     Eigen::Matrix3f aff = Eigen::Matrix3f::Identity();
     if(mpWarp != nullptr){
-      aff.block<2,2>(0,0) = mpWarp->get_affineTransform();
+      aff.block<2,2>(0,0) = mpWarp->get_affineTransform(&cInit);
     }
     Eigen::Matrix3f affInv = aff.inverse();
     const int halfpatch_size = patch_size/2;

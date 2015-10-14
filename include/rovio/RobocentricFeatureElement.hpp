@@ -41,9 +41,9 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   using typename Base::mtCovMat;
   using typename Base::mtGet;
   using Base::name_;
-  LWF::NormalVectorElement::mtDifVec norDifTemp_;
-  LWF::NormalVectorElement::mtCovMat norCovMatTemp_;
-  LWF::NormalVectorElement norTemp_;
+  mutable LWF::NormalVectorElement::mtDifVec norDifTemp_;
+  mutable LWF::NormalVectorElement::mtCovMat norCovMatTemp_;
+  mutable LWF::NormalVectorElement norTemp_;
   FeatureCoordinates coordinates_;
   FeatureDistance distance_;
   RobocentricFeatureElement():distance_(FeatureDistance::REGULAR){}
@@ -55,6 +55,8 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   void boxPlus(const mtDifVec& vecIn, RobocentricFeatureElement& stateOut) const{
     coordinates_.get_nor().boxPlus(vecIn.template block<2,1>(0,0),norTemp_);
     stateOut.coordinates_.set_nor(norTemp_);
+    stateOut.coordinates_.mpCamera_ = coordinates_.mpCamera_;
+    stateOut.coordinates_.camID_ = coordinates_.camID_;
     stateOut.distance_.p_ = distance_.p_ + vecIn(2);
   }
   void boxMinus(const RobocentricFeatureElement& stateIn, mtDifVec& vecOut) const{

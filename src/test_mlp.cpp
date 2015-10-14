@@ -37,7 +37,7 @@ class MLPTesting : public virtual ::testing::Test {
   Eigen::Matrix2f affineTransform_;
   Camera camera_;
   MultilevelPatchAlignment<nLevels_,patchSize_> mpa_;
-  MLPTesting(): c_(&camera_), warp_(warpDistance_,&camera_,&c_){
+  MLPTesting(): c_(&camera_), warp_(warpDistance_){
     static_assert(imgSize_*dx_*dy_<255,"imgSize to large for gradients");
     pixel_ = cv::Point2f(patchSize_/2+1,patchSize_/2+1);
     bearing_ = V3D(patchSize_/2+1,patchSize_/2+1,1);
@@ -45,8 +45,8 @@ class MLPTesting : public virtual ::testing::Test {
     c_.set_c(pixel_);
     affineTransform_.setIdentity();
     warp_.set_affineTransfrom(affineTransform_);
-    pixelCorners_ = warp_.get_pixelCorners();
-    bearingCorners_ = warp_.get_bearingCorners();
+    pixelCorners_ = warp_.get_pixelCorners(&c_);
+    bearingCorners_ = warp_.get_bearingCorners(&c_);
 
     stat_.localQualityRange_ = 3;
     stat_.localQualityRange_ = 4;
@@ -109,15 +109,15 @@ TEST_F(MLPTesting, corner) {
   ASSERT_EQ(warp_.valid_pixelCorners_,true);
   ASSERT_EQ(warp_.valid_bearingCorners_,false);
   ASSERT_EQ(warp_.valid_affineTransform_,false);
-  ASSERT_EQ(warp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(warp_.get_pixelCorners()[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
   ASSERT_EQ(warp_.valid_pixelCorners_,true);
   ASSERT_EQ(warp_.valid_bearingCorners_,false);
   ASSERT_EQ(warp_.valid_affineTransform_,false);
-  ASSERT_EQ((warp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((warp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
   ASSERT_EQ(warp_.valid_bearingCorners_,true);
-  ASSERT_EQ(warp_.get_affineTransform(),affineTransform_);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
   ASSERT_EQ(warp_.valid_affineTransform_,true);
   warp_.pixelCorners_[0] = cv::Point2f(0,0);
   warp_.pixelCorners_[1] = cv::Point2f(0,0);
@@ -128,15 +128,15 @@ TEST_F(MLPTesting, corner) {
   ASSERT_EQ(warp_.valid_pixelCorners_,false);
   ASSERT_EQ(warp_.valid_bearingCorners_,true);
   ASSERT_EQ(warp_.valid_affineTransform_,false);
-  ASSERT_EQ((warp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((warp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
   ASSERT_EQ(warp_.valid_pixelCorners_,false);
   ASSERT_EQ(warp_.valid_bearingCorners_,true);
   ASSERT_EQ(warp_.valid_affineTransform_,false);
-  ASSERT_EQ(warp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(warp_.get_pixelCorners()[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
   ASSERT_EQ(warp_.valid_pixelCorners_,true);
-  ASSERT_EQ(warp_.get_affineTransform(),affineTransform_);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
   ASSERT_EQ(warp_.valid_affineTransform_,true);
   warp_.pixelCorners_[0] = cv::Point2f(0,0);
   warp_.pixelCorners_[1] = cv::Point2f(0,0);
@@ -147,15 +147,15 @@ TEST_F(MLPTesting, corner) {
   ASSERT_EQ(warp_.valid_pixelCorners_,false);
   ASSERT_EQ(warp_.valid_bearingCorners_,false);
   ASSERT_EQ(warp_.valid_affineTransform_,true);
-  ASSERT_EQ(warp_.get_affineTransform(),affineTransform_);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
   ASSERT_EQ(warp_.valid_pixelCorners_,false);
   ASSERT_EQ(warp_.valid_bearingCorners_,false);
   ASSERT_EQ(warp_.valid_affineTransform_,true);
-  ASSERT_EQ(warp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(warp_.get_pixelCorners()[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
   ASSERT_EQ(warp_.valid_pixelCorners_,true);
-  ASSERT_EQ((warp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((warp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
   ASSERT_EQ(warp_.valid_bearingCorners_,true);
 }
 

@@ -49,7 +49,6 @@ template<int nLevels,int patchSize, int nCam>
 class FeatureManager{
  public:
   int idx_;  /**<Feature ID.*/
-  int camID_; /**<Camera ID.*/
 
   FeatureCoordinates log_previous_;
   FeatureCoordinates log_prediction_;
@@ -77,7 +76,6 @@ class FeatureManager{
    */
   FeatureManager(){
     idx_ = -1;
-    camID_ = -1;
     mpCoordinates_ = nullptr;
     mpDistance_ = nullptr;
     mpWarping_ = nullptr;
@@ -158,7 +156,8 @@ class FeatureSetManager{
 
   /** \brief Constructor
    */
-  FeatureSetManager(){
+  FeatureSetManager(const MultiCamera<nCam>* mpMultiCamera){
+    mpMultiCamera_ = mpMultiCamera;
     reset();
   }
 
@@ -171,6 +170,18 @@ class FeatureSetManager{
   void allocateMissing(){
     for(unsigned int i=0;i<nMax;i++){
       features_[i].allocateMissing();
+    }
+  }
+
+  /** \brief Sets all camera pointer in for FeatureCoordinates
+   */
+  void setAllCameraPointers(){
+    for(unsigned int i=0;i<nMax;i++){
+      if(features_[i].mpCoordinates_->camID_ < nCam && features_[i].mpCoordinates_->camID_ >= 0){
+        features_[i].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[features_[i].mpCoordinates_->camID_];
+      } else {
+        features_[i].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[0];
+      }
     }
   }
 
@@ -320,10 +331,11 @@ class FeatureSetManager{
     double t2 = pow(penaltyDistance,2);
     bool doDelete;
     FeatureCoordinates featureCoordinates;
+    FeatureDistance featureDistance;
     featureCoordinates.mpCamera_ = &mpMultiCamera_->cameras_[camID];
     for(unsigned int i=0;i<nMax;i++){
       if(isValid_[i]){
-        mpMultiCamera_->transformBearing(features_[i].camID_,camID,*(features_[i].mpCoordinates_),*(features_[i].mpDistance_),featureCoordinates);
+        mpMultiCamera_->transformFeature(camID,*(features_[i].mpCoordinates_),*(features_[i].mpDistance_),featureCoordinates,featureDistance);
         if(featureCoordinates.isInFront()){
           for (unsigned int bucketID = 1;bucketID < nDetectionBuckets;bucketID++) {
             for (auto it_cand = buckets[bucketID].begin();it_cand != buckets[bucketID].end();) {
@@ -354,8 +366,8 @@ class FeatureSetManager{
         const int nf = *(buckets[bucketID].begin());
         buckets[bucketID].erase(nf);
         const int ind = makeNewFeature(camID);
-        features_[ind].camID_ = camID;
         *(features_[ind].mpCoordinates_) = candidates[nf];
+        features_[ind].mpCoordinates_->camID_ = camID;
         features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
         features_[ind].mpDistance_->reset();
