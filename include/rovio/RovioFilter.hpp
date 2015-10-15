@@ -29,14 +29,12 @@
 #ifndef ROVIO_ROVIO_FILTER_HPP_
 #define ROVIO_ROVIO_FILTER_HPP_
 
-#include "kindr/rotations/RotationEigen.hpp"
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/FilterBase.hpp"
-#include "lightweight_filtering/State.hpp"
 #include "rovio/FilterStates.hpp"
 #include "rovio/ImgUpdate.hpp"
 #include "rovio/ImuPrediction.hpp"
-#include "rovio/Camera.hpp"
+#include "rovio/MultiCamera.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -66,6 +64,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   typedef typename Base::mtState mtState;
   rovio::MultiCamera<mtState::nCam_> multiCamera_;
   std::string cameraCalibrationFile_[mtState::nCam_];
+  int depthTypeInt_;
 
   /** \brief Constructor. Initializes the filter.
    */
@@ -73,7 +72,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     std::get<0>(mUpdates_).setCamera(&multiCamera_);
     init_.setCamera(&multiCamera_);
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
-//    intRegister_.registerScalar("Common.depthType",init_.state_.aux().depthTypeInt_);
+    intRegister_.registerScalar("Common.depthType",depthTypeInt_);
     for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
@@ -86,6 +85,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().z());
+      doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.MrMC(camID));
+      doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.qCM(camID));
     }
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
@@ -112,6 +113,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     doubleRegister_.registerQuaternion("Groundtruth.qJI",init_.groundtruth_qJI_);
     doubleRegister_.registerVector("Groundtruth.BrBC",init_.groundtruth_BrBC_);
     doubleRegister_.registerQuaternion("Groundtruth.qCB",init_.groundtruth_qCB_);
+    std::get<0>(mUpdates_).boolRegister_.registerScalar("doPatchWarping",init_.state_.aux().doPatchWarping_);
     Eigen::Vector3d groundtruth_IrIJ_;
     Eigen::Vector3d groundtruth_BrBC_;
     reset(0.0);
@@ -120,12 +122,14 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   /** \brief Reloads the camera calibration for all cameras and resets the depth map type.
    */
   void refreshProperties(){
-//    for(int camID = 0;camID<mtState::nCam_;camID++){
-//      if (!cameraCalibrationFile_[camID].empty()) {
-//        cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
-//      }
-//    }
-//    init_.state_.aux().depthMap_.setType(init_.state_.aux().depthTypeInt_);
+    for(int camID = 0;camID<mtState::nCam_;camID++){
+      if (!cameraCalibrationFile_[camID].empty()) {
+        multiCamera_.cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+      }
+    }
+    for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
+      init_.state_.dep(i).setType(depthTypeInt_);
+    }
   };
 
   /** \brief Destructor
@@ -142,8 +146,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
    *  @param t         - Current time. @todo check this
    */
   void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
-//    init_.initWithAccelerometer(fMeasInit);
-//    reset(t);
+    init_.initWithAccelerometer(fMeasInit);
+    reset(t);
   }
 
   /** \brief Sets the transformation between IMU and Camera.
@@ -153,9 +157,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
    *  @param camID -  ID of the considered camera.
    */
   void setExtrinsics(const Eigen::Matrix3d& R_CM, const Eigen::Vector3d& CrCM, const int camID = 0){
-//    rot::RotationMatrixAD R(R_CM);
-//    init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
-//    init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM); // TODO: all filterstates
+    rot::RotationMatrixAD R(R_CM);
+    init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
+    init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM); // TODO: all filterstates
   }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;

@@ -28,7 +28,7 @@
 
 #include <ros/package.h>
 
-#include "rovio/rovioFilter.hpp"
+#include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
 
 // TODO(helenol): expose these as ROS params as well?

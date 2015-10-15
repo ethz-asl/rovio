@@ -29,7 +29,7 @@
 #ifndef ROVIO_PATCH_HPP_
 #define ROVIO_PATCH_HPP_
 
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include "rovio/FeatureCoordinates.hpp"
 #include "rovio/FeatureWarping.hpp"
 #include "rovio/ImagePyramid.hpp"
@@ -174,7 +174,7 @@ class Patch {
   void drawPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
     const int halfpatch_size = patchSize/2;
     Eigen::Matrix2f A;
-    if(mpWarp == nullptr){
+    if(mpWarp == nullptr || mpWarp->isIdentity_){
       A.setIdentity();
     } else {
       A = mpWarp->get_affineTransform(&c);
@@ -208,7 +208,7 @@ class Patch {
   static bool isPatchInFrame(const cv::Mat& img,const FeatureCoordinates& c,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false){
     if(!c.isInFront()) return false;
     const int halfpatch_size = patchSize/2+(int)withBorder;
-    if(mpWarp == nullptr){
+    if(mpWarp == nullptr || mpWarp->isIdentity_){
       if(c.get_c().x < halfpatch_size || c.get_c().y < halfpatch_size || c.get_c().x > img.cols-halfpatch_size || c.get_c().y > img.rows-halfpatch_size){
         return false;
       } else {
@@ -255,7 +255,7 @@ class Patch {
       patch_ptr = patch_;
     }
 
-    if(mpWarp == nullptr){
+    if(mpWarp == nullptr || mpWarp->isIdentity_){
       const int u_r = floor(c.get_c().x);
       const int v_r = floor(c.get_c().y);
 

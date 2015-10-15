@@ -29,6 +29,12 @@
 #ifndef ROVIO_MULTILEVELPATCHALIGNMENT_HPP_
 #define ROVIO_MULTILEVELPATCHALIGNMENT_HPP_
 
+#include "lightweight_filtering/common.hpp"
+#include "rovio/ImagePyramid.hpp"
+#include "rovio/MultilevelPatch.hpp"
+#include "rovio/FeatureCoordinates.hpp"
+#include "rovio/FeatureWarping.hpp"
+
 namespace rovio{
 
 /** \brief %Class for handling the alignement of multilevel patches
@@ -97,7 +103,7 @@ class MultilevelPatchAlignment {
               const float Jy = -pow(0.5,l)*(*it_dy);
               mean_diff += res;
               b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = res;
-              if(mpWarp == nullptr){
+              if(mpWarp == nullptr || mpWarp->isIdentity_){
                 mean_diff_dx += Jx;
                 mean_diff_dy += Jy;
                 A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
@@ -262,7 +268,7 @@ class MultilevelPatchAlignment {
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          if(mpWarp == nullptr){
+          if(mpWarp == nullptr || mpWarp->isIdentity_){
             const int u_r = floor(c_level.get_c().x);
             const int v_r = floor(c_level.get_c().y);
             if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[l].cols-halfpatch_size || v_r >= pyr.imgs_[l].rows-halfpatch_size){ // TODO: check limits
@@ -322,7 +328,7 @@ class MultilevelPatchAlignment {
       if(count==0){
         return false;
       }
-      if(mpWarp == nullptr){
+      if(mpWarp == nullptr || mpWarp->isIdentity_){
         update = Hinv * Jres;
       } else {
         update = aff * Hinv * Jres;

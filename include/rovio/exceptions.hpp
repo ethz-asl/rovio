@@ -29,7 +29,6 @@
 #ifndef ROVIO_EXCEPTION_HPP_
 #define ROVIO_EXCEPTION_HPP_
 
-
 #include <string>
 #include <iostream>
 #include <exception>
@@ -63,5 +62,9 @@ namespace rovio {
     CameraNullPtrException(std::string function, std::string file, int line): ExceptionBase("Camera pointer is null!",function,file,line){}
   };
 }
+
+/* Usage:
+ * ROVIO_THROW(rovio::CameraNullPtrException);
+ */
 
 #endif /* ROVIO_EXCEPTION_HPP_ */

@@ -29,7 +29,7 @@
 #ifndef ROVIO_YPROUTPUT_HPP_
 #define ROVIO_YPROUTPUT_HPP_
 
-#include "rovio/FilterStates.hpp"
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {

@@ -30,9 +30,7 @@
 #define ROVIO_SCENE_HPP_
 
 #include <functional>
-#include <Eigen/Dense>
 #include "lightweight_filtering/common.hpp"
-
 #include "GL/glew.h"
 #include <GL/freeglut.h>
 

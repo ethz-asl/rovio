@@ -114,6 +114,8 @@ class ImagePyramid{
   void levelTranformCoordinates(const FeatureCoordinates& cIn,FeatureCoordinates& cOut,const int l1, const int l2) const{
     assert(l1<n_levels && l2<n_levels && l1>=0 && l2>=0);
     cOut.set_c((centers_[l1]-centers_[l2])*pow(0.5,l2)+cIn.get_c()*pow(0.5,l2-l1));
+    cOut.camID_ = cIn.camID_;
+    cOut.mpCamera_ = cIn.mpCamera_;
   }
 
   /** \brief Extract FastCorner coordinates

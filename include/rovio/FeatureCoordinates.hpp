@@ -29,12 +29,11 @@
 #ifndef FEATURECOORDINATES_HPP_
 #define FEATURECOORDINATES_HPP_
 
-#include <Eigen/Dense>
-#include <opencv2/features2d/features2d.hpp>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/State.hpp"
+#include <opencv2/features2d/features2d.hpp>
 #include "rovio/Camera.hpp"
 #include "rovio/FeatureDistance.hpp"
-#include "rovio/exceptions.hpp"
 
 namespace rovio{
 
@@ -107,7 +106,7 @@ class FeatureCoordinates{
    */
   const cv::Point2f& get_c() const{
     if(!valid_c_){
-      if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+      assert(mpCamera_ != nullptr);
       if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
         valid_c_ = true;
       } else {
@@ -122,7 +121,7 @@ class FeatureCoordinates{
    *  @return The Jacobian of the pixel output w.r.t. the bearing vector
    */
   Eigen::Matrix<double,2,2> get_J() const{
-    if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+    assert(mpCamera_ != nullptr);
     Eigen::Matrix<double,2,2> J;
     if(!mpCamera_->bearingToPixel(get_nor(),c_,J)){
       J.setZero();
@@ -139,7 +138,7 @@ class FeatureCoordinates{
    */
   const LWF::NormalVectorElement& get_nor() const{
     if(!valid_nor_){
-      if(mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+      assert(mpCamera_ != nullptr);
       if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
         valid_nor_ = true;
       } else {

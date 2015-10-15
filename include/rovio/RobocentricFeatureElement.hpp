@@ -29,6 +29,7 @@
 #ifndef ROBOCENTRICFEATUREELEMENT_HPP_
 #define ROBOCENTRICFEATUREELEMENT_HPP_
 
+#include "lightweight_filtering/common.hpp"
 #include "rovio/FeatureCoordinates.hpp"
 #include "rovio/FeatureDistance.hpp"
 
@@ -58,6 +59,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
     stateOut.coordinates_.mpCamera_ = coordinates_.mpCamera_;
     stateOut.coordinates_.camID_ = coordinates_.camID_;
     stateOut.distance_.p_ = distance_.p_ + vecIn(2);
+    stateOut.distance_.type_ = distance_.type_;
   }
   void boxMinus(const RobocentricFeatureElement& stateIn, mtDifVec& vecOut) const{
     coordinates_.get_nor().boxMinus(stateIn.coordinates_.get_nor(),norDifTemp_);

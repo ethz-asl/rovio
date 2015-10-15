@@ -2,7 +2,7 @@ Common
 {
 	doVECalibration true
 	depthType 1
-	verbose false
+	verbose true
 }
 Camera0
 {
@@ -109,7 +109,7 @@ Update0
     fastDetectionThreshold 10
     matchingPixelThreshold 0.0
     specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
-    patchRejectionTh 10.0;
+    patchRejectionTh 10000000000.0;
     removeNegativeFeatureAfterUpdate true;
     maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
     MotionDetection

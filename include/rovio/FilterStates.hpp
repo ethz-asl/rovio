@@ -29,18 +29,14 @@
 #ifndef ROVIO_FILTERSTATES_HPP_
 #define ROVIO_FILTERSTATES_HPP_
 
-#include "kindr/rotations/RotationEigen.hpp"
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
-
 #include "CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/RobocentricFeatureElement.hpp"
 #include "rovio/FeatureManager.hpp"
 #include "rovio/MultiCamera.hpp"
-
-namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
@@ -76,6 +72,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
+    doPatchWarping_ = true;
   };
 
   /** \brief Destructor
@@ -96,6 +93,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
   FeatureWarping warping_[nMax];  /**<FeatureWarpings.*/
+  bool doPatchWarping_; /**<Should patches be warped.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

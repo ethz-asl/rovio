@@ -29,8 +29,7 @@
 #ifndef ROVIO_IMGUPDATE_HPP_
 #define ROVIO_IMGUPDATE_HPP_
 
-#include "kindr/rotations/RotationEigen.hpp"
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
 
@@ -40,8 +39,6 @@
 #include "rovio/CoordinateTransform/PixelOutput.hpp"
 #include "rovio/ZeroVelocityUpdate.hpp"
 #include "rovio/MultilevelPatchAlignment.hpp"
-
-namespace rot = kindr::rotations::eigen_impl;
 
 namespace rovio {
 
@@ -193,7 +190,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double pixelCoordinateMotionTh_; /**<Threshold for detecting feature motion*/
   int minFeatureCountForNoMotionDetection_; /**<Minimum amount of feature for detecting NO image motion*/
   double patchRejectionTh_;
-  bool doPatchWarping_;
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
                               If false, the reprojection error is used for the innovation term. @todo check this*/
   bool doFrameVisualisation_;
@@ -236,7 +232,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     scoreDetectionExponent_ = 0.5;
     penaltyDistance_ = 20;
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
-    doPatchWarping_ = true;
     useDirectMethod_ = true;
     doFrameVisualisation_ = true;
     verbose_ = false;
@@ -282,7 +277,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     intRegister_.registerScalar("MotionDetection.minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
     boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
-    boolRegister_.registerScalar("doPatchWarping",doPatchWarping_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
     boolRegister_.registerScalar("removeNegativeFeatureAfterUpdate",removeNegativeFeatureAfterUpdate_);
@@ -495,6 +489,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         // Make patch feature in target frame
         if(!mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],featureOutput_.c(),startLevel_,f.mpWarping_,false)){
           f.mpStatistics_->status_[activeCamID] = NOT_IN_FRAME;
+          if(verbose_) std::cout << "    NOT in frame" << std::endl;
         } else {
           pixelOutputCT_.transformState(featureOutput_,pixelOutput_);
           pixelOutputCT_.transformCovMat(featureOutput_,featureOutputCov_,pixelOutputCov_);
@@ -515,7 +510,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           if(activeCamID==camID){
             f.log_prediction_ = *f.mpCoordinates_;
             const PixelCorners& pixelCorners = f.mpWarping_->get_pixelCorners(f.mpCoordinates_);
-            const float s = pow(2.0,startLevel_)*0.5*mtState::patchSize_;
+            const double s = mtState::patchSize_*std::pow(2.0,startLevel_)/(f.mpWarping_->warpDistance_*2.0);
             f.log_predictionC0_.set_c(f.mpCoordinates_->get_c() - s*pixelCorners[0] - s*pixelCorners[1]);
             f.log_predictionC1_.set_c(f.mpCoordinates_->get_c() + s*pixelCorners[0] - s*pixelCorners[1]);
             f.log_predictionC2_.set_c(f.mpCoordinates_->get_c() - s*pixelCorners[0] + s*pixelCorners[1]);
@@ -783,14 +778,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
     if (doFrameVisualisation_){
-      drawVirtualHorizon(filterState,0);
-      drawVirtualHorizon(filterState,1);
+      for(unsigned int i=0;i<mtState::nCam_;i++){
+        drawVirtualHorizon(filterState,i);
+      }
     }
 
     if(verbose_){
       for(int i=0;i<mtState::nCam_;i++){
-        std::cout << filterState.state_.qCM(i) << std::endl;
-        std::cout << filterState.state_.MrMC(i).transpose() << std::endl;
+        std::cout << "Camera extrinsics: " << i << std::endl;
+        std::cout << "  " << filterState.state_.qCM(i) << std::endl;
+        std::cout << "  " << filterState.state_.MrMC(i).transpose() << std::endl;
       }
     }
 

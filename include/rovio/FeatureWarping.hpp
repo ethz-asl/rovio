@@ -29,11 +29,10 @@
 #ifndef FEATUREWARPING_HPP_
 #define FEATUREWARPING_HPP_
 
-#include <Eigen/Dense>
-#include <opencv2/features2d/features2d.hpp>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/State.hpp"
+#include <opencv2/features2d/features2d.hpp>
 #include "rovio/FeatureCoordinates.hpp"
-#include "rovio/exceptions.hpp"
 
 namespace rovio{
 
@@ -49,6 +48,12 @@ struct PixelCorners{
   const cv::Point2f& operator[](unsigned int i) const{
     return corners_[i];
   };
+  void setIdentity(){
+    corners_[0].x = 1;
+    corners_[1].x = 0;
+    corners_[0].y = 0;
+    corners_[1].y = 1;
+  }
 };
 
 /** \brief Difference (see boxminus for bearing vectors) between feature bearing vector and bearing vectors
@@ -78,6 +83,7 @@ class FeatureWarping{
   mutable bool valid_bearingCorners_;  /**<Specifies if the current bearing corners \ref bearingCorners_ are valid.*/
   mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from current patch to the current frame. */
   mutable bool valid_affineTransform_;  /**<Specifies if the affine transformation \ref affineTransform_ is valid.*/
+  mutable bool isIdentity_; /**<Is the warping equal to identity.*/
 
   /** \brief Constructor
    */
@@ -93,6 +99,7 @@ class FeatureWarping{
     valid_pixelCorners_ = false;
     valid_bearingCorners_ = false;
     valid_affineTransform_ = true;
+    isIdentity_ = true;
   }
 
   /** \brief Get the PixelCorners of the MultilevelPatchFeature.
@@ -102,7 +109,7 @@ class FeatureWarping{
   const PixelCorners& get_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_pixelCorners_){
       if(valid_bearingCorners_){
-        if(mpCoordinates->mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+        assert(mpCoordinates->mpCamera_ != nullptr);
         cv::Point2f tempPixel;
         LWF::NormalVectorElement tempNormal;
         for(unsigned int i=0;i<2;i++){
@@ -132,7 +139,7 @@ class FeatureWarping{
    */
   const BearingCorners& get_bearingCorners(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_bearingCorners_){
-      if(mpCoordinates->mpCamera_ == nullptr) ROVIO_THROW(rovio::CameraNullPtrException);
+      assert(mpCoordinates->mpCamera_ != nullptr);
       cv::Point2f tempPixel;
       LWF::NormalVectorElement tempNormal;
       get_pixelCorners(mpCoordinates);
@@ -177,6 +184,7 @@ class FeatureWarping{
     valid_pixelCorners_ = true;
     valid_bearingCorners_ = false;
     valid_affineTransform_ = false;
+    isIdentity_ = false;
   }
 
   /** \brief Set the \ref bearingCorners_ of the MultilevelPatchFeature.
@@ -190,6 +198,7 @@ class FeatureWarping{
     valid_bearingCorners_ = true;
     valid_pixelCorners_ = false;
     valid_affineTransform_ = false;
+    isIdentity_ = false;
   }
 
   /** \brief Set the affine transformation \ref affineTransform_ of the MultilevelPatchFeature.
@@ -203,6 +212,7 @@ class FeatureWarping{
     valid_affineTransform_ = true;
     valid_bearingCorners_ = false;
     valid_pixelCorners_ = false;
+    isIdentity_ = false;
   }
 
 };

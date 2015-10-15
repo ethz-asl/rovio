@@ -29,10 +29,10 @@
 #ifndef ROVIO_FEATUREOUTPUT_HPP_
 #define ROVIO_FEATUREOUTPUT_HPP_
 
-#include "rovio/FilterStates.hpp"
+#include "lightweight_filtering/common.hpp"
+#include "lightweight_filtering/CoordinateTransform.hpp"
 #include "rovio/RobocentricFeatureElement.hpp"
 #include "rovio/MultiCamera.hpp"
-#include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
 
