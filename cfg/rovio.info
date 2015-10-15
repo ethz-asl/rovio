@@ -80,7 +80,7 @@ Init
 }
 Update0
 {
-    doPatchWarping true
+    doPatchWarping false
     doFrameVisualisation true
     useDirectMethod true
     startLevel 3

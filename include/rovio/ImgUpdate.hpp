@@ -305,6 +305,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    */
   void refreshProperties(){
     useSpecialLinearizationPoint_ = true; // TODO: make dependent
+    if(isZeroVelocityUpdateEnabled_) assert(doVisualMotionDetection_);
   };
 
   /** \brief @todo
@@ -509,12 +510,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           // Logging (TODO: remove eventually)
           if(activeCamID==camID){
             f.log_prediction_ = *f.mpCoordinates_;
-            const PixelCorners& pixelCorners = f.mpWarping_->get_pixelCorners(f.mpCoordinates_);
-            const double s = mtState::patchSize_*std::pow(2.0,startLevel_)/(f.mpWarping_->warpDistance_*2.0);
-            f.log_predictionC0_.set_c(f.mpCoordinates_->get_c() - s*pixelCorners[0] - s*pixelCorners[1]);
-            f.log_predictionC1_.set_c(f.mpCoordinates_->get_c() + s*pixelCorners[0] - s*pixelCorners[1]);
-            f.log_predictionC2_.set_c(f.mpCoordinates_->get_c() - s*pixelCorners[0] + s*pixelCorners[1]);
-            f.log_predictionC3_.set_c(f.mpCoordinates_->get_c() + s*pixelCorners[0] + s*pixelCorners[1]);
           }
 
           // Search patch
@@ -637,10 +632,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
       if(!outlierDetection.isOutlier(0)){
         f.mpStatistics_->status_[activeCamID] = TRACKED;
-        if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),4.0,cv::Scalar(0,255,0),f.mpWarping_);
+        if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,255,0),f.mpWarping_);
       } else {
         f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
-        if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),4.0,cv::Scalar(0,0,255),f.mpWarping_);
+        if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,255),f.mpWarping_);
       }
       // Remove negative feature
       if(removeNegativeFeatureAfterUpdate_){

@@ -141,7 +141,7 @@ class MultilevelPatch{
    * @param color       - Line color.
    */
   void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
-    patches_[0].drawPatchBorder(drawImg,c,s*pow(2.0,nLevels),color,mpWarp);
+    patches_[0].drawPatchBorder(drawImg,c,s*pow(2.0,nLevels-1),color,mpWarp);
   }
 
   /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patches of an other MultilevelPatch
