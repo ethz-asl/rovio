@@ -83,15 +83,20 @@ class MultiCamera{
    *   @param dOut - Corresponding distance of output
    */
   void transformFeature(const int i, const int j, const Eigen::Vector3d& vecIn, const double& dIn, Eigen::Vector3d& vecOut, double& dOut) const{
-    const QPD qDC = qCB_[j]*qCB_[i].inverted(); // TODO: avoid double computation
-    const V3D CrCD = qCB_[i].rotate(V3D(BrBC_[j]-BrBC_[i]));
-    const V3D CrCP = dIn*vecIn;
-    vecOut = qDC.rotate(V3D(CrCP-CrCD));
-    dOut = vecOut.norm();
-    if(dOut > 1e-6){
-      vecOut = vecOut/dOut;
+    if(i != j){
+      const QPD qDC = qCB_[j]*qCB_[i].inverted(); // TODO: avoid double computation
+      const V3D CrCD = qCB_[i].rotate(V3D(BrBC_[j]-BrBC_[i]));
+      const V3D CrCP = dIn*vecIn;
+      vecOut = qDC.rotate(V3D(CrCP-CrCD));
+      dOut = vecOut.norm();
+      if(dOut > 1e-6){
+        vecOut = vecOut/dOut;
+      } else {
+        vecOut = V3D(0,0,1);
+      }
     } else {
-      vecOut = V3D(0,0,1);
+      vecOut = vecIn;
+      dOut = dIn;
     }
   }
   /** \brief Transforms feature coordinates from one camera frame to another
@@ -104,14 +109,19 @@ class MultiCamera{
    *   @param dOut - Corresponding distance of output
    */
   void transformFeature(const int j, const FeatureCoordinates& vecIn, const FeatureDistance& dIn, FeatureCoordinates& vecOut, FeatureDistance& dOut) const{
-    const QPD qDC = qCB_[j]*qCB_[vecIn.camID_].inverted(); // TODO: avoid double computation
-    const V3D CrCD = qCB_[vecIn.camID_].rotate(V3D(BrBC_[j]-BrBC_[vecIn.camID_]));
-    const V3D CrCP = dIn.getDistance()*vecIn.get_nor().getVec();
-    const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
-    dOut.setParameter(DrDP.norm());
-    vecOut.nor_.setFromVector(DrDP);
-    vecOut.valid_c_ = false;
-    vecOut.valid_nor_ = true;
+    if(vecIn.camID_ != j){
+      const QPD qDC = qCB_[j]*qCB_[vecIn.camID_].inverted(); // TODO: avoid double computation
+      const V3D CrCD = qCB_[vecIn.camID_].rotate(V3D(BrBC_[j]-BrBC_[vecIn.camID_]));
+      const V3D CrCP = dIn.getDistance()*vecIn.get_nor().getVec();
+      const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+      dOut.setParameter(DrDP.norm());
+      vecOut.nor_.setFromVector(DrDP);
+      vecOut.valid_c_ = false;
+      vecOut.valid_nor_ = true;
+    } else {
+      vecOut = vecIn;
+      dOut = dIn;
+    }
   }
 };
 

@@ -346,7 +346,7 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
   Eigen::MatrixXf b;
   b.setZero();
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  mp_.extractMultilevelPatchFromImage(pyr2_,c_);
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
   c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
   // NOTE: only works for patch size = 2, nLevels = 2
   ASSERT_EQ(mpa_.getLinearAlignEquations(pyr2_,mp_,c_,nullptr,0,nLevels_-1,A,b),true);

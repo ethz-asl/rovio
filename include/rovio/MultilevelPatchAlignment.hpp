@@ -69,12 +69,14 @@ class MultilevelPatchAlignment {
                                Eigen::MatrixXf& A, Eigen::MatrixXf& b){
     A.resize(0,0);
     b.resize(0,0);
+    Eigen::Matrix2f W;
     Eigen::Matrix2f affInv;
     if(mpWarp != nullptr){
-      affInv = mpWarp->get_affineTransform(&c).inverse(); // TODO: catch if too distorted
+      W = mpWarp->get_affineTransform(&c); // TODO: catch if too distorted
     } else {
-      affInv.setIdentity();
+      W.setIdentity();
     }
+    affInv = W.inverse();
     int numLevel = 0;
     FeatureCoordinates c_level;
     const int halfpatch_size = patch_size/2;
@@ -84,7 +86,7 @@ class MultilevelPatchAlignment {
     Patch<patch_size> extractedPatch;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
+      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -94,7 +96,7 @@ class MultilevelPatchAlignment {
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level,mpWarp,false);
+          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level.get_c(),W,false);
           const float* it_patch_extracted = extractedPatch.patch_;
           for(int y=0; y<patch_size; ++y){
             for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
@@ -103,7 +105,7 @@ class MultilevelPatchAlignment {
               const float Jy = -pow(0.5,l)*(*it_dy);
               mean_diff += res;
               b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = res;
-              if(mpWarp == nullptr || mpWarp->isIdentity_){
+              if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
                 mean_diff_dx += Jx;
                 mean_diff_dy += Jy;
                 A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
@@ -209,11 +211,19 @@ class MultilevelPatchAlignment {
    */
   bool align2D_old(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp, const int l1, const int l2,
                    const int maxIter = 10, const double minPixUpd = 0.03){
+    Eigen::Matrix2f W;
+    Eigen::Matrix2f WInv;
+    if(mpWarp != nullptr){
+      W = mpWarp->get_affineTransform(&cInit); // TODO: catch if too distorted
+    } else {
+      W.setIdentity();
+    }
+    WInv = W.inverse();
     int numLevel = 0;
     FeatureCoordinates c_level;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -225,7 +235,7 @@ class MultilevelPatchAlignment {
     }
     Eigen::Matrix3f aff = Eigen::Matrix3f::Identity();
     if(mpWarp != nullptr){
-      aff.block<2,2>(0,0) = mpWarp->get_affineTransform(&cInit);
+      aff.block<2,2>(0,0) = W;
     }
     Eigen::Matrix3f affInv = aff.inverse();
     const int halfpatch_size = patch_size/2;
@@ -233,7 +243,7 @@ class MultilevelPatchAlignment {
     Eigen::Matrix3f H; H.setZero();
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
         mp.patches_[l].computeGradientParameters();
         H(0,0) += pow(0.25,l)*mp.patches_[l].H_(0,0);
         H(0,1) += pow(0.25,l)*mp.patches_[l].H_(0,1);
@@ -262,13 +272,13 @@ class MultilevelPatchAlignment {
       int count = 0;
       for(int l = l1; l <= l2; l++){
         pyr.levelTranformCoordinates(cOut,c_level,0,l);
-        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,mpWarp,false)){
+        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
           const int refStep = pyr.imgs_[l].step.p[0];
 
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          if(mpWarp == nullptr || mpWarp->isIdentity_){
+          if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
             const int u_r = floor(c_level.get_c().x);
             const int v_r = floor(c_level.get_c().y);
             if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[l].cols-halfpatch_size || v_r >= pyr.imgs_[l].rows-halfpatch_size){ // TODO: check limits
@@ -298,8 +308,8 @@ class MultilevelPatchAlignment {
               for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
                 const float dx = x - halfpatch_size + 0.5;
                 const float dy = y - halfpatch_size + 0.5;
-                const float wdx = aff(0,0)*dx + aff(0,1)*dy;
-                const float wdy = aff(1,0)*dx + aff(1,1)*dy;
+                const float wdx = W(0,0)*dx + W(0,1)*dy;
+                const float wdy = W(1,0)*dx + W(1,1)*dy;
                 const float u_pixel = c_level.get_c().x + wdx - 0.5;
                 const float v_pixel = c_level.get_c().y + wdy - 0.5;
                 const int u_pixel_r = floor(u_pixel);
@@ -328,7 +338,7 @@ class MultilevelPatchAlignment {
       if(count==0){
         return false;
       }
-      if(mpWarp == nullptr || mpWarp->isIdentity_){
+      if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
         update = Hinv * Jres;
       } else {
         update = aff * Hinv * Jres;

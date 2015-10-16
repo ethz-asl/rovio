@@ -55,6 +55,8 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   const V3D g_; /**<Gravity in inertial frame, always aligned with the z-axis.*/
   double inertialMotionRorTh_; /**<Threshold on the rotational rate for motion detection.*/
   double inertialMotionAccTh_; /**<Threshold on the acceleration for motion detection.*/
+  mutable FeatureCoordinates oldC_;
+  mutable FeatureDistance oldD_;
   ImuPrediction():g_(0,0,-9.81){
     int ind;
     inertialMotionRorTh_ = 0.1;
@@ -84,33 +86,37 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     BearingCorners bearingCornerOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){
       const int camID = state.CfP(i).camID_;
+      output.CfP(i).mpCamera_ = state.CfP(i).mpCamera_;
+      output.CfP(i).camID_ = state.CfP(i).camID_;
       if(camID >= 0 && camID < mtState::nCam_){
         const V3D camRor = state.qCM(camID).rotate(imuRor);
         const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-        const LWF::NormalVectorElement& oldBearing = state.CfP(i).get_nor();
-        output.dep(i).p_ = state.dep(i).p_-dt*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*camVel + noise.template get<mtNoise::_fea>(i)(2)*sqrt(dt);
-        V3D dm = dt*(gSM(oldBearing.getVec())*camVel/state.dep(i).getDistance()
-            + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor)
-            + oldBearing.getN()*noise.template get<mtNoise::_fea>(i).template block<2,1>(0,0)*sqrt(dt);
+        oldC_ = state.CfP(i);
+        oldD_ = state.dep(i);
+        output.dep(i).p_ = oldD_.p_-dt*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*camVel + noise.template get<mtNoise::_fea>(i)(2)*sqrt(dt);
+        V3D dm = dt*(gSM(oldC_.get_nor().getVec())*camVel/oldD_.getDistance()
+            + (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())*camRor)
+            + oldC_.get_nor().getN()*noise.template get<mtNoise::_fea>(i).template block<2,1>(0,0)*sqrt(dt);
         QPD qm = qm.exponentialMap(dm);
-        output.CfP(i).set_nor(oldBearing.rotated(qm));
+        output.CfP(i).set_nor(oldC_.get_nor().rotated(qm));
         // WARP corners
         if(state.aux().doPatchWarping_){
           for(unsigned int j=0;j<2;j++){
-            oldBearing.boxPlus(state.aux().warping_[i].get_bearingCorners(&state.CfP(i))[j],tempNormal);
-            dm = dt*(gSM(tempNormal.getVec())*camVel/state.dep(i).getDistance() + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
+            oldC_.get_nor().boxPlus(state.aux().warping_[i].get_bearingCorners(&oldC_)[j],tempNormal);
+            dm = dt*(gSM(tempNormal.getVec())*camVel/oldD_.getDistance() + (M3D::Identity()-tempNormal.getVec()*tempNormal.getVec().transpose())*camRor);
             qm = qm.exponentialMap(dm);
             tempNormal = tempNormal.rotated(qm);
             tempNormal.boxMinus(output.CfP(i).get_nor(),bearingCornerOut[j]);
           }
           output.aux().warping_[i].set_bearingCorners(bearingCornerOut);
+        } else {
+          output.aux().warping_[i].set_affineTransfrom(Eigen::Matrix2f::Identity());
         }
       } else {
         output.CfP(i).set_nor(state.CfP(i).get_nor());
         output.dep(i).p_ = 1.0;
         output.aux().warping_[i].set_affineTransfrom(Eigen::Matrix2f::Identity());
       }
-      output.CfP(i).mpCamera_ = state.CfP(i).mpCamera_;
     }
     output.WrWM() = state.WrWM()-dt*(state.qWM().rotate(state.MvM())-noise.template get<mtNoise::_pos>()/sqrt(dt));
     output.MvM() = (M3D::Identity()-gSM(dOmega))*state.MvM()-dt*(meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
@@ -157,52 +163,53 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       if(camID >= 0 && camID < mtState::nCam_){
         const V3D camRor = state.qCM(camID).rotate(imuRor);
         const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-        const LWF::NormalVectorElement& oldBearing = state.CfP(i).get_nor();
-        V3D dm = dt*(gSM(oldBearing.getVec())*camVel/state.dep(i).getDistance()
-            + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
+        oldC_ = state.CfP(i);
+        oldD_ = state.dep(i);
+        V3D dm = dt*(gSM(oldC_.get_nor().getVec())*camVel/oldD_.getDistance()
+            + (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())*camRor);
         qm = qm.exponentialMap(dm);
-        nOut = oldBearing.rotated(qm);
-        F(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = 1.0 - dt*state.dep(i).getParameterDerivativeCombined()
-                *oldBearing.getVec().transpose()*camVel;
+        nOut = oldC_.get_nor().rotated(qm);
+        F(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = 1.0 - dt*oldD_.getParameterDerivativeCombined()
+                *oldC_.get_nor().getVec().transpose()*camVel;
         F.template block<1,3>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_vel>()) =
-            dt*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*MPD(state.qCM(camID)).matrix();
+            dt*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*MPD(state.qCM(camID)).matrix();
         F.template block<1,3>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_gyb>()) =
-            -dt*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*gSM(state.qCM(camID).rotate(state.MrMC(camID)))*MPD(state.qCM(camID)).matrix();
+            -dt*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*gSM(state.qCM(camID).rotate(state.MrMC(camID)))*MPD(state.qCM(camID)).matrix();
         F.template block<1,2>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)) =
-            -dt*state.dep(i).getParameterDerivative()*camVel.transpose()*oldBearing.getM();
+            -dt*oldD_.getParameterDerivative()*camVel.transpose()*oldC_.get_nor().getM();
         F.template block<2,2>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)) =
             nOut.getM().transpose()*(
-                    dt*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)*(
-                        -1.0/state.dep(i).getDistance()*gSM(camVel)
-                        - (M3D::Identity()*(oldBearing.getVec().dot(camRor))+oldBearing.getVec()*camRor.transpose()))
+                    dt*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)*(
+                        -1.0/oldD_.getDistance()*gSM(camVel)
+                        - (M3D::Identity()*(oldC_.get_nor().getVec().dot(camRor))+oldC_.get_nor().getVec()*camRor.transpose()))
                     +MPD(qm).matrix()
-            )*oldBearing.getM();
+            )*oldC_.get_nor().getM();
         F.template block<2,1>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)+2) =
             -nOut.getM().transpose()*gSM(nOut.getVec())*Lmat(dm)
-                *dt*gSM(oldBearing.getVec())*camVel*(state.dep(i).getDistanceDerivative()/(state.dep(i).getDistance()*state.dep(i).getDistance()));
+                *dt*gSM(oldC_.get_nor().getVec())*camVel*(oldD_.getDistanceDerivative()/(oldD_.getDistance()*oldD_.getDistance()));
         F.template block<2,3>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_vel>()) =
-            -nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)
-                *dt/state.dep(i).getDistance()*gSM(oldBearing.getVec())*MPD(state.qCM(camID)).matrix();
+            -nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)
+                *dt/oldD_.getDistance()*gSM(oldC_.get_nor().getVec())*MPD(state.qCM(camID)).matrix();
         F.template block<2,3>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_gyb>()) =
-            nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)*(
-                - (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())
-                +1.0/state.dep(i).getDistance()*gSM(oldBearing.getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
+            nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)*(
+                - (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())
+                +1.0/oldD_.getDistance()*gSM(oldC_.get_nor().getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
             )*dt*MPD(state.qCM(camID)).matrix();
         if(state.aux().doVECalibration_){
           F.template block<1,3>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_vea>(camID)) =
-              -dt*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*gSM(camVel);
+              -dt*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*gSM(camVel);
           F.template block<1,3>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_vep>(camID)) =
-              -dt*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*MPD(state.qCM(camID)).matrix()*gSM(imuRor);
+              -dt*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*MPD(state.qCM(camID)).matrix()*gSM(imuRor);
 
           F.template block<2,3>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_vea>(camID)) =
-              nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)*(
-                  (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())
+              nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)*(
+                  (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())
               )*dt*gSM(camRor)
-              +nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)
-                  *dt/state.dep(i).getDistance()*gSM(oldBearing.getVec())*gSM(camVel);
+              +nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)
+                  *dt/oldD_.getDistance()*gSM(oldC_.get_nor().getVec())*gSM(camVel);
           F.template block<2,3>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_vep>(camID)) =
-              nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)
-                  *dt/state.dep(i).getDistance()*gSM(oldBearing.getVec())*MPD(state.qCM(camID)).matrix()*gSM(imuRor);
+              nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)
+                  *dt/oldD_.getDistance()*gSM(oldC_.get_nor().getVec())*MPD(state.qCM(camID)).matrix()*gSM(imuRor);
         }
       }
     }
@@ -229,22 +236,23 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     for(unsigned int i=0;i<mtState::nMax_;i++){
       const int camID = state.CfP(i).camID_;
       if(camID >= 0 && camID < mtState::nCam_){
-        const LWF::NormalVectorElement& oldBearing = state.CfP(i).get_nor();
+        oldC_ = state.CfP(i);
+        oldD_ = state.dep(i);
         const V3D camRor = state.qCM(camID).rotate(imuRor);
         const V3D camVel = state.qCM(camID).rotate(V3D(imuRor.cross(state.MrMC(camID))-state.MvM()));
-        V3D dm = dt*(gSM(oldBearing.getVec())*camVel/state.dep(i).getDistance()
-            + (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())*camRor);
+        V3D dm = dt*(gSM(oldC_.get_nor().getVec())*camVel/oldD_.getDistance()
+            + (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())*camRor);
         QPD qm = qm.exponentialMap(dm);
-        nOut = oldBearing.rotated(qm);
+        nOut = oldC_.get_nor().rotated(qm);
         G(mtState::template getId<mtState::_fea>(i)+2,mtNoise::template getId<mtNoise::_fea>(i)+2) = sqrt(dt);
         G.template block<1,3>(mtState::template getId<mtState::_fea>(i)+2,mtNoise::template getId<mtNoise::_att>()) =
-            sqrt(dt)*state.dep(i).getParameterDerivative()*oldBearing.getVec().transpose()*gSM(state.qCM(camID).rotate(state.MrMC(camID)))*MPD(state.qCM(camID)).matrix();
+            sqrt(dt)*oldD_.getParameterDerivative()*oldC_.get_nor().getVec().transpose()*gSM(state.qCM(camID).rotate(state.MrMC(camID)))*MPD(state.qCM(camID)).matrix();
         G.template block<2,2>(mtState::template getId<mtState::_fea>(i),mtNoise::template getId<mtNoise::_fea>(i)) =
-            nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)*oldBearing.getN()*sqrt(dt);
+            nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)*oldC_.get_nor().getN()*sqrt(dt);
         G.template block<2,3>(mtState::template getId<mtState::_fea>(i),mtNoise::template getId<mtNoise::_att>()) =
-            -nOut.getM().transpose()*gSM(qm.rotate(oldBearing.getVec()))*Lmat(dm)*(
-                - (M3D::Identity()-oldBearing.getVec()*oldBearing.getVec().transpose())
-                +1.0/state.dep(i).getDistance()*gSM(oldBearing.getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
+            -nOut.getM().transpose()*gSM(qm.rotate(oldC_.get_nor().getVec()))*Lmat(dm)*(
+                - (M3D::Identity()-oldC_.get_nor().getVec()*oldC_.get_nor().getVec().transpose())
+                +1.0/oldD_.getDistance()*gSM(oldC_.get_nor().getVec())*gSM(state.qCM(camID).rotate(state.MrMC(camID)))
              )*sqrt(dt)*MPD(state.qCM(camID)).matrix();
       }
     }

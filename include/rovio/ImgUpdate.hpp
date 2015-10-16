@@ -223,7 +223,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   ImgUpdate(): transformFeatureOutputCT_(nullptr){
     mpMultiCamera_ = nullptr;
     initCovFeature_.setIdentity();
-    initDepth_ = 0;
+    initDepth_ = 0.5;
     startLevel_ = 3;
     endLevel_ = 1;
     startDetectionTh_ = 0.9;
@@ -488,10 +488,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         if(verbose_) std::cout << "    Normal in camera frame: " << featureOutput_.c().get_nor().getVec().transpose() << std::endl;
 
         // Make patch feature in target frame
-        if(!mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],featureOutput_.c(),startLevel_,f.mpWarping_,false)){
+        if(!featureOutput_.c().isInFront() || !mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],featureOutput_.c(),startLevel_,f.mpWarping_,false)){
           f.mpStatistics_->status_[activeCamID] = NOT_IN_FRAME;
           if(verbose_) std::cout << "    NOT in frame" << std::endl;
         } else {
+//          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(255,255,0),f.mpWarping_);
           pixelOutputCT_.transformState(featureOutput_,pixelOutput_);
           pixelOutputCT_.transformCovMat(featureOutput_,featureOutputCov_,pixelOutputCov_);
           featureOutput_.c().setSigmaFromCov(pixelOutputCov_);
@@ -516,19 +517,19 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           bool successfullAlignment = false;
           if(!useDirectMethod_ || true){ // TODO: make adaptive || pixelOutputCov_.operatorNorm() > matchingPixelThreshold_
             if(alignment_.align2DComposed(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_,startLevel_,endLevel_,endLevel_)){
+              if(verbose_) std::cout << "    Found match: " << alignedCoordinates_.get_nor().getVec().transpose() << std::endl;
               if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false)){
                 mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false);
                 const float avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
                 if(avgError > patchRejectionTh_){
                   f.mpStatistics_->status_[activeCamID] = FAILED_ALIGNEMENT;
-                  if(verbose_) std::cout << "    \033[31mNOT FOUND (error too large)\033[0m" << std::endl;
+                  if(verbose_) std::cout << "    \033[31mREJECTED (error too large)\033[0m" << std::endl;
                 } else {
                   if(doFrameVisualisation_){
                     alignedCoordinates_.drawPoint(filterState.img_[activeCamID], cv::Scalar(255,0,255));
                   }
                   if(activeCamID==camID) f.log_meas_ = alignedCoordinates_;
                   successfullAlignment = true;
-                  if(verbose_) std::cout << "    Found match: " << alignedCoordinates_.get_nor().getVec().transpose() << std::endl;
                 }
               }
             } else {
@@ -762,6 +763,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       const double t3 = (double) cv::getTickCount();
       if(verbose_) std::cout << "== Got " << filterState.fsm_.getValidCount() << " after adding " << newSet.size() << " features (" << (t3-t2)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
       for(auto it = newSet.begin();it != newSet.end();++it){
+        filterState.fsm_.features_[*it].mpStatistics_->resetStatistics(filterState.t_);
         filterState.fsm_.features_[*it].mpStatistics_->status_[searchCamID] = TRACKED;
         filterState.fsm_.features_[*it].mpDistance_->p_ = medianDepthParameters[searchCamID];
         filterState.resetFeatureCovariance(*it,initCovFeature_);

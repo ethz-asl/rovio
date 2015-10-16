@@ -42,10 +42,12 @@ namespace rovio{
  */
 struct PixelCorners{
   cv::Point2f corners_[2];
-  cv::Point2f& operator[](unsigned int i){
+  cv::Point2f& operator[](int i){
+    assert(i>=0 && i<2);
     return corners_[i];
   };
-  const cv::Point2f& operator[](unsigned int i) const{
+  const cv::Point2f& operator[](int i) const{
+    assert(i>=0 && i<2);
     return corners_[i];
   };
   void setIdentity(){
@@ -62,19 +64,58 @@ struct PixelCorners{
  *  \see PixelCorners
  */
 struct BearingCorners{
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   Eigen::Vector2d corners_[2];
-  Eigen::Vector2d& operator[](unsigned int i){
+  Eigen::Vector2d& operator[](int i){
+    assert(i>=0 && i<2);
     return corners_[i];
   };
-  const Eigen::Vector2d& operator[](unsigned int i) const{
+  const Eigen::Vector2d& operator[](int i) const{
+    assert(i>=0 && i<2);
     return corners_[i];
   };
 };
+
+/** \brief Coordinates of the four patch corners.
+ */
+struct PatchCorners{
+  FeatureCoordinates f_[4];
+  FeatureCoordinates& operator()(int x,int y){
+    assert(x>=0 && x<2);
+    assert(y>=0 && y<2);
+    return f_[2*x+y];
+  };
+  const FeatureCoordinates& operator()(int x,int y) const{
+    assert(x>=0 && x<2);
+    assert(y>=0 && y<2);
+    return f_[2*x+y];
+  };
+};
+
+/** \brief Helper function for transforming a cv::Point2f to a Eigen::Vector2f
+ *
+ * @param p - cv::Point2f
+ * @return Eigen::Vector2f
+ */
+static Eigen::Vector2f pointToVec2f(const cv::Point2f& p){
+  return Eigen::Vector2f(p.x,p.y);
+}
+
+
+/** \brief Helper function for transforming a cv::Point2f to a Eigen::Vector2f
+ *
+ * @param v - Eigen::Vector2f
+ * @return cv::Point2f
+ */
+static cv::Point2f vecToPoint2f(const Eigen::Vector2f& v){
+  return cv::Point2f(v(0),v(1));
+}
 
 /** \brief Class taking care of tracking the feature warping
  */
 class FeatureWarping{
  public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   float warpDistance_; /**<Distance used for computing the affine matrix numerically.*/
   mutable PixelCorners pixelCorners_;  /**<Vectors, pointing from the feature coordinates to the midpoint of the patch edges.*/
   mutable bool valid_pixelCorners_;  /**<Specifies if the current pixel corners \ref pixelCorners_ are valid.*/
@@ -83,7 +124,9 @@ class FeatureWarping{
   mutable bool valid_bearingCorners_;  /**<Specifies if the current bearing corners \ref bearingCorners_ are valid.*/
   mutable Eigen::Matrix2f affineTransform_;  /**<Affine transformation matrix from current patch to the current frame. */
   mutable bool valid_affineTransform_;  /**<Specifies if the affine transformation \ref affineTransform_ is valid.*/
-  mutable bool isIdentity_; /**<Is the warping equal to identity.*/
+  bool isIdentity_; /**<Is the warping equal to identity.*/
+  mutable PatchCorners patchCornersTemp_; /**<Four corners of patch.*/
+  mutable LWF::NormalVectorElement norTemp_;
 
   /** \brief Constructor
    */
@@ -102,11 +145,32 @@ class FeatureWarping{
     isIdentity_ = true;
   }
 
+  /** \brief Get the four corners of the MultilevelPatchFeature.
+   *
+   * @param mpCoordinates - pointer to coordinates of center point
+   * @param s - stretch factor
+   * @return the four corners.
+   */
+  const PatchCorners& get_patchCorners(const FeatureCoordinates* mpCoordinates, float s = 1.0) const{
+    assert(mpCoordinates != nullptr);
+    get_bearingCorners(mpCoordinates);
+    for(int x=0;x<2;x++){
+      for(int y=0;y<2;y++){
+        mpCoordinates->get_nor().boxPlus(((x*2-1)*bearingCorners_[0]+(y*2-1)*bearingCorners_[1])*s/warpDistance_,norTemp_);
+        patchCornersTemp_(x,y).set_nor(norTemp_);
+        patchCornersTemp_(x,y).mpCamera_ = mpCoordinates->mpCamera_;
+        patchCornersTemp_(x,y).camID_ = mpCoordinates->camID_;
+      }
+    }
+    return patchCornersTemp_;
+  }
+
   /** \brief Get the PixelCorners of the MultilevelPatchFeature.
    *
    * @return the valid PixelCorners.
    */
   const PixelCorners& get_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
+    assert(mpCoordinates != nullptr);
     if(!valid_pixelCorners_){
       if(valid_bearingCorners_){
         assert(mpCoordinates->mpCamera_ != nullptr);
@@ -138,6 +202,7 @@ class FeatureWarping{
    * @return the valid BearingCorners.
    */
   const BearingCorners& get_bearingCorners(const FeatureCoordinates* mpCoordinates) const{
+    assert(mpCoordinates != nullptr);
     if(!valid_bearingCorners_){
       assert(mpCoordinates->mpCamera_ != nullptr);
       cv::Point2f tempPixel;
@@ -161,6 +226,7 @@ class FeatureWarping{
    * @return the affine transformation matrix \ref affineTransform_.
    */
   const Eigen::Matrix2f& get_affineTransform(const FeatureCoordinates* mpCoordinates) const{
+    assert(mpCoordinates != nullptr);
     if(!valid_affineTransform_){
       get_pixelCorners(mpCoordinates);
       for(unsigned int i=0;i<2;i++){

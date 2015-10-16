@@ -51,14 +51,6 @@ class FeatureDistance{
    *  @param type - enum \ref Type.
    */
   FeatureDistance(const Type& type = REGULAR){
-    reset(type);
-  }
-
-  /** \brief Resets the distance parameter
-   *
-   *  @param type - enum \ref Type.
-   */
-  void reset(const Type& type = REGULAR){
     setType(type);
     p_ = 1.0;
   }

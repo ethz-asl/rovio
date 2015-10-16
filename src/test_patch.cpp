@@ -51,37 +51,37 @@ TEST_F(PatchTesting, constructors) {
 // Test isPatchInFrame
 TEST_F(PatchTesting, isPatchInFrame) {
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),false);
   c_.set_c(cv::Point2f(patchSize_/2-0.1,patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),false);
   c_.set_c(cv::Point2f(patchSize_/2,patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),true);
   c_.set_c(cv::Point2f(patchSize_/2+0.1,patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-0.1,imgSize_-patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2,imgSize_-patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2+0.1,imgSize_-patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity()),false);
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1-0.1,patchSize_/2+1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),true);
   c_.set_c(cv::Point2f(patchSize_/2+1+0.1,patchSize_/2+1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1-0.1,imgSize_-patchSize_/2-1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1,imgSize_-patchSize_/2-1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1+0.1,imgSize_-patchSize_/2-1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,nullptr,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true),false);
 }
 
 // Test isPatchInFrame
@@ -90,79 +90,79 @@ TEST_F(PatchTesting, isPatchInFrameWithWarping) {
   aff.setIdentity();
   warp_.set_affineTransfrom(aff);
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(patchSize_/2-0.1,patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(patchSize_/2,patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(patchSize_/2+0.1,patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-0.1,imgSize_-patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2,imgSize_-patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2+0.1,imgSize_-patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1-0.1,patchSize_/2+1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(patchSize_/2+1+0.1,patchSize_/2+1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1-0.1,imgSize_-patchSize_/2-1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1,imgSize_-patchSize_/2-1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1+0.1,imgSize_-patchSize_/2-1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   aff << 0, -1, 1, 0;
   warp_.set_affineTransfrom(aff);
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(patchSize_/2-0.1,patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(patchSize_/2,patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(patchSize_/2+0.1,patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-0.1,imgSize_-patchSize_/2-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2,imgSize_-patchSize_/2));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2+0.1,imgSize_-patchSize_/2+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f(0,0));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1-0.1,patchSize_/2+1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(patchSize_/2+1+0.1,patchSize_/2+1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1-0.1,imgSize_-patchSize_/2-1-0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1,imgSize_-patchSize_/2-1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),true);
   c_.set_c(cv::Point2f(imgSize_-patchSize_/2-1+0.1,imgSize_-patchSize_/2-1+0.1));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   c_.set_c(cv::Point2f(imgSize_,imgSize_));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_,true),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true),false);
   aff << cos(M_PI/6.0), -sin(M_PI/6.0), sin(M_PI/6.0), cos(M_PI/6.0);
   warp_.set_affineTransfrom(aff);
   c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),true);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),true);
   c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2-1e-6));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
   c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2-1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6));
-  ASSERT_EQ(p_.isPatchInFrame(img1_,c_,&warp_),false);
+  ASSERT_EQ(p_.isPatchInFrame(img1_,c_.get_c(),warp_.get_affineTransform(&c_)),false);
 }
 
 // Test extractPatchFromImage
@@ -176,7 +176,7 @@ TEST_F(PatchTesting, extractPatchFromImage) {
       cv::Point2f(imgSize_-patchSize_-2,imgSize_-patchSize_-2)};
   for(unsigned int n=0;n<N;n++){
     c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1)+patchOrigins[n]);
-    p_.extractPatchFromImage(img1_,c_,nullptr,true);
+    p_.extractPatchFromImage(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true);
     float* patch_ptr = p_.patchWithBorder_;
     for(int i=0;i<patchSize_+2;i++){
       for(int j=0;j<patchSize_+2;j++, ++patch_ptr){
@@ -192,7 +192,7 @@ TEST_F(PatchTesting, extractWarpedPatchFromImage) {
   aff << cos(M_PI/6.0), -sin(M_PI/6.0), sin(M_PI/6.0), cos(M_PI/6.0);
   warp_.set_affineTransfrom(aff);
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  p_.extractPatchFromImage(img1_,c_,&warp_,true);
+  p_.extractPatchFromImage(img1_,c_.get_c(),warp_.get_affineTransform(&c_),true);
   float* patch_ptr = p_.patchWithBorder_;
   for(int i=0;i<patchSize_+2;i++){
     for(int j=0;j<patchSize_+2;j++, ++patch_ptr){
@@ -205,7 +205,7 @@ TEST_F(PatchTesting, extractWarpedPatchFromImage) {
 // Test extractPatchFromPatchWithBorder
 TEST_F(PatchTesting, extractPatchFromPatchWithBorder) {
   c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1));
-  p_.extractPatchFromImage(img1_,c_,nullptr,true);
+  p_.extractPatchFromImage(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true);
   p_.extractPatchFromPatchWithBorder();
   float* patch_ptr = p_.patch_;
   for(int i=0;i<patchSize_;i++){
@@ -218,7 +218,7 @@ TEST_F(PatchTesting, extractPatchFromPatchWithBorder) {
 // Test computeGradientParameters
 TEST_F(PatchTesting, computeGradientParameters) {
   c_.set_c(cv::Point2f(patchSize_/2+1,patchSize_/2+1+0.5));
-  p_.extractPatchFromImage(img1_,c_,nullptr,true);
+  p_.extractPatchFromImage(img1_,c_.get_c(),Eigen::Matrix2f::Identity(),true);
   p_.computeGradientParameters();
   float* it_dx = p_.dx_;
   float* it_dy = p_.dy_;
@@ -240,7 +240,7 @@ TEST_F(PatchTesting, computeGradientParameters) {
   ASSERT_EQ(p_.H_(2,2),patchSize_*patchSize_);
 
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  p_.extractPatchFromImage(img2_,c_,nullptr,true);
+  p_.extractPatchFromImage(img2_,c_.get_c(),Eigen::Matrix2f::Identity(),true);
   p_.computeGradientParameters();
   double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
   s = s*(255*0.5)*(255*0.5)/(patchSize_*patchSize_);

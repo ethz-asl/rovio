@@ -129,9 +129,9 @@ class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutp
     // d_out = ||DrDP||
     // nor_out = DrDP/d_out
     input.updateMultiCameraExtrinsics(mpMultiCamera_);
-    mpMultiCamera_->transformFeature(outputCamID_,input.CfP(ID_),input.dep(ID_),output.c(),output.d());
     output.c().camID_ = outputCamID_;
     output.c().mpCamera_ = &mpMultiCamera_->cameras_[outputCamID_];
+    mpMultiCamera_->transformFeature(outputCamID_,input.CfP(ID_),input.dep(ID_),output.c(),output.d());
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
     input.updateMultiCameraExtrinsics(mpMultiCamera_);

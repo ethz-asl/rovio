@@ -147,10 +147,10 @@ class RovioNode{
   /** \brief Tests the functionality of the rovio node.
    */
   void makeTest(){
-    mtFilterState testFilterState;
-    testFilterState = mpFilter_->init_;
-    testFilterState.setCamera(&mpFilter_->multiCamera_);
-    mtState& testState = testFilterState.state_;
+    mtFilterState* mpTestFilterState = new mtFilterState();
+    *mpTestFilterState = mpFilter_->init_;
+    mpTestFilterState->setCamera(&mpFilter_->multiCamera_);
+    mtState& testState = mpTestFilterState->state_;
     unsigned int s = 2;
     testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
     predictionMeas_.setRandom(s);
@@ -166,7 +166,7 @@ class RovioNode{
       testState.aux().warping_[i].set_bearingCorners(bearingCorners);
     }
     testState.CfP(0).camID_ = mtState::nCam_-1;
-    testFilterState.fsm_.setAllCameraPointers();
+    mpTestFilterState->fsm_.setAllCameraPointers();
 
     // Prediction
     mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
@@ -205,6 +205,8 @@ class RovioNode{
 
     // Zero Velocity Updates
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
+
+    delete mpTestFilterState;
   }
 
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.

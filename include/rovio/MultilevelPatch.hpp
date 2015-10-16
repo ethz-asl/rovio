@@ -31,6 +31,7 @@
 
 #include "rovio/Patch.hpp"
 #include "rovio/FeatureCoordinates.hpp"
+#include "rovio/ImagePyramid.hpp"
 
 namespace rovio{
 
@@ -141,7 +142,12 @@ class MultilevelPatch{
    * @param color       - Line color.
    */
   void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
-    patches_[0].drawPatchBorder(drawImg,c,s*pow(2.0,nLevels-1),color,mpWarp);
+    if(!c.isInFront()) return;
+    if(mpWarp == nullptr){
+      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,Eigen::Matrix2f::Identity());
+    } else {
+      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,mpWarp->get_affineTransform(&c));
+    }
   }
 
   /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patches of an other MultilevelPatch
@@ -190,7 +196,11 @@ class MultilevelPatch{
   bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false) const{
     if(!c.isInFront()) return false;
     pyr.levelTranformCoordinates(c,coorTemp_,0,l);
-    return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_,mpWarp,withBorder);
+    if(mpWarp == nullptr){
+      return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),Eigen::Matrix2f::Identity(),withBorder);
+    } else {
+      return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),mpWarp->get_affineTransform(&c),withBorder);
+    }
   }
 
   /** \brief Extracts a multilevel patch from a given image pyramid.
@@ -205,7 +215,11 @@ class MultilevelPatch{
     for(unsigned int i=0;i<=l;i++){
       pyr.levelTranformCoordinates(c,coorTemp_,0,i);
       isValidPatch_[i] = true;
-      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_,mpWarp,withBorder);
+      if(mpWarp == nullptr){
+        patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),Eigen::Matrix2f::Identity(),withBorder);
+      } else {
+        patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),mpWarp->get_affineTransform(&c),withBorder);
+      }
     }
   }
 };

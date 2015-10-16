@@ -364,7 +364,6 @@ class FeatureSetManager{
         features_[ind].mpCoordinates_->camID_ = camID;
         features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
-        features_[ind].mpDistance_->reset();
         features_[ind].mpWarping_->reset();
         if(ind >= 0){
           newSet.insert(ind);
