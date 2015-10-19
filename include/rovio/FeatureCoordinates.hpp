@@ -98,26 +98,63 @@ class FeatureCoordinates{
     camID_ = -1;
   }
 
-  /** \brief Get the feature's pixel coordinates \ref c_.
+  /** \brief Compute the feature's pixel coordinates \ref c_.
    *
    *   If there are no valid feature pixel coordinates \ref c_ available, the feature pixel coordinates are computed
    *   from the bearing vector \ref nor_ (if valid).
-   *  @return the valid feature pixel coordinates \ref c_.
+   *  @return whether the computation was successful
    */
-  const cv::Point2f& get_c() const{
+  bool com_c() const{
     if(!valid_c_){
       assert(mpCamera_ != nullptr);
       if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
         valid_c_ = true;
-      } else {
-        std::cout << "ERROR: No valid coordinate data!" << std::endl;
       }
+    }
+    return valid_c_;
+  }
+
+  /** \brief Get the feature's pixel coordinates \ref c_.
+   *
+   *  @return the valid feature pixel coordinates \ref c_.
+   */
+  const cv::Point2f& get_c() const{
+    if(!com_c()){
+      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
     }
     return c_;
   }
 
+  /** \brief Compute the feature's bearing vector \ref nor_.
+   *
+   *  If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
+   *  feature pixel coordinates \ref c_ (if valid).
+   *  @return the valid bearing vector \ref nor_.
+   */
+  bool com_nor() const{
+    if(!valid_nor_){
+      assert(mpCamera_ != nullptr);
+      if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
+        valid_nor_ = true;
+      }
+    }
+    return valid_nor_;
+  }
+
+  /** \brief Get the feature's bearing vector \ref nor_.
+   *
+   *  @return the valid bearing vector \ref nor_.
+   */
+  const LWF::NormalVectorElement& get_nor() const{
+    if(!com_nor()){
+      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
+    }
+    return nor_;
+  }
+
   /** \brief Get the feature's pixel coordinates Jacobian
    *
+   *  Note: Validity can be checked with com_bearingCorners()
    *  @return The Jacobian of the pixel output w.r.t. the bearing vector
    */
   Eigen::Matrix<double,2,2> get_J() const{
@@ -125,27 +162,9 @@ class FeatureCoordinates{
     Eigen::Matrix<double,2,2> J;
     if(!mpCamera_->bearingToPixel(get_nor(),c_,J)){
       J.setZero();
-      std::cout << "ERROR: No valid coordinate data!" << std::endl;
+      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
     }
     return J;
-  }
-
-  /** \brief Get the feature's bearing vector \ref nor_.
-   *
-   *  If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
-   *  feature pixel coordinates \ref c_ (if valid).
-   *  @return the valid bearing vector \ref nor_.
-   */
-  const LWF::NormalVectorElement& get_nor() const{
-    if(!valid_nor_){
-      assert(mpCamera_ != nullptr);
-      if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
-        valid_nor_ = true;
-      } else {
-        std::cout << "ERROR: No valid coordinate data!" << std::endl;
-      }
-    }
-    return nor_;
   }
 
   /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).

@@ -147,6 +147,7 @@ class FeatureWarping{
 
   /** \brief Get the four corners of the MultilevelPatchFeature.
    *
+   * Note: Validity can be checked with com_bearingCorners(mpCoordinates)
    * @param mpCoordinates - pointer to coordinates of center point
    * @param s - stretch factor
    * @return the four corners.
@@ -167,34 +168,71 @@ class FeatureWarping{
 
   /** \brief Get the PixelCorners of the MultilevelPatchFeature.
    *
-   * @return the valid PixelCorners.
+   * @return Whether the computation was successfull.
    */
-  const PixelCorners& get_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
-    assert(mpCoordinates != nullptr);
+  bool com_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
     if(!valid_pixelCorners_){
-      if(valid_bearingCorners_){
-        assert(mpCoordinates->mpCamera_ != nullptr);
-        cv::Point2f tempPixel;
-        LWF::NormalVectorElement tempNormal;
-        for(unsigned int i=0;i<2;i++){
-          mpCoordinates->get_nor().boxPlus(bearingCorners_[i],tempNormal);
-          if(!mpCoordinates->mpCamera_->bearingToPixel(tempNormal,tempPixel)){
-            std::cout << "ERROR: Problem during bearing corner to pixel mapping!" << std::endl;
-          }
-          pixelCorners_[i] = tempPixel - mpCoordinates->get_c();
-        }
-        valid_pixelCorners_ = true;
-      } else if(valid_affineTransform_) {
+      if(valid_affineTransform_) {
         for(unsigned int i=0;i<2;i++){
           pixelCorners_[i].x = affineTransform_(0,i)*warpDistance_;  // Parallelism is preserved in an affine transformation!
           pixelCorners_[i].y = affineTransform_(1,i)*warpDistance_;  // Parallelism is preserved in an affine transformation!
         }
         valid_pixelCorners_ = true;
-      } else {
-        std::cout << "ERROR: No valid corner data!" << std::endl;
+      } else if(valid_bearingCorners_){
+        assert(mpCoordinates != nullptr);
+        assert(mpCoordinates->mpCamera_ != nullptr);
+        cv::Point2f tempPixel;
+        LWF::NormalVectorElement tempNormal;
+        if(mpCoordinates->com_nor() && mpCoordinates->com_c()){
+          valid_pixelCorners_ = true;
+          for(unsigned int i=0;i<2;i++){
+            mpCoordinates->get_nor().boxPlus(bearingCorners_[i],tempNormal);
+            if(!mpCoordinates->mpCamera_->bearingToPixel(tempNormal,tempPixel)){
+              valid_pixelCorners_ = false;
+              break;
+            }
+            pixelCorners_[i] = tempPixel - mpCoordinates->get_c();
+          }
+        }
       }
     }
+    return valid_pixelCorners_;
+  }
+
+  /** \brief Get the PixelCorners of the MultilevelPatchFeature.
+   *
+   * @return the valid PixelCorners.
+   */
+  const PixelCorners& get_pixelCorners(const FeatureCoordinates* mpCoordinates) const{
+    if(!com_pixelCorners(mpCoordinates)){
+      std::cout << "    \033[31mERROR: No valid corner data!\033[0m" << std::endl;
+    }
     return pixelCorners_;
+  }
+
+  /** \brief Computes the BearingCorners of the MultilevelPatchFeature.
+   *
+   * @return Whether the computation was successfull.
+   */
+  bool com_bearingCorners(const FeatureCoordinates* mpCoordinates) const{
+    if(!valid_bearingCorners_){
+      assert(mpCoordinates != nullptr);
+      assert(mpCoordinates->mpCamera_ != nullptr);
+      cv::Point2f tempPixel;
+      LWF::NormalVectorElement tempNormal;
+      if(com_pixelCorners(mpCoordinates) && mpCoordinates->com_nor() && mpCoordinates->com_c()){
+        valid_bearingCorners_ = true;
+        for(unsigned int i=0;i<2;i++){
+          tempPixel = mpCoordinates->get_c()+pixelCorners_[i];
+          if(!mpCoordinates->mpCamera_->pixelToBearing(tempPixel,tempNormal)){
+            valid_bearingCorners_ = false;
+            break;
+          }
+          tempNormal.boxMinus(mpCoordinates->get_nor(),bearingCorners_[i]);
+        }
+      }
+    }
+    return valid_bearingCorners_;
   }
 
   /** \brief Get the BearingCorners of the MultilevelPatchFeature.
@@ -202,38 +240,37 @@ class FeatureWarping{
    * @return the valid BearingCorners.
    */
   const BearingCorners& get_bearingCorners(const FeatureCoordinates* mpCoordinates) const{
-    assert(mpCoordinates != nullptr);
-    if(!valid_bearingCorners_){
-      assert(mpCoordinates->mpCamera_ != nullptr);
-      cv::Point2f tempPixel;
-      LWF::NormalVectorElement tempNormal;
-      get_pixelCorners(mpCoordinates);
-      for(unsigned int i=0;i<2;i++){
-        tempPixel = mpCoordinates->get_c()+pixelCorners_[i];
-        if(!mpCoordinates->mpCamera_->pixelToBearing(tempPixel,tempNormal)){
-          std::cout << "ERROR: Problem during pixel corner to bearing mapping!" << std::endl;
-        }
-        tempNormal.boxMinus(mpCoordinates->get_nor(),bearingCorners_[i]);
-      }
-      valid_bearingCorners_ = true;
+    if(!com_bearingCorners(mpCoordinates)){
+      std::cout << "    \033[31mERROR: No valid corner data!\033[0m" << std::endl;
     }
     return bearingCorners_;
   }
 
-  /** \brief Get the affine transformation of the current patch, if not available computes it from the
+  /** \brief Computes the affine transformation of the current patch, if not available computes it from the
    *  current pixelCorners or bearingCorners.
+   *
+   * @return Whether the computation was successfull.
+   */
+  bool com_affineTransform(const FeatureCoordinates* mpCoordinates) const{
+    if(!valid_affineTransform_){
+      if(com_pixelCorners(mpCoordinates)){
+        for(unsigned int i=0;i<2;i++){
+          affineTransform_(0,i) = pixelCorners_[i].x/warpDistance_;
+          affineTransform_(1,i) = pixelCorners_[i].y/warpDistance_;
+        }
+        valid_affineTransform_ = true;
+      }
+    }
+    return valid_affineTransform_;
+  }
+
+  /** \brief Get the affine transformation of the current patch.
    *
    * @return the affine transformation matrix \ref affineTransform_.
    */
   const Eigen::Matrix2f& get_affineTransform(const FeatureCoordinates* mpCoordinates) const{
-    assert(mpCoordinates != nullptr);
-    if(!valid_affineTransform_){
-      get_pixelCorners(mpCoordinates);
-      for(unsigned int i=0;i<2;i++){
-        affineTransform_(0,i) = pixelCorners_[i].x/warpDistance_;
-        affineTransform_(1,i) = pixelCorners_[i].y/warpDistance_;
-      }
-      valid_affineTransform_ = true;
+    if(!com_affineTransform(mpCoordinates)){
+      std::cout << "    \033[31mERROR: No valid corner data!\033[0m" << std::endl;
     }
     return affineTransform_;
   }

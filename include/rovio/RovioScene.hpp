@@ -131,6 +131,10 @@ class RovioScene{
       mpGroundtruth_->draw_ = false;
     }
 
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      mpPatches_[i]->draw_ = false;
+    }
+
     for(unsigned int camID=0;camID<mtState::nCam_;camID++){
       mpSensor_[camID]->W_r_WB_ = state.WrWC(camID).template cast<float>();
       mpSensor_[camID]->q_BW_ = state.qCW(camID);
@@ -144,6 +148,7 @@ class RovioScene{
       const float s = pow(2.0,mtState::nLevels_-1)*0.5*mtState::patchSize_;
       for(unsigned int i=0;i<mtState::nMax_;i++){
         if(filterState.fsm_.isValid_[i] && filterState.fsm_.features_[i].mpCoordinates_->camID_ == camID){
+          mpPatches_[i]->draw_ = true;
           d = state.dep(i);
           const double sigma = cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2);
           d.p_ -= sigma;
@@ -154,6 +159,10 @@ class RovioScene{
           const LWF::NormalVectorElement middle = state.CfP(i).get_nor();
           Eigen::Vector3d cornerVec[4];
           const double s = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-2);
+          if(!filterState.fsm_.features_[i].mpWarping_->com_bearingCorners(filterState.fsm_.features_[i].mpCoordinates_)){
+            mpPatches_[i]->draw_ = false;
+            continue;
+          }
           PatchCorners patchCorners = filterState.fsm_.features_[i].mpWarping_->get_patchCorners(filterState.fsm_.features_[i].mpCoordinates_,s);
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){

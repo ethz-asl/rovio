@@ -146,7 +146,9 @@ class MultilevelPatch{
     if(mpWarp == nullptr){
       patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,Eigen::Matrix2f::Identity());
     } else {
-      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,mpWarp->get_affineTransform(&c));
+      if(mpWarp->com_affineTransform(&c)){
+        patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,mpWarp->get_affineTransform(&c));
+      }
     }
   }
 
@@ -199,6 +201,9 @@ class MultilevelPatch{
     if(mpWarp == nullptr){
       return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),Eigen::Matrix2f::Identity(),withBorder);
     } else {
+      if(!mpWarp->com_affineTransform(&c)){
+        return false;
+      }
       return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),mpWarp->get_affineTransform(&c),withBorder);
     }
   }
