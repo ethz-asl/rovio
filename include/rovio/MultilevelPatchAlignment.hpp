@@ -71,7 +71,7 @@ class MultilevelPatchAlignment {
     b.resize(0,0);
     Eigen::Matrix2f W;
     Eigen::Matrix2f affInv;
-    if(!c.com_c() || !mpWarp->com_affineTransform(&c)){
+    if(!c.com_c() || (mpWarp != nullptr && !mpWarp->com_affineTransform(&c))){
       return false;
     }
     if(mpWarp != nullptr){
@@ -216,7 +216,7 @@ class MultilevelPatchAlignment {
                    const int maxIter = 10, const double minPixUpd = 0.03){
     Eigen::Matrix2f W;
     Eigen::Matrix2f WInv;
-    if(!cInit.com_c() || !mpWarp->com_affineTransform(&cInit)){
+    if(!cInit.com_c() || (mpWarp != nullptr && !mpWarp->com_affineTransform(&cInit))){
       return false;
     }
     if(mpWarp != nullptr){
