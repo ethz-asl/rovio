@@ -256,12 +256,12 @@ class FeatureStatistics{
    * @param localVisibilityRange local range for visibility quality
    * @param upper                if the global quality is bad (0) than the combination of local and visibility quality must be above this
    * @param lower                if the global quality is very good (1) than the combination of local and visibility quality must be above this
-   * @return
+   * @return whether this is a good feature or not
+   * @todo consider information quality (neibours, shape)
    */
   bool isGoodFeature(const double upper = 0.8, const double lower = 0.1) const{
     return getAverageLocalQuality()*localVisibility_ > upper-(upper-lower)*getGlobalQuality();
 
-    // TODO: consider information quality (neibours, shape)
   }
 };
 

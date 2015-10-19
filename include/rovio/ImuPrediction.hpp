@@ -76,7 +76,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     disablePreAndPostProcessingWarning_ = true;
   };
   ~ImuPrediction(){};
-  void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{ // TODO: implement without noise for speed
+  /* /brief Evaluation of prediction
+   *
+   * @todo implement without noise for speed
+   */
+  void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
     output.aux().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
     output.aux().MwWMest_  = meas.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuRor = output.aux().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);

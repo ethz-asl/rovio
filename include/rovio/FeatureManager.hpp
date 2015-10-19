@@ -173,7 +173,9 @@ class FeatureSetManager{
     }
   }
 
-  /** \brief @todo
+  /** \brief Sets the multicamera pointer
+   *
+   * @param mpMultiCamera - multicamera pointer;
    */
   void setCamera(MultiCamera<nCam>* mpMultiCamera){
     mpMultiCamera_ = mpMultiCamera;
@@ -281,9 +283,9 @@ class FeatureSetManager{
    *
    * @return an unordered_set, holding the indizes of the MultilevelPatchSet, at which the new MultilevelPatchFeature%s have been added (from the candidates list).
    */
-  // TODO: work more on bearing vectors (in general)
-  // TODO: add corner motion dependency
-  // TODO: check inFrame, only if COVARIANCE not too large
+  // @todo work more on bearing vectors (in general)
+  // @todo add corner motion dependency
+  // @todo check inFrame, only if COVARIANCE not too large
   std::unordered_set<unsigned int> addBestCandidates(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
                                                      const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                      const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
@@ -393,39 +395,6 @@ class FeatureSetManager{
     return newSet;
   }
 };
-
-///** \brief Prunes the (corner/feature) candidate list by erasing candidates, which are too close to an existing feature. // TODO: overthink
-// *
-// * @param mlpSet             - MultilevelPatchSet, containing the existing MultilevelPatchFeature%s .
-// * @param candidates         - List of extracted corner coordinates/candidates (defined on pyramid level 0).
-// * @param candidateID        - Camera ID, in which the candidates have been extracted.
-// */
-//void pruneCandidates(const MultilevelPatchSet<nLevels,patchSize,nMax>& mlpSet, std::list<cv::Point2f>& candidates, const int candidateID){
-//  constexpr float t2 = patchSize*patchSize;  // TODO: param
-//  bool prune;
-//  const MultilevelPatchFeature<nLevels,patchSize>* mpFeature;
-//  FeatureCoordinates featureCoordinates;
-//  for (auto it = candidates.begin(); it != candidates.end();) {
-//    prune = false;
-//    for(unsigned int i=0;i<nMax;i++){
-//      if(mlpSet.isValid_[i]){
-//        mpFeature = &mlpSet.features_[i];
-//        featureCoordinates = static_cast<FeatureCoordinates>(*mpFeature);
-//        featureCoordinates.set_nor(featureCoordinates.get_nor_other(candidateID));
-//        featureCoordinates.camID_ = candidateID;
-//        if(featureCoordinates.isInFront() && pow(it->x-featureCoordinates.get_c().x,2) + pow(it->y-featureCoordinates.get_c().y,2) < t2){
-//          prune = true;
-//          break;
-//        }
-//      }
-//    }
-//    if(prune){
-//      it = candidates.erase(it);
-//    } else {
-//      it++;
-//    }
-//  }
-//}
 
 }
 

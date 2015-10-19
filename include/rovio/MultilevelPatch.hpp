@@ -50,7 +50,7 @@ class MultilevelPatch{
   mutable Eigen::Matrix3f H_;  /**<Hessian matrix, corresponding to the multilevel patches.*/
   mutable float e0_;  /**<Smaller eigenvalue of H_.*/
   mutable float e1_;  /**<Larger eigenvalue of H_.*/
-  mutable float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation, add mutable */
+  mutable float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation*/
   mutable FeatureCoordinates coorTemp_; /**<Temporary feature coordinates object */
 
   /** Constructor

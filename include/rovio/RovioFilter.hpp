@@ -124,7 +124,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   void refreshProperties(){
     for(int camID = 0;camID<mtState::nCam_;camID++){
       if (!cameraCalibrationFile_[camID].empty()) {
-        multiCamera_.cameras_[camID].load(cameraCalibrationFile_[camID]); // TODO IMG
+        multiCamera_.cameras_[camID].load(cameraCalibrationFile_[camID]);
       }
     }
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
@@ -143,7 +143,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   /** \brief Resets the filter with an accelerometer measurement.
    *
    *  @param fMeasInit - Accelerometer measurement.
-   *  @param t         - Current time. @todo check this
+   *  @param t         - Current time.
    */
   void resetWithAccelerometer(const V3D& fMeasInit, double t = 0.0){
     init_.initWithAccelerometer(fMeasInit);
@@ -159,7 +159,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   void setExtrinsics(const Eigen::Matrix3d& R_CM, const Eigen::Vector3d& CrCM, const int camID = 0){
     rot::RotationMatrixAD R(R_CM);
     init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
-    init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM); // TODO: all filterstates
+    init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM);
   }
 //  void resetToKeyframe(double t = 0.0) {
 //    std::cout << "Reseting to keyframe" << std::endl;

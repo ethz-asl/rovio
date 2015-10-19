@@ -64,6 +64,7 @@ class MultilevelPatchAlignment {
    * @param A           - Jacobian of the pixel intensities w.r.t. to pixel coordinates
    * @param b           - Intensity errors
    * @return true, if successful.
+   * @todo catch if warping too distorted
    */
   bool getLinearAlignEquations(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const FeatureWarping* mpWarp, const int l1, const int l2,
                                Eigen::MatrixXf& A, Eigen::MatrixXf& b){
@@ -75,7 +76,7 @@ class MultilevelPatchAlignment {
       return false;
     }
     if(mpWarp != nullptr){
-      W = mpWarp->get_affineTransform(&c); // TODO: catch if too distorted
+      W = mpWarp->get_affineTransform(&c);
     } else {
       W.setIdentity();
     }
@@ -211,6 +212,7 @@ class MultilevelPatchAlignment {
    * @param maxIter     - Maximal number of iterations
    * @param minPixUpd   - Termination condition on absolute pixel update
    * @return true, if alignment converged!
+   * @todo catch if warping too distorted
    */
   bool align2D_old(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp, const int l1, const int l2,
                    const int maxIter = 10, const double minPixUpd = 0.03){
@@ -220,7 +222,7 @@ class MultilevelPatchAlignment {
       return false;
     }
     if(mpWarp != nullptr){
-      W = mpWarp->get_affineTransform(&cInit); // TODO: catch if too distorted
+      W = mpWarp->get_affineTransform(&cInit);
     } else {
       W.setIdentity();
     }
@@ -310,7 +312,7 @@ class MultilevelPatchAlignment {
               }
             }
           } else {
-            for(int y=0; y<patch_size; ++y){ // TODO: renaming
+            for(int y=0; y<patch_size; ++y){
               for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
                 const float dx = x - halfpatch_size + 0.5;
                 const float dy = y - halfpatch_size + 0.5;

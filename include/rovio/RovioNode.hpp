@@ -145,6 +145,8 @@ class RovioNode{
   ~RovioNode(){}
 
   /** \brief Tests the functionality of the rovio node.
+   *
+   *  @todo debug with   doVECalibration = false and depthType = 0
    */
   void makeTest(){
     mtFilterState* mpTestFilterState = new mtFilterState();
@@ -152,7 +154,7 @@ class RovioNode{
     mpTestFilterState->setCamera(&mpFilter_->multiCamera_);
     mtState& testState = mpTestFilterState->state_;
     unsigned int s = 2;
-    testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
+    testState.setRandom(s);
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
@@ -226,7 +228,8 @@ class RovioNode{
 
   /** \brief Image callback for the camera with ID 0
    *
-   *  @param img - Image message.
+   * @param img - Image message.
+   * @todo generalize
    */
   void imgCallback0(const sensor_msgs::ImageConstPtr & img){
     imgCallback(img,0);
@@ -235,9 +238,10 @@ class RovioNode{
   /** \brief Image callback for the camera with ID 1
    *
    * @param img - Image message.
+   * @todo generalize
    */
   void imgCallback1(const sensor_msgs::ImageConstPtr & img){
-    if(mtState::nCam_ > 1) imgCallback(img,1); //TODO generalize
+    if(mtState::nCam_ > 1) imgCallback(img,1);
   }
 
   /** \brief Image callback. Adds images (as update measurements) to the filter.
@@ -297,7 +301,7 @@ class RovioNode{
     }
   }
 
-  /** \brief Executes the update step of the filter and publishes the updated data. @todo check this
+  /** \brief Executes the update step of the filter and publishes the updated data.
    *
    *   @param updateTime   - Update Time.
    */
@@ -309,7 +313,7 @@ class RovioNode{
       static double timing_T = 0;
       static int timing_C = 0;
       const double oldSafeTime = mpFilter_->safe_.t_;
-      mpFilter_->updateSafe(&updateTime); // TODO: continue only if actually updates
+      mpFilter_->updateSafe(&updateTime);
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;

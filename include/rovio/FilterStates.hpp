@@ -395,7 +395,6 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
  *
  *  \see State
  *  @tparam STATE - Filter State
- *  @todo complete
  */
 template<typename STATE>
 class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
@@ -414,7 +413,7 @@ LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>{
   static constexpr unsigned int _att = _gyb+1;  /**<Idx. Quaternion qWM: IMU coordinates to World coordinates.*/
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
-  static constexpr unsigned int _fea = _vea+1;  /**<Idx. Depth Parameters @todo complete*/
+  static constexpr unsigned int _fea = _vea+1;  /**<Idx. Feature parametrizations (bearing + depth parameter), array*/
 
   /** \brief Constructor
    */
@@ -486,7 +485,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     fsm_.allocateMissing();
   }
 
-  /** \brief @todo
+  /** \brief Sets the multicamera pointer
+   *
+   * @param mpMultiCamera - multicamera pointer;
    */
   void setCamera(MultiCamera<nCam>* mpMultiCamera){
     fsm_.setCamera(mpMultiCamera);

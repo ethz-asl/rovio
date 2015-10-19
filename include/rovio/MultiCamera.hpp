@@ -80,6 +80,7 @@ class MultiCamera{
    *   @param dIn - Corresponding distance
    *   @param cOut - Transformed feature coordinates
    *   @param dOut - Corresponding distance of output
+   *   @todo avoid double computation
    */
   void transformFeature(const int i, const FeatureCoordinates& vecIn, const FeatureDistance& dIn, FeatureCoordinates& vecOut, FeatureDistance& dOut) const{
     if(vecIn.camID_ != i){
@@ -89,7 +90,7 @@ class MultiCamera{
       // DrDP = qDC*(d_in*nor_in-CrCD)
       // d_out = ||DrDP||
       // nor_out = DrDP/d_out
-      const QPD qDC = qCB_[i]*qCB_[vecIn.camID_].inverted(); // TODO: avoid double computation
+      const QPD qDC = qCB_[i]*qCB_[vecIn.camID_].inverted();
       const V3D CrCD = qCB_[vecIn.camID_].rotate(V3D(BrBC_[i]-BrBC_[vecIn.camID_]));
       const V3D CrCP = dIn.getDistance()*vecIn.get_nor().getVec();
       const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));

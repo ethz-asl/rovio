@@ -204,7 +204,7 @@ class FeatureCoordinates{
    *
    *  @param cov - Covariance matrix (2x2).
    */
-  void setSigmaFromCov(const Eigen::Matrix2d& cov){ // TODO: put somewhere else
+  void setSigmaFromCov(const Eigen::Matrix2d& cov){
     es_.compute(cov);
     sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real());
     sigma1_ = sqrt(es_.eigenvalues()(0).real());
@@ -268,7 +268,7 @@ class FeatureCoordinates{
    *  @param d       - Triangulated depth value along the bearing vector C1fP.
    *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
    *
-   *  todo: compare woth d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
+   *  @todo compare woth d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
    */
   bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
     Eigen::Matrix<double,3,2> B;
@@ -301,7 +301,7 @@ class FeatureCoordinates{
    *                          fx the focal length (expressed in pixel) of the camera belonging to C2fP.
    * @return the depth uncertainty value \f$tau=|(P\_plus - P)|\f$.
    *
-   * todo: rethink
+   * @todo rethink
    */
   float getDepthUncertaintyTau(const V3D& C1rC1C2, const float d, const float px_error_angle)
   {

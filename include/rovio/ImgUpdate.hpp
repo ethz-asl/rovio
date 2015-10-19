@@ -43,6 +43,8 @@
 namespace rovio {
 
 /** \brief Class, defining the innovation.
+ *
+ *  @tparam STATE - Filter State
  */
 template<typename STATE>
 class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
@@ -59,7 +61,9 @@ class ImgInnovation: public LWF::State<LWF::VectorElement<2>>{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/** \brief Class, holding the image pyramids of the different cameras. @todo complete
+/** \brief Class, holding the image pyramids of the different cameras.
+ *
+ *  @tparam STATE - Filter State
  */
 template<typename STATE>
 class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<STATE>>{
@@ -87,7 +91,9 @@ class ImgUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ImgUpdateMeasAuxiliary<S
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**  \brief @todo
+/**  \brief Update measurement class (all data in auxillary)
+ *
+ *  @tparam STATE - Filter State
  */
 template<typename STATE>
 class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
@@ -117,7 +123,9 @@ class ImgUpdateMeas: public LWF::State<ImgUpdateMeasAuxiliary<STATE>>{
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**  \brief Class holding the update noise. @todo complete
+/**  \brief Class holding the update noise.
+ *
+ *  @tparam STATE - Filter State
  */
 template<typename STATE>
 class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
@@ -135,6 +143,8 @@ class ImgUpdateNoise: public LWF::State<LWF::VectorElement<2>>{
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Outlier Detection.
+ *
+ *  @tparam STATE - Filter State
  */
 template<typename STATE>
 class ImgOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ImgInnovation<STATE>::template getId<ImgInnovation<STATE>::_pix>(),2>>{
@@ -191,7 +201,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   int minFeatureCountForNoMotionDetection_; /**<Minimum amount of feature for detecting NO image motion*/
   double patchRejectionTh_;
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
-                              If false, the reprojection error is used for the innovation term. @todo check this*/
+                              If false, the reprojection error is used for the innovation term.*/
   bool doFrameVisualisation_;
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
@@ -301,14 +311,18 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    */
   ~ImgUpdate(){};
 
-  /** \brief @todo
+  /** \brief Refresh the properties of the property handler
+   *
+   * @todo make useSpecialLinearizationPoint_ dependent
    */
   void refreshProperties(){
-    useSpecialLinearizationPoint_ = true; // TODO: make dependent
+    useSpecialLinearizationPoint_ = true;
     if(isZeroVelocityUpdateEnabled_) assert(doVisualMotionDetection_);
   };
 
-  /** \brief @todo
+  /** \brief Sets the multicamera pointer
+   *
+   * @param mpMultiCamera - Multicamera pointer
    */
   void setCamera(MultiCamera<mtState::nCam_>* mpMultiCamera){
     mpMultiCamera_ = mpMultiCamera;
@@ -324,7 +338,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param meas         - Not Used.
    *  @param noise        - Additive discrete Gaussian noise.
    *  @param dt           - Not used.
-   *  @todo check this
    */
   void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
     const int& ID = state.aux().activeFeature_;  // Feature ID.
@@ -353,7 +366,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param state - Filter state.
    *  @param meas  - Not used.
    *  @param dt    - Not used.
-   *  @todo check this
    */
   void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     const int& ID = state.aux().activeFeature_;
@@ -377,7 +389,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     }
   }
 
-  /** \brief @todo
+  /** \brief Computes the Jacobian for the update step of the filter.
+   *
+   *  @param G     - Jacobian for the update step of the filter.
+   *  @param state - Filter state.
+   *  @param meas  - Not used.
+   *  @param dt    - Not used.
    */
   void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
     G.setZero();
@@ -388,6 +405,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *   @param filterState - Filter state.
    *   @param meas        - Update measurement.
+   *   @todo sort feature by covariance and use more accurate ones first
    */
   void commonPreProcess(mtFilterState& filterState, const mtMeas& meas){
     assert(filterState.t_ == meas.aux().imgTime_);
@@ -402,7 +420,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     filterState.state_.aux().activeFeature_ = 0;
     filterState.state_.aux().activeCameraCounter_ = 0;
 
-    // TODO sort feature by covariance and use more accurate ones first
 
     /* Detect Image changes by looking at the feature patches between current and previous image (both at the current feature location)
      * The maximum change of intensity is obtained if the pixel is moved along the strongest gradient.
@@ -445,8 +462,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param filterState - Filter state.
    *  @param meas        - Update measurement.
    *  @param isFinished  - True, if process has finished.
-   *  @todo check and complete.
-   */ // TODO: split into methods
+   *  @todo split into methods
+   */
   void preProcess(mtFilterState& filterState, const mtMeas& meas, bool& isFinished){
     if(isFinished){ // gets called if this is the first call
       commonPreProcess(filterState,meas);
@@ -507,8 +524,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
               featureOutput_.c().drawText(filterState.img_[activeCamID],std::to_string(f.mpStatistics_->countTot()),cv::Scalar(175,175,0));
             }
           }
-
-          // Logging (TODO: remove eventually)
           if(activeCamID==camID){
             f.log_prediction_ = *f.mpCoordinates_;
           }
@@ -611,7 +626,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param meas             - Update measurement.
    *  @param outlierDetection - Outlier detection.
    *  @param isFinished       - True, if process has finished.
-   *  @todo check and complete.
    */
   void postProcess(mtFilterState& filterState, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     int& ID = filterState.state_.aux().activeFeature_;  // Get the ID of the updated feature.
@@ -667,7 +681,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *  @param filterState      - Filter state.
    *  @param meas             - Update measurement.
-   *  @todo check and complete.
    */
   void commonPostProcess(mtFilterState& filterState, const mtMeas& meas){
     // Temps
