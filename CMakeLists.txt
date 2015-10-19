@@ -29,7 +29,7 @@ if(MAKE_SCENE)
 endif()
 
 find_package(PkgConfig)
-pkg_check_modules(YamlCpp yaml-cpp>=0.5)
+pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
 
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS

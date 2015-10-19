@@ -788,7 +788,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
     if (doFrameVisualisation_){
-      for(unsigned int i=0;i<mtState::nCam_;i++){
+      for(int i=0;i<mtState::nCam_;i++){
         drawVirtualHorizon(filterState,i);
       }
     }
