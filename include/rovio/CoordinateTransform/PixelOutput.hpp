@@ -46,21 +46,19 @@ class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
   }
 };
 
-class PixelOutputCT:public LWF::CoordinateTransform<FeatureOutput,PixelOutput,true>{
+class PixelOutputCT:public LWF::CoordinateTransform<FeatureOutput,PixelOutput>{
  public:
-  typedef LWF::CoordinateTransform<FeatureOutput,PixelOutput,true> Base;
+  typedef LWF::CoordinateTransform<FeatureOutput,PixelOutput> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
-  typedef typename Base::mtMeas mtMeas;
-  typedef typename Base::mtJacInput mtJacInput;
   PixelOutputCT(){
   };
   ~PixelOutputCT(){};
-  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void evalTransform(mtOutput& output, const mtInput& input) const{
     cv::Point2f c = input.c().get_c();
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
   }
-  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void jacTransform(MXD& J, const mtInput& input) const{
     J.setZero();
     J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_fea>()) = input.c().get_J();
   }

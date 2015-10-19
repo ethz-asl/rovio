@@ -2,7 +2,7 @@ Common
 {
 	doVECalibration true
 	depthType 1
-	verbose false
+	verbose true
 }
 Camera0
 {

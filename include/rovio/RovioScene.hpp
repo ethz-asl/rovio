@@ -120,7 +120,7 @@ class RovioScene{
   }
   void drawScene(mtFilterState& filterState){
     const mtState& state = filterState.state_;
-    const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    const MXD& cov = filterState.cov_;
 
     if(filterState.plotGroundtruth_){
       mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;

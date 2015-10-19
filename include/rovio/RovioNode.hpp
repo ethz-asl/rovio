@@ -41,10 +41,11 @@
 #include <cv_bridge/cv_bridge.h>
 #include <rovio/RovioOutput.h> // Ros msg
 #include "rovio/RovioFilter.hpp"
-#include "rovio/CoordinateTransform/CameraOutputCF.hpp"
-#include "rovio/CoordinateTransform/YprOutputCF.hpp"
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
+
+#include "rovio/CoordinateTransform/CameraOutput.hpp"
+#include "rovio/CoordinateTransform/YprOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 
 namespace rovio {
@@ -86,16 +87,16 @@ class RovioNode{
   int poseMsgSeq_;
   typedef StandardOutput mtOutput;
   mtOutput output_;
-  CameraOutputCF<mtState> cameraOutputCF_;
-  typename CameraOutputCF<mtState>::mtOutputCovMat outputCov_;
+  CameraOutputCT<mtState> cameraOutputCF_;
+  MXD outputCov_;
 
   typedef AttitudeOutput mtAttitudeOutput;
   mtAttitudeOutput attitudeOutput_;
   typedef YprOutput mtYprOutput;
   mtYprOutput yprOutput_;
-  AttitudeToYprCF attitudeToYprCF_;
-  AttitudeToYprCF::mtInputCovMat attitudeOutputCov_;
-  AttitudeToYprCF::mtOutputCovMat yprOutputCov_;
+  AttitudeToYprCT attitudeToYprCF_;
+  MXD attitudeOutputCov_;
+  MXD yprOutputCov_;
 
   static const int groundtruthN_ = 3;
   std::queue<rot::RotationQuaternionPD> groundtruth_qCJ_;
@@ -109,7 +110,7 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter) {
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
@@ -171,7 +172,7 @@ class RovioNode{
     mpTestFilterState->fsm_.setAllCameraPointers();
 
     // Prediction
-    mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
+    mpFilter_->mPrediction_.testPredictionJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
     if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
@@ -180,30 +181,30 @@ class RovioNode{
         testState.aux().activeCameraCounter_ = 0;
         const int camID = testState.CfP(i).camID_;
         int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
         testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
       }
     }
 
     // CF
-    cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
-    attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);
+    cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    attitudeToYprCF_.testTransformJac(1e-8,1e-6);
     rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT(&mpFilter_->multiCamera_);
     transformFeatureOutputCT.setFeatureID(0);
     if(mtState::nCam_>1){
       transformFeatureOutputCT.setOutputCameraID(1);
-      transformFeatureOutputCT.testJacInput(testState,testState,1e-8,1e-5,0.1);
+      transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
     }
     transformFeatureOutputCT.setOutputCameraID(0);
-    transformFeatureOutputCT.testJacInput(testState,testState,1e-8,1e-5,0.1);
+    transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
     FeatureOutput featureOutput;
     transformFeatureOutputCT.transformState(testState,featureOutput);
     if(!featureOutput.c().isInFront()){
       featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)));
     }
     rovio::PixelOutputCT pixelOutputCT;
-    pixelOutputCT.testJacInput(featureOutput,featureOutput,1e-3,0.5,0.1); // Reduces accuracy due to float and strong camera distortion
+    pixelOutputCT.testTransformJac(featureOutput,1e-3,0.5); // Reduces accuracy due to float and strong camera distortion
 
     // Zero Velocity Updates
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
@@ -333,7 +334,7 @@ class RovioNode{
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
-        typename mtFilterState::mtFilterCovMat& cov = mpFilter_->safe_.cov_;
+        MXD& cov = mpFilter_->safe_.cov_;
         cameraOutputCF_.transformState(state,output_);
         cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 

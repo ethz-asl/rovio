@@ -160,6 +160,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
   typedef LWF::Update<ImgInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ImgUpdateMeas<typename FILTERSTATE::mtState>,ImgUpdateNoise<typename FILTERSTATE::mtState>,
       ImgOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
+  using Base::meas_;
   using Base::doubleRegister_;
   using Base::intRegister_;
   using Base::boolRegister_;
@@ -171,8 +172,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   typedef typename Base::mtInnovation mtInnovation;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtNoise mtNoise;
-  typedef typename Base::mtJacInput mtJacInput;
-  typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
 
   // Multicamera pointer
@@ -214,11 +213,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   // Temporary
   mutable PixelOutputCT pixelOutputCT_;
   mutable PixelOutput pixelOutput_;
-  mutable PixelOutputCT::mtOutputCovMat pixelOutputCov_;
+  mutable MXD pixelOutputCov_;
   mutable rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
   mutable FeatureOutput featureOutput_;
-  mutable typename rovio::FeatureOutputCT<mtState>::mtOutputCovMat featureOutputCov_;
-  mutable typename rovio::FeatureOutputCT<mtState>::mtJacInput featureOutputJac_;
+  mutable MXD featureOutputCov_;
+  mutable MXD featureOutputJac_;
   mutable MultilevelPatch<mtState::nLevels_,mtState::patchSize_> mlpTemp1_;
   mutable MultilevelPatch<mtState::nLevels_,mtState::patchSize_> mlpTemp2_;
   mutable FeatureCoordinates alignedCoordinates_;
@@ -230,7 +229,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *   Loads and sets the needed parameters.
    */
-  ImgUpdate(): transformFeatureOutputCT_(nullptr){
+  ImgUpdate(): transformFeatureOutputCT_(nullptr), pixelOutputCov_((int)(PixelOutput::D_),(int)(PixelOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)), featureOutputJac_((int)(FeatureOutput::D_),(int)(mtState::D_)){
     mpMultiCamera_ = nullptr;
     initCovFeature_.setIdentity();
     initDepth_ = 0.5;
@@ -335,11 +334,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  \note If \ref useDirectMethod_ is set false, the reprojection error is used for the innovation term.
    *  @param mtInnovation - Class, holding innovation data.
    *  @param state        - Filter %State.
-   *  @param meas         - Not Used.
    *  @param noise        - Additive discrete Gaussian noise.
-   *  @param dt           - Not used.
    */
-  void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
+  void evalInnovation(mtInnovation& y, const mtState& state, const mtNoise& noise) const{
     const int& ID = state.aux().activeFeature_;  // Feature ID.
     const int& camID = state.CfP(ID).camID_;   // Camera ID of the feature.
     const int& activeCamCounter = state.aux().activeCameraCounter_;
@@ -352,7 +349,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     } else {
       transformFeatureOutputCT_.setFeatureID(ID);
       transformFeatureOutputCT_.setOutputCameraID(activeCamID);
-      transformFeatureOutputCT_.eval(featureOutput_,state,state);
+      transformFeatureOutputCT_.transformState(state,featureOutput_);
       featureOutput_.c().get_nor().boxMinus(state.aux().bearingMeas_[ID],y.template get<mtInnovation::_pix>()); // 0 = m - m_meas + n
       y.template get<mtInnovation::_pix>() += noise.template get<mtNoise::_pix>();
     }
@@ -364,10 +361,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  \note If \ref useDirectMethod_ is set false, the jacobian is set w.r.t. the reprojection error.
    *  @param F     - Jacobian for the update step of the filter.
    *  @param state - Filter state.
-   *  @param meas  - Not used.
-   *  @param dt    - Not used.
    */
-  void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+  void jacState(MXD& F, const mtState& state) const{
     const int& ID = state.aux().activeFeature_;
     const int& camID = state.CfP(ID).camID_;
     const int& activeCamCounter = state.aux().activeCameraCounter_;
@@ -375,8 +370,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     F.setZero();
     transformFeatureOutputCT_.setFeatureID(ID);
     transformFeatureOutputCT_.setOutputCameraID(activeCamID);
-    transformFeatureOutputCT_.eval(featureOutput_,state,state);
-    transformFeatureOutputCT_.jacInput(featureOutputJac_,state,state);
+    transformFeatureOutputCT_.transformState(state,featureOutput_);
+    transformFeatureOutputCT_.jacTransform(featureOutputJac_,state);
     if(useDirectMethod_){
       cv::Point2f c_temp;
       Eigen::Matrix2d c_J;
@@ -393,10 +388,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *  @param G     - Jacobian for the update step of the filter.
    *  @param state - Filter state.
-   *  @param meas  - Not used.
-   *  @param dt    - Not used.
    */
-  void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+  void jacNoise(MXD& G, const mtState& state) const{
     G.setZero();
     G.template block<2,2>(mtInnovation::template getId<mtInnovation::_pix>(),mtNoise::template getId<mtNoise::_pix>()) = Eigen::Matrix2d::Identity();
   }
@@ -472,7 +465,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     bool foundValidMeasurement = false;
     Eigen::Vector2d bearingError;
     typename mtFilterState::mtState& state = filterState.state_;
-    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    MXD& cov = filterState.cov_;
     int& ID = filterState.state_.aux().activeFeature_;   // ID of the current updated feature!!! Initially set to 0.
     int& activeCamCounter = filterState.state_.aux().activeCameraCounter_;
 
@@ -690,7 +683,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     double removalFactor;
     int featureIndex;
     typename mtFilterState::mtState& state = filterState.state_;
-    typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    MXD& cov = filterState.cov_;
 
     // Actualize camera extrinsics
     state.updateMultiCameraExtrinsics(mpMultiCamera_);

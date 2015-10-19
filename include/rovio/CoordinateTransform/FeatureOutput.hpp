@@ -73,13 +73,11 @@ class FeatureOutput: public LWF::State<RobocentricFeatureElement>{
 };
 
 template<typename STATE>
-class FeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput,true>{
+class FeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput>{
  public:
-  typedef LWF::CoordinateTransform<STATE,FeatureOutput,true> Base;
+  typedef LWF::CoordinateTransform<STATE,FeatureOutput> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
-  typedef typename Base::mtMeas mtMeas;
-  typedef typename Base::mtJacInput mtJacInput;
   int ID_;
   FeatureOutputCT(){
     ID_ = -1;
@@ -88,22 +86,20 @@ class FeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput,true>{
   void setFeatureID(int ID){
     ID_ = ID;
   }
-  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void evalTransform(mtOutput& output, const mtInput& input) const{
     output.template get<mtOutput::_fea>() = input.template get<mtInput::_fea>(ID_);
   }
-  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void jacTransform(MXD& J, const mtInput& input) const{
     J.setIdentity();
   }
 };
 
 template<typename STATE>
-class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput,true>{
+class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput>{
  public:
-  typedef LWF::CoordinateTransform<STATE,FeatureOutput,true> Base;
+  typedef LWF::CoordinateTransform<STATE,FeatureOutput> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
-  typedef typename Base::mtMeas mtMeas;
-  typedef typename Base::mtJacInput mtJacInput;
   int outputCamID_;
   int ID_;
   bool ignoreDistanceOutput_;
@@ -121,11 +117,11 @@ class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutp
   void setOutputCameraID(int camID){
     outputCamID_ = camID;
   }
-  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void evalTransform(mtOutput& output, const mtInput& input) const{
     input.updateMultiCameraExtrinsics(mpMultiCamera_);
     mpMultiCamera_->transformFeature(outputCamID_,input.CfP(ID_),input.dep(ID_),output.c(),output.d());
   }
-  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void jacTransform(MXD& J, const mtInput& input) const{
     J.setZero();
     const int& camID = input.CfP(ID_).camID_;
     if(camID != outputCamID_){

@@ -40,7 +40,7 @@ template<typename FILTERSTATE>
 class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
  public:
   typedef LWF::Prediction<FILTERSTATE> Base;
-  using Base::eval;
+  using Base::meas_;
   using Base::prenoiP_;
   using Base::doubleRegister_;
   using Base::intRegister_;
@@ -50,8 +50,6 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtNoise mtNoise;
-  typedef typename Base::mtJacInput mtJacInput;
-  typedef typename Base::mtJacNoise mtJacNoise;
   const V3D g_; /**<Gravity in inertial frame, always aligned with the z-axis.*/
   double inertialMotionRorTh_; /**<Threshold on the rotational rate for motion detection.*/
   double inertialMotionAccTh_; /**<Threshold on the acceleration for motion detection.*/
@@ -80,9 +78,9 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
    *
    * @todo implement without noise for speed
    */
-  void eval(mtState& output, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt) const{
-    output.aux().MwWMmeas_ = meas.template get<mtMeas::_gyr>();
-    output.aux().MwWMest_  = meas.template get<mtMeas::_gyr>()-state.gyb();
+  void evalPrediction(mtState& output, const mtState& state, const mtNoise& noise, double dt) const{
+    output.aux().MwWMmeas_ = meas_.template get<mtMeas::_gyr>();
+    output.aux().MwWMest_  = meas_.template get<mtMeas::_gyr>()-state.gyb();
     const V3D imuRor = output.aux().MwWMest_+noise.template get<mtNoise::_att>()/sqrt(dt);
     const V3D dOmega = dt*imuRor;
     QPD dQ = dQ.exponentialMap(-dOmega);
@@ -123,7 +121,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       }
     }
     output.WrWM() = state.WrWM()-dt*(state.qWM().rotate(state.MvM())-noise.template get<mtNoise::_pos>()/sqrt(dt));
-    output.MvM() = (M3D::Identity()-gSM(dOmega))*state.MvM()-dt*(meas.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
+    output.MvM() = (M3D::Identity()-gSM(dOmega))*state.MvM()-dt*(meas_.template get<mtMeas::_acc>()-state.acb()+state.qWM().inverseRotate(g_)-noise.template get<mtNoise::_vel>()/sqrt(dt));
     output.acb() = state.acb()+noise.template get<mtNoise::_acb>()*sqrt(dt);
     output.gyb() = state.gyb()+noise.template get<mtNoise::_gyb>()*sqrt(dt);
     output.qWM() = state.qWM()*dQ;
@@ -134,19 +132,19 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     }
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
-    if(detectInertialMotion(state,meas)){
+    if(detectInertialMotion(state,meas_)){
       output.aux().timeSinceLastInertialMotion_ = 0;
     } else {
       output.aux().timeSinceLastInertialMotion_ = output.aux().timeSinceLastInertialMotion_ + dt;
     }
     output.aux().timeSinceLastImageMotion_ = output.aux().timeSinceLastImageMotion_ + dt;
   }
-  void noMeasCase(mtFilterState& filterState, mtMeas& meas, double dt){
-    meas.template get<mtMeas::_gyr>() = filterState.state_.gyb();
-    meas.template get<mtMeas::_acc>() = filterState.state_.acb()-filterState.state_.qWM().inverseRotate(g_);
+  void noMeasCase(mtFilterState& filterState, mtMeas& meas_, double dt){
+    meas_.template get<mtMeas::_gyr>() = filterState.state_.gyb();
+    meas_.template get<mtMeas::_acc>() = filterState.state_.acb()-filterState.state_.qWM().inverseRotate(g_);
   }
-  void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt) const{
-    const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.gyb();
+  void jacPreviousState(MXD& F, const mtState& state, double dt) const{
+    const V3D imuRor = meas_.template get<mtMeas::_gyr>()-state.gyb();
     const V3D dOmega = dt*imuRor;
     F.setZero();
     F.template block<3,3>(mtState::template getId<mtState::_pos>(),mtState::template getId<mtState::_pos>()) = M3D::Identity();
@@ -222,8 +220,8 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       F.template block<3,3>(mtState::template getId<mtState::_vea>(i),mtState::template getId<mtState::_vea>(i)) = M3D::Identity();
     }
   }
-  void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt) const{
-    const V3D imuRor = meas.template get<mtMeas::_gyr>()-state.gyb();
+  void jacNoise(MXD& G, const mtState& state, double dt) const{
+    const V3D imuRor = meas_.template get<mtMeas::_gyr>()-state.gyb();
     const V3D dOmega = dt*imuRor;
     G.setZero();
     G.template block<3,3>(mtState::template getId<mtState::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity()*sqrt(dt);

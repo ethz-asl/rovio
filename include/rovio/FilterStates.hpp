@@ -444,9 +444,9 @@ LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>{
  *  @tparam nCam      - Used total number of cameras.
  */
 template<unsigned int nMax, int nLevels, int patchSize,int nCam>
-class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true>{
+class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0>{
  public:
-  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true> Base;
+  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0> Base;
   typedef typename Base::mtState mtState;  /**<Local Filter %State Type. \see LWF::FilterState*/
   using Base::state_;  /**<Filter State. \see LWF::FilterState*/
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
@@ -454,7 +454,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   FeatureSetManager<nLevels,patchSize,nCam,nMax> fsm_;
   mutable rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
   mutable FeatureOutput featureOutput_;
-  mutable typename rovio::FeatureOutputCT<mtState>::mtOutputCovMat featureOutputCov_;
+  mutable MXD featureOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
@@ -470,7 +470,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
 
   /** \brief Constructor
    */
-  FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr){
+  FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)){
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;

@@ -103,11 +103,11 @@ class ZeroVelocityOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<Ze
 /** \brief Class, holding the zero velocity update
  */
 template<typename FILTERSTATE>
-class ZeroVelocityUpdate: public LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,
-ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
+class ZeroVelocityUpdate: public LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,
+ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
  public:
-  typedef LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,
-      ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
+  typedef LWF::Update<ZeroVelocityInnovation<typename FILTERSTATE::mtState>,FILTERSTATE,ZeroVelocityUpdateMeas<typename FILTERSTATE::mtState>,
+      ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false> Base;
   using Base::doubleRegister_;
   using Base::intRegister_;
   typedef typename Base::mtState mtState;
@@ -115,8 +115,6 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
   typedef typename Base::mtInnovation mtInnovation;
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtNoise mtNoise;
-  typedef typename Base::mtJacInput mtJacInput;
-  typedef typename Base::mtJacNoise mtJacNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
 
   /** \brief Constructor.
@@ -143,7 +141,7 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param noise        - Additive discrete Gaussian noise.
    *  @param dt           - Not used.
    */
-  void eval(mtInnovation& y, const mtState& state, const mtMeas& meas, const mtNoise noise, double dt = 0.0) const{
+  void evalInnovation(mtInnovation& y, const mtState& state, const mtNoise& noise) const{
     y.template get<mtInnovation::_vel>() = state.MvM()+noise.template get<mtInnovation::_vel>();
   }
 
@@ -154,7 +152,7 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param meas  - Not used.
    *  @param dt    - Not used.
    */
-  void jacInput(mtJacInput& F, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+  void jacState(MXD& F, const mtState& state) const{
     F.setZero();
     F.template block<3,3>(mtInnovation::template getId<mtInnovation::_vel>(),mtState::template getId<mtState::_vel>()) = Eigen::Matrix3d::Identity();
   }
@@ -166,7 +164,7 @@ ZeroVelocityOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *  @param meas  - Not used.
    *  @param dt    - Not used.
    */
-  void jacNoise(mtJacNoise& G, const mtState& state, const mtMeas& meas, double dt = 0.0) const{
+  void jacNoise(MXD& G, const mtState& state) const{
     G.setZero();
     G.template block<3,3>(mtInnovation::template getId<mtInnovation::_vel>(),mtNoise::template getId<mtNoise::_vel>()) = Eigen::Matrix3d::Identity();
   }
