@@ -122,15 +122,7 @@ class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutp
     outputCamID_ = camID;
   }
   void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
-    // D = Destination camera frame.
-    // qDC = qDM*qCM^T
-    // CrCD = qCM*(MrMD-MrMC)
-    // DrDP = qDC*(d_in*nor_in-CrCD)
-    // d_out = ||DrDP||
-    // nor_out = DrDP/d_out
     input.updateMultiCameraExtrinsics(mpMultiCamera_);
-    output.c().camID_ = outputCamID_;
-    output.c().mpCamera_ = &mpMultiCamera_->cameras_[outputCamID_];
     mpMultiCamera_->transformFeature(outputCamID_,input.CfP(ID_),input.dep(ID_),output.c(),output.d());
   }
   void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{

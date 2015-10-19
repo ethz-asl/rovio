@@ -73,51 +73,32 @@ class MultiCamera{
     cameras_[i].load(filename);
   }
 
-  /** \brief Transforms a bearing vector from one camera frame to another
-   *
-   *   @param i - Camera index of input frame
-   *   @param j - Camera index of output frame
-   *   @param vecIn - Bearing vector to be transformed
-   *   @param dIn - Corresponding distance
-   *   @param vecOut - Transformed bearing vector
-   *   @param dOut - Corresponding distance of output
-   */
-  void transformFeature(const int i, const int j, const Eigen::Vector3d& vecIn, const double& dIn, Eigen::Vector3d& vecOut, double& dOut) const{
-    if(i != j){
-      const QPD qDC = qCB_[j]*qCB_[i].inverted(); // TODO: avoid double computation
-      const V3D CrCD = qCB_[i].rotate(V3D(BrBC_[j]-BrBC_[i]));
-      const V3D CrCP = dIn*vecIn;
-      vecOut = qDC.rotate(V3D(CrCP-CrCD));
-      dOut = vecOut.norm();
-      if(dOut > 1e-6){
-        vecOut = vecOut/dOut;
-      } else {
-        vecOut = V3D(0,0,1);
-      }
-    } else {
-      vecOut = vecIn;
-      dOut = dIn;
-    }
-  }
   /** \brief Transforms feature coordinates from one camera frame to another
    *
-   *   @param i - Camera index of input frame
-   *   @param j - Camera index of output frame
+   *   @param u - Camera index of output frame
    *   @param cIn - Feature coordinates to be transformed
    *   @param dIn - Corresponding distance
    *   @param cOut - Transformed feature coordinates
    *   @param dOut - Corresponding distance of output
    */
-  void transformFeature(const int j, const FeatureCoordinates& vecIn, const FeatureDistance& dIn, FeatureCoordinates& vecOut, FeatureDistance& dOut) const{
-    if(vecIn.camID_ != j){
-      const QPD qDC = qCB_[j]*qCB_[vecIn.camID_].inverted(); // TODO: avoid double computation
-      const V3D CrCD = qCB_[vecIn.camID_].rotate(V3D(BrBC_[j]-BrBC_[vecIn.camID_]));
+  void transformFeature(const int i, const FeatureCoordinates& vecIn, const FeatureDistance& dIn, FeatureCoordinates& vecOut, FeatureDistance& dOut) const{
+    if(vecIn.camID_ != i){
+      // D = Destination camera frame.
+      // qDC = qDM*qCM^T
+      // CrCD = qCM*(MrMD-MrMC)
+      // DrDP = qDC*(d_in*nor_in-CrCD)
+      // d_out = ||DrDP||
+      // nor_out = DrDP/d_out
+      const QPD qDC = qCB_[i]*qCB_[vecIn.camID_].inverted(); // TODO: avoid double computation
+      const V3D CrCD = qCB_[vecIn.camID_].rotate(V3D(BrBC_[i]-BrBC_[vecIn.camID_]));
       const V3D CrCP = dIn.getDistance()*vecIn.get_nor().getVec();
       const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
       dOut.setParameter(DrDP.norm());
       vecOut.nor_.setFromVector(DrDP);
       vecOut.valid_c_ = false;
       vecOut.valid_nor_ = true;
+      vecOut.camID_ = i;
+      vecOut.mpCamera_ = &cameras_[i];
     } else {
       vecOut = vecIn;
       dOut = dIn;
