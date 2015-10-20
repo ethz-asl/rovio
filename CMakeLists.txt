@@ -29,7 +29,17 @@ if(MAKE_SCENE)
 endif()
 
 find_package(PkgConfig)
-pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
+
+find_package(yaml_cpp_catkin)
+if(${yaml_cpp_catkin_FOUND})
+  message(STATUS "Found yaml_cpp_catkin, using instead of system library.")
+  set(YamlCpp_LIBRARIES ${yaml_cpp_catkin_LIBRARIES})
+  set(YamlCpp_INCLUDE_DIRS ${yaml_cpp_catkin_INCLUDE_DIRS})
+else()
+  message(STATUS "No yaml_cpp_catkin, using yaml-cpp system library instead.")
+  pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
+endif()
+
 
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
@@ -74,10 +84,10 @@ catkin_package(
 	tf
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${yaml_cpp_catkin_INCLUDE_DIRS})
 
 add_library(${PROJECT_NAME} src/test_rovio.cpp)
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${yaml_cpp_catkin_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(test_rovio src/test_rovio.cpp)
