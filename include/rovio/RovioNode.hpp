@@ -330,6 +330,10 @@ class RovioNode{
             cv::waitKey(5);
           }
         }
+        if(!mpFilter_->safe_.patchDrawing_.empty() && std::get<0>(mpFilter_->mUpdates_).visualizePatches_){
+          cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
+          cv::waitKey(5);
+        }
 
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;

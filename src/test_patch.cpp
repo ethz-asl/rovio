@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 #include <assert.h>
 
-#include "../include/rovio/Patch.hpp"
+#include "rovio/Patch.hpp"
 
 using namespace rovio;
 
