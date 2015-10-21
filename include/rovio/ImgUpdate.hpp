@@ -321,8 +321,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   ~ImgUpdate(){};
 
   /** \brief Refresh the properties of the property handler
-   *
-   * @todo make useSpecialLinearizationPoint_ dependent
    */
   void refreshProperties(){
     useSpecialLinearizationPoint_ = true;
@@ -796,7 +794,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
 
-    // Get new features // TODO IMG do for both images
+    // Get new features // TODO IMG do for all images
     const int searchCamID = rand()%mtState::nCam_;
     averageScore = filterState.fsm_.getAverageScore(); // TODO
     if(filterState.fsm_.getValidCount() < startDetectionTh_*mtState::nMax_){
