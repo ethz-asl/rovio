@@ -31,6 +31,7 @@
 
 #include "lightweight_filtering/common.hpp"
 #include "rovio/Camera.hpp"
+#include "rovio/FeatureCoordinates.hpp"
 
 namespace rovio{
 

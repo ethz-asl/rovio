@@ -91,7 +91,7 @@ Update0
     UpdateNoise
     {
         nor 1e-5 ; rad (~1/f ~ 1/400^2 = 1/160000)
-        int 16    ; intensity error
+        int 4    ; intensity error
     }
     initCovFeature_0 0.5
     initCovFeature_1 1e-5
