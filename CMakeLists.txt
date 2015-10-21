@@ -29,7 +29,17 @@ if(MAKE_SCENE)
 endif()
 
 find_package(PkgConfig)
-pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
+
+find_package(yaml_cpp_catkin)
+if(${yaml_cpp_catkin_FOUND})
+  message(STATUS "Found yaml_cpp_catkin, using instead of system library.")
+  set(YamlCpp_LIBRARIES ${yaml_cpp_catkin_LIBRARIES})
+  set(YamlCpp_INCLUDE_DIRS ${yaml_cpp_catkin_INCLUDE_DIRS})
+else()
+  message(STATUS "No yaml_cpp_catkin, using yaml-cpp system library instead.")
+  pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
+endif()
+
 
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
