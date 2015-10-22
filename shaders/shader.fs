@@ -1,4 +1,6 @@
-#version 330
+#version 300 es
+
+precision highp float;
 
 in vec4 Color0;
 in vec3 Normal0;
@@ -26,11 +28,11 @@ void main()
 
     vec4 DiffuseColor;
 
-    if (DiffuseFactor > 0) {
+    if (DiffuseFactor > 0.0f) {
         DiffuseColor = vec4(gDirectionalLight.Color, 1.0f) * gDirectionalLight.DiffuseIntensity * DiffuseFactor;
     }
     else {
-        DiffuseColor = vec4(0, 0, 0, 0);
+        DiffuseColor = vec4(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     if(!useTexture){
