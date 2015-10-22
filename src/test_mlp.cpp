@@ -2,7 +2,9 @@
 #include "gtest/gtest.h"
 #include <assert.h>
 
-#include "../include/rovio/commonVision.hpp"
+#include "../include/rovio/ImagePyramid.hpp"
+#include "../include/rovio/FeatureManager.hpp"
+#include "../include/rovio/MultilevelPatchAlignment.hpp"
 
 using namespace rovio;
 
@@ -12,36 +14,43 @@ class MLPTesting : public virtual ::testing::Test {
   static const int patchSize_ = 2;
   static const int imgSize_ = (patchSize_+2)*pow(2,nLevels_-1)+4;
   static const int nMax_ = 20;
+  static const int nCam_ = 2;
   static const int dx_ = 2;
   static const int dy_ = 3;
+  static constexpr float warpDistance_ = 2.0;
 
   ImagePyramid<nLevels_> pyr1_;
   ImagePyramid<nLevels_> pyr2_;
   cv::Mat img1_;
   cv::Mat img2_;
   Patch<patchSize_> p_;
-  MultilevelPatchFeature<nLevels_,patchSize_> mlp_;
-  cv::Point2f c_;
-  LWF::NormalVectorElement nor_;
+  FeatureManager<nLevels_,patchSize_,nCam_> feature_;
+  FeatureCoordinates c_;
+  cv::Point2f pixel_;
+  V3D bearing_;
+  FeatureDistance d_;
+  FeatureWarping warp_;
+  FeatureStatistics<nCam_> stat_;
+  MultilevelPatch<nLevels_,patchSize_> mp_;
   PixelCorners pixelCorners_;
   BearingCorners bearingCorners_;
   Eigen::Matrix2f affineTransform_;
   Camera camera_;
-  MLPTesting(): mlp_(&camera_){
+  MultilevelPatchAlignment<nLevels_,patchSize_> mpa_;
+  MLPTesting(): c_(&camera_), warp_(warpDistance_){
     static_assert(imgSize_*dx_*dy_<255,"imgSize to large for gradients");
-    c_ = cv::Point2f(patchSize_/2+1,patchSize_/2+1);
-    camera_.pixelToBearing(c_,nor_);
+    pixel_ = cv::Point2f(patchSize_/2+1,patchSize_/2+1);
+    bearing_ = V3D(patchSize_/2+1,patchSize_/2+1,1);
+    bearing_.normalize();
+    c_.set_c(pixel_);
     affineTransform_.setIdentity();
-    pixelCorners_[0] = cv::Point2f(mlp_.warpDistance_,0);
-    pixelCorners_[1] = cv::Point2f(0,mlp_.warpDistance_);
-    cv::Point2f cTemp;
-    LWF::NormalVectorElement norTemp;
-    cTemp = c_ + pixelCorners_[0];
-    camera_.pixelToBearing(cTemp,norTemp);
-    norTemp.boxMinus(nor_,bearingCorners_[0]);
-    cTemp = c_ + pixelCorners_[1];
-    camera_.pixelToBearing(cTemp,norTemp);
-    norTemp.boxMinus(nor_,bearingCorners_[1]);
+    warp_.set_affineTransfrom(affineTransform_);
+    pixelCorners_ = warp_.get_pixelCorners(&c_);
+    bearingCorners_ = warp_.get_bearingCorners(&c_);
+
+    stat_.localQualityRange_ = 3;
+    stat_.localQualityRange_ = 4;
+    stat_.minFrameGlobalQuality_ = 5;
 
     img1_ = cv::Mat::zeros(imgSize_,imgSize_,CV_8UC1);
     uint8_t* img_ptr = (uint8_t*) img1_.data;
@@ -68,168 +77,170 @@ class MLPTesting : public virtual ::testing::Test {
 
 // Test constructors/reset
 TEST_F(MLPTesting, constructors) {
-  MultilevelPatchFeature<nLevels_,patchSize_> mlp(&camera_);
-  ASSERT_EQ(mlp.idx_,-1);
-  ASSERT_EQ(mlp.initTime_,0.0);
-  ASSERT_EQ(mlp.currentTime_,0.0);
-  ASSERT_EQ(mlp.c_,cv::Point2f(0,0));
-  ASSERT_EQ(mlp.valid_c_,false);
-  ASSERT_EQ(mlp.valid_nor_,false);
-  ASSERT_EQ(mlp.valid_pixelCorners_,false);
-  ASSERT_EQ(mlp.valid_bearingCorners_,false);
-  ASSERT_EQ(mlp.valid_affineTransform_,false);
-  ASSERT_EQ(mlp.s_,0.0);
-  ASSERT_EQ(mlp.totCount_,0);
-  ASSERT_EQ(mlp.inFrameCount_,0);
-  ASSERT_EQ(mlp.statistics_.size(),0);
-  ASSERT_EQ(mlp.cumulativeMatchingStatus_.size(),0);
-  ASSERT_EQ(mlp.cumulativeTrackingStatus_.size(),0);
-  ASSERT_EQ(mlp.status_.inFrame_,false);
-  ASSERT_EQ(mlp.status_.matchingStatus_,(NOTMATCHED));
-  ASSERT_EQ(mlp.status_.trackingStatus_,(NOTTRACKED));
-  for(unsigned int i = 0;i<nLevels_;i++){
-    ASSERT_EQ(mlp.isValidPatch_[i],false);
-  }
+  FeatureManager<nLevels_,patchSize_,nCam_> feature;
+  ASSERT_EQ(feature.idx_,-1);
 }
 
 // Test coordinates getters and setters
 TEST_F(MLPTesting, coordinates) {
-  mlp_.set_c(c_);
-  ASSERT_EQ(mlp_.valid_c_,true);
-  ASSERT_EQ(mlp_.valid_nor_,false);
-  ASSERT_EQ(mlp_.get_c(),c_);
-  ASSERT_EQ(mlp_.get_nor().getVec(),nor_.getVec());
-  ASSERT_EQ(mlp_.valid_nor_,true);
-  nor_.boxPlus(Eigen::Vector2d(0.001,0.002),nor_);
-  camera_.bearingToPixel(nor_,c_);
-  mlp_.set_nor(nor_);
-  ASSERT_EQ(mlp_.valid_c_,false);
-  ASSERT_EQ(mlp_.valid_nor_,true);
-  ASSERT_EQ(mlp_.get_nor().getVec(),nor_.getVec());
-  ASSERT_EQ(mlp_.get_c(),c_);
-  ASSERT_EQ(mlp_.valid_c_,true);
+  c_.set_c(pixel_);
+  ASSERT_EQ(c_.valid_c_,true);
+  ASSERT_EQ(c_.valid_nor_,false);
+  ASSERT_EQ(c_.get_c(),pixel_);
+  ASSERT_NEAR((c_.get_nor().getVec()-bearing_).norm(),0.0,1e-8);
+  ASSERT_EQ(c_.valid_nor_,true);
+  c_.set_nor(LWF::NormalVectorElement(bearing_));
+  ASSERT_EQ(c_.valid_c_,false);
+  ASSERT_EQ(c_.valid_nor_,true);
+  ASSERT_NEAR((c_.get_nor().getVec()-bearing_).norm(),0.0,1e-8);
+  ASSERT_EQ(c_.get_c(),pixel_);
+  ASSERT_EQ(c_.valid_c_,true);
 }
 
 // Test corner getters and setters
 TEST_F(MLPTesting, corner) {
-  mlp_.set_c(c_);
-  mlp_.pixelCorners_[0] = cv::Point2f(0,0);
-  mlp_.pixelCorners_[1] = cv::Point2f(0,0);
-  mlp_.bearingCorners_[0].setZero();
-  mlp_.bearingCorners_[1].setZero();
-  mlp_.affineTransform_.setZero();
-  mlp_.set_pixelCorners(pixelCorners_);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,true);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,false);
-  ASSERT_EQ(mlp_.valid_affineTransform_,false);
-  ASSERT_EQ(mlp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(mlp_.get_pixelCorners()[1],pixelCorners_[1]);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,true);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,false);
-  ASSERT_EQ(mlp_.valid_affineTransform_,false);
-  ASSERT_EQ((mlp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((mlp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,true);
-  ASSERT_EQ(mlp_.get_affineTransform(),affineTransform_);
-  ASSERT_EQ(mlp_.valid_affineTransform_,true);
-  mlp_.pixelCorners_[0] = cv::Point2f(0,0);
-  mlp_.pixelCorners_[1] = cv::Point2f(0,0);
-  mlp_.bearingCorners_[0].setZero();
-  mlp_.bearingCorners_[1].setZero();
-  mlp_.affineTransform_.setZero();
-  mlp_.set_bearingCorners(bearingCorners_);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,false);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,true);
-  ASSERT_EQ(mlp_.valid_affineTransform_,false);
-  ASSERT_EQ((mlp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((mlp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,false);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,true);
-  ASSERT_EQ(mlp_.valid_affineTransform_,false);
-  ASSERT_EQ(mlp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(mlp_.get_pixelCorners()[1],pixelCorners_[1]);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,true);
-  ASSERT_EQ(mlp_.get_affineTransform(),affineTransform_);
-  ASSERT_EQ(mlp_.valid_affineTransform_,true);
-  mlp_.pixelCorners_[0] = cv::Point2f(0,0);
-  mlp_.pixelCorners_[1] = cv::Point2f(0,0);
-  mlp_.bearingCorners_[0].setZero();
-  mlp_.bearingCorners_[1].setZero();
-  mlp_.affineTransform_.setZero();
-  mlp_.set_affineTransfrom(affineTransform_);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,false);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,false);
-  ASSERT_EQ(mlp_.valid_affineTransform_,true);
-  ASSERT_EQ(mlp_.get_affineTransform(),affineTransform_);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,false);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,false);
-  ASSERT_EQ(mlp_.valid_affineTransform_,true);
-  ASSERT_EQ(mlp_.get_pixelCorners()[0],pixelCorners_[0]);
-  ASSERT_EQ(mlp_.get_pixelCorners()[1],pixelCorners_[1]);
-  ASSERT_EQ(mlp_.valid_pixelCorners_,true);
-  ASSERT_EQ((mlp_.get_bearingCorners()[0]-bearingCorners_[0]).norm(),0.0);
-  ASSERT_EQ((mlp_.get_bearingCorners()[1]-bearingCorners_[1]).norm(),0.0);
-  ASSERT_EQ(mlp_.valid_bearingCorners_,true);
+  c_.set_c(pixel_);
+  warp_.pixelCorners_[0] = cv::Point2f(0,0);
+  warp_.pixelCorners_[1] = cv::Point2f(0,0);
+  warp_.bearingCorners_[0].setZero();
+  warp_.bearingCorners_[1].setZero();
+  warp_.affineTransform_.setZero();
+  warp_.set_pixelCorners(pixelCorners_);
+  ASSERT_EQ(warp_.valid_pixelCorners_,true);
+  ASSERT_EQ(warp_.valid_bearingCorners_,false);
+  ASSERT_EQ(warp_.valid_affineTransform_,false);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.valid_pixelCorners_,true);
+  ASSERT_EQ(warp_.valid_bearingCorners_,false);
+  ASSERT_EQ(warp_.valid_affineTransform_,false);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ(warp_.valid_bearingCorners_,true);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
+  ASSERT_EQ(warp_.valid_affineTransform_,true);
+  warp_.pixelCorners_[0] = cv::Point2f(0,0);
+  warp_.pixelCorners_[1] = cv::Point2f(0,0);
+  warp_.bearingCorners_[0].setZero();
+  warp_.bearingCorners_[1].setZero();
+  warp_.affineTransform_.setZero();
+  warp_.set_bearingCorners(bearingCorners_);
+  ASSERT_EQ(warp_.valid_pixelCorners_,false);
+  ASSERT_EQ(warp_.valid_bearingCorners_,true);
+  ASSERT_EQ(warp_.valid_affineTransform_,false);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ(warp_.valid_pixelCorners_,false);
+  ASSERT_EQ(warp_.valid_bearingCorners_,true);
+  ASSERT_EQ(warp_.valid_affineTransform_,false);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.valid_pixelCorners_,true);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
+  ASSERT_EQ(warp_.valid_affineTransform_,true);
+  warp_.pixelCorners_[0] = cv::Point2f(0,0);
+  warp_.pixelCorners_[1] = cv::Point2f(0,0);
+  warp_.bearingCorners_[0].setZero();
+  warp_.bearingCorners_[1].setZero();
+  warp_.affineTransform_.setZero();
+  warp_.set_affineTransfrom(affineTransform_);
+  ASSERT_EQ(warp_.valid_pixelCorners_,false);
+  ASSERT_EQ(warp_.valid_bearingCorners_,false);
+  ASSERT_EQ(warp_.valid_affineTransform_,true);
+  ASSERT_EQ(warp_.get_affineTransform(&c_),affineTransform_);
+  ASSERT_EQ(warp_.valid_pixelCorners_,false);
+  ASSERT_EQ(warp_.valid_bearingCorners_,false);
+  ASSERT_EQ(warp_.valid_affineTransform_,true);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[0],pixelCorners_[0]);
+  ASSERT_EQ(warp_.get_pixelCorners(&c_)[1],pixelCorners_[1]);
+  ASSERT_EQ(warp_.valid_pixelCorners_,true);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[0]-bearingCorners_[0]).norm(),0.0);
+  ASSERT_EQ((warp_.get_bearingCorners(&c_)[1]-bearingCorners_[1]).norm(),0.0);
+  ASSERT_EQ(warp_.valid_bearingCorners_,true);
 }
 
 // Test statistics
 TEST_F(MLPTesting, statistics) {
-  Status status1;
-  status1.inFrame_ = true;
-  status1.trackingStatus_ = TRACKED;
-  Status status2;
-  status2.inFrame_ = true;
-  status2.trackingStatus_ = FAILED;
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTMATCHED),1);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTFOUND),0);
-  ASSERT_EQ(mlp_.countMatchingStatistics(FOUND),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(NOTTRACKED),1);
-  ASSERT_EQ(mlp_.countTrackingStatistics(FAILED),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(TRACKED),0);
-  ASSERT_EQ(mlp_.countTot(),1);
-  ASSERT_EQ(mlp_.countTotInFrame(),0);
-  mlp_.increaseStatistics(0.1);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTMATCHED),2);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTFOUND),0);
-  ASSERT_EQ(mlp_.countMatchingStatistics(FOUND),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(NOTTRACKED),2);
-  ASSERT_EQ(mlp_.countTrackingStatistics(FAILED),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(TRACKED),0);
-  ASSERT_EQ(mlp_.countTot(),2);
-  ASSERT_EQ(mlp_.countTotInFrame(),0);
-  mlp_.increaseStatistics(0.2);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(0.3);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(0.4);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(0.5);
-  mlp_.status_ = status2;
-  mlp_.increaseStatistics(0.6);
-  mlp_.status_ = status2;
-  mlp_.increaseStatistics(0.7);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(0.8);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(0.9);
-  mlp_.status_ = status1;
-  mlp_.increaseStatistics(1.0);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTMATCHED),11);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTFOUND),0);
-  ASSERT_EQ(mlp_.countMatchingStatistics(FOUND),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(NOTTRACKED),3);
-  ASSERT_EQ(mlp_.countTrackingStatistics(FAILED),2);
-  ASSERT_EQ(mlp_.countTrackingStatistics(TRACKED),6);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTMATCHED,5),5);
-  ASSERT_EQ(mlp_.countMatchingStatistics(NOTFOUND,5),0);
-  ASSERT_EQ(mlp_.countMatchingStatistics(FOUND,5),0);
-  ASSERT_EQ(mlp_.countTrackingStatistics(NOTTRACKED,5),1);
-  ASSERT_EQ(mlp_.countTrackingStatistics(FAILED,5),1);
-  ASSERT_EQ(mlp_.countTrackingStatistics(TRACKED,5),3);
-  ASSERT_EQ(mlp_.getLocalQuality(5),0.6);
-  ASSERT_EQ(mlp_.getLocalVisibilityQuality(5),0.8);
-  ASSERT_EQ(mlp_.getGlobalQuality(5),6.0/11.0);
-  ASSERT_EQ(mlp_.isGoodFeature(5,5,0.9,0.1),false);
+  double localQuality[nCam_];
+  for(int i=0;i<nCam_;i++){
+    localQuality[i] = 1.0;
+  }
+  double localVisibility = 1.0;
+  ASSERT_EQ(stat_.countTrackingStatistics(UNKNOWN),2);
+  ASSERT_EQ(stat_.countTrackingStatistics(NOT_IN_FRAME),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_ALIGNEMENT),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_TRACKING),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(TRACKED),0);
+  ASSERT_EQ(stat_.trackedInSomeFrame(),false);
+  ASSERT_EQ(stat_.countTot(),1);
+  ASSERT_EQ(stat_.countInFrame(),0);
+  ASSERT_EQ(stat_.countTracked(),0);
+  stat_.increaseStatistics(0.1);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility;
+  ASSERT_EQ(stat_.countTrackingStatistics(UNKNOWN),4);
+  ASSERT_EQ(stat_.countTrackingStatistics(NOT_IN_FRAME),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_ALIGNEMENT),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_TRACKING),0);
+  ASSERT_EQ(stat_.countTrackingStatistics(TRACKED),0);
+  ASSERT_EQ(stat_.trackedInSomeFrame(),false);
+  ASSERT_EQ(stat_.countTot(),2);
+  ASSERT_EQ(stat_.countInFrame(),0);
+  ASSERT_EQ(stat_.countTracked(),0);
+  stat_.increaseStatistics(0.2);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility;
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = UNKNOWN;
+  stat_.increaseStatistics(0.3);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0] + 1.0/stat_.localQualityRange_;
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = NOT_IN_FRAME;
+  stat_.increaseStatistics(0.4);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0] + 1.0/stat_.localQualityRange_;
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = NOT_IN_FRAME;
+  stat_.increaseStatistics(0.5);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0] + 1.0/stat_.localQualityRange_;
+  stat_.status_[0] = FAILED_TRACKING;
+  stat_.status_[1] = NOT_IN_FRAME;
+  stat_.increaseStatistics(0.6);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0];
+  stat_.status_[0] = FAILED_TRACKING;
+  stat_.status_[1] = NOT_IN_FRAME;
+  stat_.increaseStatistics(0.7);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0];
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = FAILED_ALIGNEMENT;
+  stat_.increaseStatistics(0.8);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0] + 1.0/stat_.localQualityRange_;
+  localQuality[1] = (1-1.0/stat_.localQualityRange_)*localQuality[1];
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = TRACKED;
+  stat_.increaseStatistics(0.9);
+  localVisibility = (1-1.0/stat_.localVisibilityRange_)*localVisibility + 1.0/stat_.localVisibilityRange_;
+  localQuality[0] = (1-1.0/stat_.localQualityRange_)*localQuality[0] + 1.0/stat_.localQualityRange_;
+  localQuality[1] = (1-1.0/stat_.localQualityRange_)*localQuality[1] + 1.0/stat_.localQualityRange_;
+  stat_.status_[0] = TRACKED;
+  stat_.status_[1] = TRACKED;
+  ASSERT_EQ(stat_.countTrackingStatistics(UNKNOWN),5);
+  ASSERT_EQ(stat_.countTrackingStatistics(NOT_IN_FRAME),4);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_ALIGNEMENT),1);
+  ASSERT_EQ(stat_.countTrackingStatistics(FAILED_TRACKING),2);
+  ASSERT_EQ(stat_.countTrackingStatistics(TRACKED),8);
+  ASSERT_EQ(stat_.trackedInSomeFrame(),true);
+  ASSERT_EQ(stat_.countTot(),10);
+  ASSERT_EQ(stat_.countInFrame(),11);
+  ASSERT_EQ(stat_.countTracked(),6);
+  ASSERT_EQ(stat_.localVisibility_,localVisibility);
+  ASSERT_EQ(stat_.localQuality_[0],localQuality[0]);
+  ASSERT_EQ(stat_.localQuality_[1],localQuality[1]);
+  ASSERT_EQ(stat_.getGlobalQuality(),6.0/10.0);
+  ASSERT_EQ(stat_.isGoodFeature(0.9,0.1),true);
 }
 
 // Test isMultilevelPatchInFrame
@@ -237,54 +248,54 @@ TEST_F(MLPTesting, isMultilevelPatchInFrame) {
   double c;
   for(unsigned int l=0;l<nLevels_;l++){
     c = patchSize_/2*pow(2,l)-0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),false);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),false);
     c = patchSize_/2*pow(2,l);
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),true);
     c = patchSize_/2*pow(2,l)+0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),true);
     c = imgSize_-patchSize_/2*pow(2,l)-0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),true);
     c = imgSize_-patchSize_/2*pow(2,l);
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),true);
     c = imgSize_-patchSize_/2*pow(2,l)+0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l),false);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l),false);
   }
   for(unsigned int l=0;l<nLevels_;l++){
     c = (patchSize_/2+1)*pow(2,l)-0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),false);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),false);
     c = (patchSize_/2+1)*pow(2,l);
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),true);
     c = (patchSize_/2+1)*pow(2,l)+0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),true);
     c = imgSize_-(patchSize_/2+1)*pow(2,l)-0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),true);
     c = imgSize_-(patchSize_/2+1)*pow(2,l);
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),true);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),true);
     c = imgSize_-(patchSize_/2+1)*pow(2,l)+0.1;
-    mlp_.set_c(cv::Point2f(c,c));
-    ASSERT_EQ(isMultilevelPatchInFrame(mlp_,pyr1_,l,true),false);
+    c_.set_c(cv::Point2f(c,c));
+    ASSERT_EQ(mp_.isMultilevelPatchInFrame(pyr1_,c_,l,nullptr,true),false);
   }
 }
 
 // Test extractMultilevelPatchFromImage (tests computeFromImage as well)
 TEST_F(MLPTesting, extractMultilevelPatchFromImage) {
   pyr1_.computeFromImage(img1_,false);
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr1_);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr1_,c_,nLevels_-1,nullptr,true);
   for(unsigned int l=0;l<nLevels_;l++){
-    ASSERT_EQ(mlp_.isValidPatch_[l],true);
-    float* patch_ptr = mlp_.patches_[l].patchWithBorder_;
+    ASSERT_EQ(mp_.isValidPatch_[l],true);
+    float* patch_ptr = mp_.patches_[l].patchWithBorder_;
     for(int i=0;i<patchSize_+2;i++){
       for(int j=0;j<patchSize_+2;j++, ++patch_ptr){
         const cv::Point2f c(i*pow(2,l)+imgSize_/2-(patchSize_/2+1.0-0.5)*pow(2,l)-0.5,
@@ -293,14 +304,13 @@ TEST_F(MLPTesting, extractMultilevelPatchFromImage) {
       }
     }
   }
-  ASSERT_EQ(mlp_.get_affineTransform(),Eigen::Matrix2f::Identity());
 
   pyr1_.computeFromImage(img1_,true);
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr1_);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr1_,c_,nLevels_-1,nullptr,false);
   for(unsigned int l=0;l<nLevels_;l++){
-    ASSERT_EQ(mlp_.isValidPatch_[l],true);
-    float* patch_ptr = mlp_.patches_[l].patch_; // Border effect, thus only valid for inner patch
+    ASSERT_EQ(mp_.isValidPatch_[l],true);
+    float* patch_ptr = mp_.patches_[l].patch_; // Border effect, thus only valid for inner patch
     for(int i=0;i<patchSize_;i++){
       for(int j=0;j<patchSize_;j++, ++patch_ptr){
         const cv::Point2f c(i*pow(2,l)+imgSize_/2-(patchSize_/2-0.5)*pow(2,l)-0.5,
@@ -309,26 +319,25 @@ TEST_F(MLPTesting, extractMultilevelPatchFromImage) {
       }
     }
   }
-  ASSERT_EQ(mlp_.get_affineTransform(),Eigen::Matrix2f::Identity());
 }
 
 // Test computeMultilevelShiTomasiScore
 TEST_F(MLPTesting, computeMultilevelShiTomasiScore) {
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
   double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
   s = s*(255*0.5)*(255*0.5)/(patchSize_*patchSize_);
   int count = 0;
   double scale = 0;
   for(unsigned int l=0;l<nLevels_;l++){
-    mlp_.getSpecificLevelScore(l);
-    ASSERT_EQ(mlp_.s_,s);
+    mp_.getSpecificLevelScore(l);
+    ASSERT_EQ(mp_.s_,s);
     count++;
     scale += pow(0.25,l);
   }
   scale /= count;
-  mlp_.computeMultilevelShiTomasiScore();
-  ASSERT_EQ(mlp_.s_,s*scale);
+  mp_.computeMultilevelShiTomasiScore();
+  ASSERT_EQ(mp_.s_,s*scale);
 }
 
 // Test getLinearAlignEquations
@@ -336,11 +345,11 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
   Eigen::MatrixXf A;
   Eigen::MatrixXf b;
   b.setZero();
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
   // NOTE: only works for patch size = 2, nLevels = 2
-  ASSERT_EQ(getLinearAlignEquations(mlp_,pyr2_,0,nLevels_-1,false,A,b),true);
+  ASSERT_EQ(mpa_.getLinearAlignEquations(pyr2_,mp_,c_,nullptr,0,nLevels_-1,A,b),true);
   float meanError = (255+255*0.75)/8;
   ASSERT_EQ(b(0),255-meanError);
   ASSERT_EQ(b(1),-meanError);
@@ -355,8 +364,8 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
   for(unsigned int l=0;l<nLevels_;l++){
     for(unsigned int i=0;i<patchSize_;i++){
       for(unsigned int j=0;j<patchSize_;j++){
-        mean_diff_dx += -pow(0.5,l)*mlp_.patches_[l].dx_[i*patchSize_+j];
-        mean_diff_dy += -pow(0.5,l)*mlp_.patches_[l].dy_[i*patchSize_+j];
+        mean_diff_dx += -pow(0.5,l)*mp_.patches_[l].dx_[i*patchSize_+j];
+        mean_diff_dy += -pow(0.5,l)*mp_.patches_[l].dy_[i*patchSize_+j];
       }
     }
   }
@@ -365,8 +374,8 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
   for(unsigned int l=0;l<nLevels_;l++){
     for(unsigned int i=0;i<patchSize_;i++){
       for(unsigned int j=0;j<patchSize_;j++){
-        ASSERT_EQ(A(4*l+i*patchSize_+j,0),-pow(0.5,l)*mlp_.patches_[l].dx_[i*patchSize_+j]-mean_diff_dx);
-        ASSERT_EQ(A(4*l+i*patchSize_+j,1),-pow(0.5,l)*mlp_.patches_[l].dy_[i*patchSize_+j]-mean_diff_dy);
+        ASSERT_EQ(A(4*l+i*patchSize_+j,0),-pow(0.5,l)*mp_.patches_[l].dx_[i*patchSize_+j]-mean_diff_dx);
+        ASSERT_EQ(A(4*l+i*patchSize_+j,1),-pow(0.5,l)*mp_.patches_[l].dy_[i*patchSize_+j]-mean_diff_dy);
       }
     }
   }
@@ -376,8 +385,8 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
 TEST_F(MLPTesting, levelTranformCoordinates) {
   const int nLevels = 4;
   ImagePyramid<nLevels> pyr;
-  cv::Point2f c1,c2;
-  c2 = cv::Point2f(1,1);
+  FeatureCoordinates c2;
+  c_.set_c(cv::Point2f(1,1));
   img1_ = cv::Mat::zeros(16,16,CV_8UC1);
   pyr.computeFromImage(img1_);
   ASSERT_EQ(pyr.centers_[0].x,0.0);
@@ -390,9 +399,9 @@ TEST_F(MLPTesting, levelTranformCoordinates) {
   ASSERT_EQ(pyr.centers_[3].y,0.0);
   for(int l1=0;l1<nLevels;l1++){
     for(int l2=0;l2<nLevels;l2++){
-      c1 = levelTranformCoordinates(c2,pyr,l1,l2);
-      ASSERT_EQ(c1.x,pow(2.0,l1-l2));
-      ASSERT_EQ(c1.y,pow(2.0,l1-l2));
+      pyr.levelTranformCoordinates(c_,c2,l1,l2);
+      ASSERT_EQ(c2.get_c().x,pow(2.0,l1-l2));
+      ASSERT_EQ(c2.get_c().y,pow(2.0,l1-l2));
     }
   }
   img1_ = cv::Mat::zeros(15,10,CV_8UC1);
@@ -407,129 +416,127 @@ TEST_F(MLPTesting, levelTranformCoordinates) {
   ASSERT_EQ(pyr.centers_[3].y,-1.0);
   for(int l1=0;l1<nLevels;l1++){
     for(int l2=0;l2<nLevels;l2++){
-      c1 = levelTranformCoordinates(c2,pyr,l1,l2);
-      ASSERT_EQ(c1.x,pow(2.0,l1-l2)+(pyr.centers_[l1].x-pyr.centers_[l2].x)*pow(0.5,l2));
-      ASSERT_EQ(c1.y,pow(2.0,l1-l2)+(pyr.centers_[l1].y-pyr.centers_[l2].y)*pow(0.5,l2));
+      pyr.levelTranformCoordinates(c_,c2,l1,l2);
+      ASSERT_EQ(c2.get_c().x,pow(2.0,l1-l2)+(pyr.centers_[l1].x-pyr.centers_[l2].x)*pow(0.5,l2));
+      ASSERT_EQ(c2.get_c().y,pow(2.0,l1-l2)+(pyr.centers_[l1].y-pyr.centers_[l2].y)*pow(0.5,l2));
     }
   }
 }
 
 // Test align2D_old
 TEST_F(MLPTesting, align2D_old) {
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,0,nLevels_-1,false,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,0,0,false,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,1,1,false,100,1e-4),false);
+  FeatureCoordinates cAligned;
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,0,0,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,1,1,100,1e-4),false);
 
   Eigen::Matrix2f aff;
   aff << cos(M_PI/2.0), -sin(M_PI/2.0), sin(M_PI/2.0), cos(M_PI/2.0);
-  mlp_.set_affineTransfrom(aff);
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_,nLevels_-1,true,true);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,0,nLevels_-1,true,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,0,0,true,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D_old(mlp_,pyr2_,1,1,true,100,1e-4),false);
+  warp_.set_affineTransfrom(aff);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,&warp_,true);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,0,0,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,1,1,100,1e-4),false);
 }
 
 // Test align2D
 TEST_F(MLPTesting, align2D) {
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,0,nLevels_-1,false,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,0,0,false,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,1,1,false,100,1e-4),false);
+  FeatureCoordinates cAligned;
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,0,0,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,1,1,100,1e-4),false);
 
   Eigen::Matrix2f aff;
   aff << cos(M_PI/2.0), -sin(M_PI/2.0), sin(M_PI/2.0), cos(M_PI/2.0);
-  mlp_.set_affineTransfrom(aff);
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_,nLevels_-1,true,true);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,0,nLevels_-1,true,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,0,0,true,100,1e-4),true);
-  ASSERT_NEAR(mlp_.get_c().x,imgSize_/2,1e-2);
-  ASSERT_NEAR(mlp_.get_c().y,imgSize_/2,1e-2);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  ASSERT_EQ(align2D(mlp_,pyr2_,1,1,true,100,1e-4),false);
+  warp_.set_affineTransfrom(aff);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,&warp_,true);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,0,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,1,100,1e-4),true);
 
   // Single step comparison
   cv::Point2f c1,c2;
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,0,1,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,0,1,false,1,1e6);
-  c2 = mlp_.get_c();
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,nullptr,true);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,0,nLevels_-1,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,0,0,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,0,0,false,1,1e6);
-  c2 = mlp_.get_c();
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,0,0,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,0,0,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,1,1,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,1,1,false,1,1e6);
-  c2 = mlp_.get_c();
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,nullptr,1,1,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,nullptr,1,1,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
 
   aff << cos(M_PI/2.0), -sin(M_PI/2.0), sin(M_PI/2.0), cos(M_PI/2.0);
-  mlp_.set_affineTransfrom(aff);
-  mlp_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
-  extractMultilevelPatchFromImage(mlp_,pyr2_,nLevels_-1,true,true);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,0,1,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,0,1,false,1,1e6);
-  c2 = mlp_.get_c();
+  warp_.set_affineTransfrom(aff);
+  c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
+  mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,&warp_,true);
+  c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,0,nLevels_-1,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,0,0,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,0,0,false,1,1e6);
-  c2 = mlp_.get_c();
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,0,0,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,0,0,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D(mlp_,pyr2_,1,1,false,1,1e6);
-  c1 = mlp_.get_c();
-  mlp_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
-  align2D_old(mlp_,pyr2_,1,1,false,1,1e6);
-  c2 = mlp_.get_c();
+  mpa_.align2D(cAligned,pyr2_,mp_,c_,&warp_,1,1,1,1e-4);
+  c1 = cAligned.get_c();
+  mpa_.align2D_old(cAligned,pyr2_,mp_,c_,&warp_,1,1,1,1e-4);
+  c2 = cAligned.get_c();
   ASSERT_NEAR(c1.x,c2.x,1e-6);
   ASSERT_NEAR(c1.y,c2.y,1e-6);
 }

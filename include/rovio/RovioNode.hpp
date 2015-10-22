@@ -39,13 +39,14 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
-#include <rovio/RovioOutput.h>
-#include "rovio/CameraOutputCF.hpp"
-#include "rovio/YprOutputCF.hpp"
+#include <rovio/RovioOutput.h> // Ros msg
+#include "rovio/RovioFilter.hpp"
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
-#include "FeatureBearingOutputCF.hpp"
-#include "FeatureLocationOutputCF.hpp"
+
+#include "rovio/CoordinateTransform/CameraOutput.hpp"
+#include "rovio/CoordinateTransform/YprOutput.hpp"
+#include "rovio/CoordinateTransform/FeatureOutput.hpp"
 
 namespace rovio {
 
@@ -86,16 +87,16 @@ class RovioNode{
   int poseMsgSeq_;
   typedef StandardOutput mtOutput;
   mtOutput output_;
-  CameraOutputCF<mtState> cameraOutputCF_;
-  typename CameraOutputCF<mtState>::mtOutputCovMat outputCov_;
+  CameraOutputCT<mtState> cameraOutputCF_;
+  MXD outputCov_;
 
   typedef AttitudeOutput mtAttitudeOutput;
   mtAttitudeOutput attitudeOutput_;
   typedef YprOutput mtYprOutput;
   mtYprOutput yprOutput_;
-  AttitudeToYprCF attitudeToYprCF_;
-  AttitudeToYprCF::mtInputCovMat attitudeOutputCov_;
-  AttitudeToYprCF::mtOutputCovMat yprOutputCov_;
+  AttitudeToYprCT attitudeToYprCF_;
+  MXD attitudeOutputCov_;
+  MXD yprOutputCov_;
 
   static const int groundtruthN_ = 3;
   std::queue<rot::RotationQuaternionPD> groundtruth_qCJ_;
@@ -109,7 +110,7 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter) {
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
@@ -145,61 +146,70 @@ class RovioNode{
   ~RovioNode(){}
 
   /** \brief Tests the functionality of the rovio node.
+   *
+   *  @todo debug with   doVECalibration = false and depthType = 0
    */
   void makeTest(){
-    mtState testState = mpFilter_->init_.state_;
+    mtFilterState* mpTestFilterState = new mtFilterState();
+    *mpTestFilterState = mpFilter_->init_;
+    mpTestFilterState->setCamera(&mpFilter_->multiCamera_);
+    mtState& testState = mpTestFilterState->state_;
     unsigned int s = 2;
-    testState.setRandom(s);            // TODO: debug with   doVECalibration = false and depthType = 0
+    testState.setRandom(s);
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
-    testState.aux().camID_[0] = mtState::nCam_-1;
+    BearingCorners bearingCorners;
+    bearingCorners[0].setZero();
+    bearingCorners[1].setZero();
+
     for(int i=0;i<mtState::nMax_;i++){
+      testState.CfP(i).camID_ = 0;
       testState.aux().bearingMeas_[i].setRandom(s);
+      testState.aux().warping_[i].set_bearingCorners(bearingCorners);
     }
+    testState.CfP(0).camID_ = mtState::nCam_-1;
+    mpTestFilterState->fsm_.setAllCameraPointers();
 
     // Prediction
-    mpFilter_->mPrediction_.testJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
+    mpFilter_->mPrediction_.testPredictionJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
     if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
       for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
         testState.aux().activeFeature_ = i;
         testState.aux().activeCameraCounter_ = 0;
-        const int camID = testState.aux().camID_[i];
+        const int camID = testState.CfP(i).camID_;
         int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setFeatureID(i);
-        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
         testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-        activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-        std::get<0>(mpFilter_->mUpdates_).featureBearingOutputCF_.setOutputCameraID(activeCamID);
-        std::get<0>(mpFilter_->mUpdates_).testJacs(testState,imgUpdateMeas_,1e-8,1e-5,0.1);
+        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
       }
     }
 
     // CF
-    cameraOutputCF_.testJacInput(testState,testState,1e-8,1e-6,0.1);
-    attitudeToYprCF_.testJacInput(1e-8,1e-6,s,0.1);
-    rovio::FeatureBearingOutputCF<mtState> featureBearingOutputCFTest;
-    featureBearingOutputCFTest.setFeatureID(0);
+    cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    attitudeToYprCF_.testTransformJac(1e-8,1e-6);
+    rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT(&mpFilter_->multiCamera_);
+    transformFeatureOutputCT.setFeatureID(0);
     if(mtState::nCam_>1){
-      featureBearingOutputCFTest.setOutputCameraID(1);
-      featureBearingOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+      transformFeatureOutputCT.setOutputCameraID(1);
+      transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
     }
-    featureBearingOutputCFTest.setOutputCameraID(0);
-    featureBearingOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
-    rovio::FeatureLocationOutputCF<mtState> featureLocationOutputCFTest;
-    featureLocationOutputCFTest.setFeatureID(0);
-    if(mtState::nCam_>1){
-      featureLocationOutputCFTest.setOutputCameraID(1);
-      featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+    transformFeatureOutputCT.setOutputCameraID(0);
+    transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
+    FeatureOutput featureOutput;
+    transformFeatureOutputCT.transformState(testState,featureOutput);
+    if(!featureOutput.c().isInFront()){
+      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)));
     }
-    featureLocationOutputCFTest.setOutputCameraID(0);
-    featureLocationOutputCFTest.testJacInput(1e-8,1e-5,s,0.1);
+    rovio::PixelOutputCT pixelOutputCT;
+    pixelOutputCT.testTransformJac(featureOutput,1e-3,0.5); // Reduces accuracy due to float and strong camera distortion
 
     // Zero Velocity Updates
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
+
+    delete mpTestFilterState;
   }
 
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.
@@ -219,7 +229,8 @@ class RovioNode{
 
   /** \brief Image callback for the camera with ID 0
    *
-   *  @param img - Image message.
+   * @param img - Image message.
+   * @todo generalize
    */
   void imgCallback0(const sensor_msgs::ImageConstPtr & img){
     imgCallback(img,0);
@@ -228,9 +239,10 @@ class RovioNode{
   /** \brief Image callback for the camera with ID 1
    *
    * @param img - Image message.
+   * @todo generalize
    */
   void imgCallback1(const sensor_msgs::ImageConstPtr & img){
-    if(mtState::nCam_ > 1) imgCallback(img,1); //TODO generalize
+    if(mtState::nCam_ > 1) imgCallback(img,1);
   }
 
   /** \brief Image callback. Adds images (as update measurements) to the filter.
@@ -290,20 +302,19 @@ class RovioNode{
     }
   }
 
-  /** \brief Executes the update step of the filter and publishes the updated data. @todo check this
+  /** \brief Executes the update step of the filter and publishes the updated data.
    *
    *   @param updateTime   - Update Time.
    */
   void updateAndPublish(const double& updateTime){
     if(isInitialized_){
-
       // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
       int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
       const double oldSafeTime = mpFilter_->safe_.t_;
-      mpFilter_->updateSafe(&updateTime); // TODO: continue only if actually updates
+      mpFilter_->updateSafe(&updateTime);
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -319,11 +330,15 @@ class RovioNode{
             cv::waitKey(5);
           }
         }
+        if(!mpFilter_->safe_.patchDrawing_.empty() && std::get<0>(mpFilter_->mUpdates_).visualizePatches_){
+          cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
+          cv::waitKey(5);
+        }
 
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
-        typename mtFilterState::mtFilterCovMat& cov = mpFilter_->safe_.cov_;
+        MXD& cov = mpFilter_->safe_.cov_;
         cameraOutputCF_.transformState(state,output_);
         cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
@@ -514,7 +529,6 @@ class RovioNode{
 
         float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
         int offset = 0;
-        double d, d_far, d_near, d_p, p_d, p_d_p;
 
         // Marker message (Uncertainty rays).
         visualization_msgs::Marker marker_msg;
@@ -536,16 +550,21 @@ class RovioNode{
         marker_msg.color.g = 1.0;
         marker_msg.color.b = 0.0;
 
+        FeatureDistance distance;
+        double d,d_far,d_near;
+        const double stretchFactor = 20;
         for (unsigned int i=0;i<mtState::nMax_; i++, offset += pcl_msg.point_step) {
-          if(filterState.mlps_.isValid_[i]){
-
+          if(filterState.fsm_.isValid_[i]){
             // Get 3D feature coordinates.
-            state.aux().depthMap_.map(filterState.state_.dep(i),d,d_p,p_d,p_d_p);
-            const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-            state.aux().depthMap_.map(filterState.state_.dep(i)-20*sigma,d_far,d_p,p_d,p_d_p);
-            if(d_far > 1000 || d_far <= 0.0) d_far = 1000;
-            state.aux().depthMap_.map(filterState.state_.dep(i)+20*sigma,d_near,d_p,p_d,p_d_p);
-            const LWF::NormalVectorElement middle = filterState.state_.CfP(i);
+            distance = state.dep(i);
+            d = distance.getDistance();
+            const double sigma = cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2);
+            distance.p_ -= stretchFactor*sigma;
+            d_far = distance.getDistance();
+            if(distance.getType() == FeatureDistance::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+            distance.p_ += 2*stretchFactor*sigma;
+            d_near = distance.getDistance();
+            const LWF::NormalVectorElement middle = filterState.state_.CfP(i).get_nor();
             const Eigen::Vector3f pos = middle.getVec().cast<float>()*d;
             const Eigen::Vector3f pos_far = middle.getVec().cast<float>()*d_far;
             const Eigen::Vector3f pos_near = middle.getVec().cast<float>()*d_near;

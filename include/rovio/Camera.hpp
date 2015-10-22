@@ -29,7 +29,7 @@
 #ifndef ROVIO_CAMERA_HPP_
 #define ROVIO_CAMERA_HPP_
 
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include <opencv2/features2d/features2d.hpp>
 #include "lightweight_filtering/State.hpp"
 #include "yaml-cpp/yaml.h"
@@ -45,8 +45,6 @@ class Camera{
     EQUIDIST   //!< Equidistant distortion model.
   } type_;
 
-  V3D BrBC_;
-  QPD qCB_;
   Eigen::Matrix3d K_; //!< Intrinsic parameter matrix.
 
   //@{
@@ -65,15 +63,8 @@ class Camera{
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
     K_.setIdentity();
     type_ = RADTAN;
-    qCB_.setIdentity();
-    BrBC_.setZero();
   };
   ~Camera(){};
-
-  void setExtrinsics(const V3D& BrBC, const QPD& qCB){ // TODO: clean and get functionality into this class
-    BrBC_ = BrBC;
-    qCB_ = qCB;
-  }
 
   /** \brief Loads and sets the intrinsic parameter matrix K_ from yaml-file.
    *

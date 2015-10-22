@@ -28,7 +28,7 @@
 
 #include <ros/package.h>
 
-#include "rovio/rovioFilter.hpp"
+#include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
 #ifdef MAKE_SCENE
 #include "rovio/RovioScene.hpp"
@@ -56,7 +56,7 @@ int main(int argc, char** argv){
   std::string rootdir = ros::package::getPath("rovio");
 
   // Filter
-  mtFilter* mpFilter = new mtFilter;
+  mtFilter* mpFilter = new mtFilter; // VERY important, needs to be allocated on heap, too large for stack!
   mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
 
   // Node

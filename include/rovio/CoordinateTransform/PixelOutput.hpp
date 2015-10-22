@@ -26,49 +26,45 @@
 *
 */
 
-#include <ros/package.h>
+#ifndef ROVIO_PIXELOUTPUT_HPP_
+#define ROVIO_PIXELOUTPUT_HPP_
 
-#include "rovio/RovioFilter.hpp"
-#include "rovio/RovioNode.hpp"
+#include "lightweight_filtering/common.hpp"
+#include "lightweight_filtering/CoordinateTransform.hpp"
+#include "rovio/CoordinateTransform/FeatureOutput.hpp"
 
-// TODO(helenol): expose these as ROS params as well?
-static constexpr unsigned int nMax_ = 25;    // Maximal number of considered features in the filter state.
-static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
-static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
-static constexpr int nCam_ = 1;              // Used total number of cameras.
-typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
+namespace rovio {
 
-int main(int argc, char** argv){
-  ros::init(argc, argv, "rovio");
-  ros::NodeHandle nh;
-  ros::NodeHandle nh_private("~");
-
-  std::string filter_config = ros::package::getPath("rovio") +
-      "/cfg/rovio.info";
-
-  nh_private.param("filter_config", filter_config, filter_config);
-
-  // Filter
-  mtFilter* mpFilter = new mtFilter;
-
-  mpFilter->readFromInfo(filter_config);
-
-  // Force the camera calibration paths to the ones from ROS parameters.
-  for (unsigned int camID = 0; camID < nCam_; ++camID) {
-    std::string camera_config;
-    if (nh_private.getParam("camera" + std::to_string(camID)
-                            + "_config", camera_config)) {
-      mpFilter->cameraCalibrationFile_[camID] = camera_config;
-    }
+class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
+ public:
+  static constexpr unsigned int _pix = 0;
+  PixelOutput(){
   }
-  mpFilter->refreshProperties();
+  ~PixelOutput(){};
+  cv::Point2f getPoint2f() const{
+    return cv::Point2f(static_cast<float>(this->get<_pix>()(0)),static_cast<float>(this->get<_pix>()(1)));
+  }
+};
 
-  // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
-  rovioNode.makeTest();
+class PixelOutputCT:public LWF::CoordinateTransform<FeatureOutput,PixelOutput>{
+ public:
+  typedef LWF::CoordinateTransform<FeatureOutput,PixelOutput> Base;
+  typedef typename Base::mtInput mtInput;
+  typedef typename Base::mtOutput mtOutput;
+  PixelOutputCT(){
+  };
+  ~PixelOutputCT(){};
+  void evalTransform(mtOutput& output, const mtInput& input) const{
+    cv::Point2f c = input.c().get_c();
+    output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);
+  }
+  void jacTransform(MXD& J, const mtInput& input) const{
+    J.setZero();
+    J.template block<2,2>(mtOutput::template getId<mtOutput::_pix>(),mtInput::template getId<mtInput::_fea>()) = input.c().get_J();
+  }
+};
 
-  ros::spin();
-
-  delete mpFilter;
-  return 0;
 }
+
+
+#endif /* ROVIO_PIXELOUTPUT_HPP_ */

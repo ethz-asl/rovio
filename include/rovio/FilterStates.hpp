@@ -29,242 +29,16 @@
 #ifndef ROVIO_FILTERSTATES_HPP_
 #define ROVIO_FILTERSTATES_HPP_
 
-#include "kindr/rotations/RotationEigen.hpp"
-#include <Eigen/Dense>
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/FilterState.hpp"
 #include <map>
 #include <unordered_set>
-
-#include "FeatureLocationOutputCF.hpp"
-#include "rovio/commonVision.hpp"
-
-namespace rot = kindr::rotations::eigen_impl;
+#include "CoordinateTransform/FeatureOutput.hpp"
+#include "rovio/RobocentricFeatureElement.hpp"
+#include "rovio/FeatureManager.hpp"
+#include "rovio/MultiCamera.hpp"
 
 namespace rovio {
-/** \brief Class , allowing the computation of some depth parameterization values.
- */
-class DepthMap{
- public:
-
-  /** \brief Specifies the depth type of the DepthMap.
-   */
-  enum DepthType{
-    REGULAR,    /**<Regular Depth p = d*/
-    INVERSE,    /**<Inverse Depth p = 1/d*/
-    LOG,        /**<Logarithmic Depth p = ln(d)*/
-    HYPERBOLIC  /**<Hyperbolic Depth p = asinh(d)*/
-  } type_;
-
-  /** \brief Constructor. Create a DepthMap object with a desired \ref DepthType.
-   *
-   *  @param type - enum \ref DepthType.
-   */
-  DepthMap(const DepthType& type = REGULAR){
-    setType(type);
-  }
-
-  /** \brief Set the \ref DepthType type_ using the enum \ref DepthType.
-   *
-   *  @param type - Enum \ref DepthType.
-   */
-  void setType(const DepthType& type){
-    type_ = type;
-  }
-
-  /** \brief Get the set \ref DepthType.
-   *
-   *  @return the set \ref DepthType.
-   */
-  DepthType getType() {
-    return type_;
-  }
-
-  /** \brief Set the \ref DepthType type_ using the integer value of the enum \ref DepthType.
-   *
-   *  @param type - Integer value of the enum \ref DepthType.
-   */
-  void setType(const int& type){
-    switch(type){
-      case 0:
-        type_ = REGULAR;
-        break;
-      case 1:
-        type_ = INVERSE;
-        break;
-      case 2:
-        type_ = LOG;
-        break;
-      case 3:
-        type_ = HYPERBOLIC;
-        break;
-      default:
-        std::cout << "Invalid type for depth parameterization: " << type << std::endl;
-        type_ = REGULAR;
-        break;
-    }
-  }
-
-  /** \brief Computes some depth parameterization values, based on the set \ref DepthType type_.
-   *
-   *  @param p     - Parameter value. Has to match the set \ref DepthType type_.
-   *                 If type_ = REGULAR then p must correspond to the depth value d.
-   *                 If type_ = INVERSE then p must correspond to the inverse depth value p=1/d.
-   *                 If type_ = LOG then p must correspond to the inverse depth value p=ln(d).
-   *                 If type_ = HYPERBOLIC then p must correspond to the hyperbolic depth value p=asinh(d).
-   *  @param d     - Depth value.
-   *  @param d_p   - d derived w.r.t. p
-   *  @param p_d   - p derived w.r.t. d
-   *  @param p_d_p - p_d derived w.r.t. p
-   */
-  void map(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    switch(type_){
-      case REGULAR:
-        mapRegular(p,d,d_p,p_d,p_d_p);
-        break;
-      case INVERSE:
-        mapInverse(p,d,d_p,p_d,p_d_p);
-        break;
-      case LOG:
-        mapLog(p,d,d_p,p_d,p_d_p);
-        break;
-      case HYPERBOLIC:
-        mapHyperbolic(p,d,d_p,p_d,p_d_p);
-        break;
-      default:
-        mapRegular(p,d,d_p,p_d,p_d_p);
-        break;
-    }
-  }
-
-  /** \brief Converts a value of a specific \ref DepthType into a value of another \ref DepthType.
-   *
-   *  @param type_p     - Input \ref DepthType, belonging to p.
-   *  @param p          - Value of the input \ref DepthType.
-   *  @param type_dep   - Output \ref DepthType, belonging to dep.
-   *  @param dep        - Value of the output \ref DepthType.
-   */
-  static void convertDepthType(const DepthType& type_p, const double& p, const DepthType& type_dep, double& dep) {
-    dep = p;
-    // Source type is REGULAR.
-    if (type_p == REGULAR) {
-      if (type_dep == INVERSE) {
-        dep = 1.0 / p;
-      }
-      else if (type_dep == LOG) {
-        dep = std::log(p);
-      }
-      else if (type_dep == HYPERBOLIC) {
-        dep = std::asinh(p);
-      }
-    }
-    // Source type is INVERSE.
-    else if (type_p == INVERSE) {
-      if (type_dep == REGULAR) {
-        dep = 1.0 / p;
-      }
-      else if (type_dep == LOG) {
-        dep = std::log(1.0/p);
-      }
-      else if (type_dep == HYPERBOLIC) {
-        dep = std::asinh(1.0/p);
-      }
-    }
-    // Source type is LOG.
-    else if (type_p == LOG) {
-      if (type_dep == REGULAR) {
-        dep = std::exp(p);
-      }
-      else if (type_dep == INVERSE) {
-        dep = 1.0 / std::exp(p);
-      }
-      else if (type_dep == HYPERBOLIC) {
-        dep = std::asinh(std::exp(p));
-      }
-    }
-    // Source type is HYPERBOLIC.
-    else if (type_p == HYPERBOLIC) {
-      if (type_dep == REGULAR) {
-        dep = std::sinh(p);
-      }
-      else if (type_dep == INVERSE) {
-        dep = 1.0 / std::sinh(p);
-      }
-      else if (type_dep == LOG) {
-        dep = std::log(std::sinh(p));
-      }
-    };
-  }
-
-  /** \brief Computes some depth parameterization values, given a depth value p = d.
-   *
-   *  @param p     - Input Parameter value: In this case p corresponds to the depth d.
-   *  @param d     - Depth value.
-   *  @param d_p   - d derived w.r.t. p
-   *  @param p_d   - p derived w.r.t. d
-   *  @param p_d_p - p_d derived w.r.t. p
-   */
-  void mapRegular(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    d = p;
-    d_p = 1.0;
-    p_d = 1.0;
-    p_d_p = 0.0;
-  }
-
-  /** \brief Computes some depth parameterization values, given an inverse depth value p = 1/d.
-   *
-   *  @param p     - Input Parameter value: In this case p corresponds to the inverse depth p = 1/d.
-   *  @param d     - Depth value.
-   *  @param d_p   - d derived w.r.t. p
-   *  @param p_d   - p derived w.r.t. d
-   *  @param p_d_p - p_d derived w.r.t. p
-   */
-  void mapInverse(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    double p_temp = p;
-    if(fabs(p_temp) < 1e-6){
-      if(p_temp >= 0){
-        p_temp = 1e-6;
-      } else {
-        p_temp = -1e-6;
-      }
-    }
-    d = 1/p_temp;
-    d_p = -d*d;
-    p_d = -p_temp*p_temp;
-    p_d_p = -2*p_temp;
-  }
-
-  /** \brief Computes some depth parameterization values, given a logarithmic depth value p = ln(d).
-   *
-   *  @param p     - Input Parameter value: In this case p corresponds to the logarithmic depth p = ln(d).
-   *  @param d     - Depth value.
-   *  @param d_p   - d derived w.r.t. p
-   *  @param p_d   - p derived w.r.t. d
-   *  @param p_d_p - p_d derived w.r.t. p
-   */
-  void mapLog(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    d = std::exp(p);
-    d_p = std::exp(p);
-    p_d = 1/d;
-    p_d_p = -1/pow(d,2)*d_p;
-  }
-
-  /** \brief Computes some depth parameterization values, given a hyperbolic depth value p = asinh(d).
-   *
-   *  @param p     - Input Parameter value: In this case p corresponds to the hyperbolic depth p = asinh(d).
-   *  @param d     - Depth value.
-   *  @param d_p   - d derived w.r.t. p
-   *  @param p_d   - p derived w.r.t. d
-   *  @param p_d_p - p_d derived w.r.t. p
-   */
-  void mapHyperbolic(const double& p, double& d, double& d_p, double& p_d, double& p_d_p) const{
-    d = std::sinh(p);
-    d_p = std::cosh(p);
-    p_d = 1/std::sqrt(std::pow(d,2)+1); // p = asinh(d)
-    p_d_p = -d/std::pow(std::pow(d,2)+1,1.5)*d_p;
-  }
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /** \brief Class, defining the auxiliary state of the filter.
  *
@@ -288,13 +62,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       A_red_[i].setIdentity();
       b_red_[i].setZero();
       bearingMeas_[i].setIdentity();
-      bearingCorners_[i][0].setZero();
-      bearingCorners_[i][1].setZero();
-      camID_[i] = 0;
     }
     doVECalibration_ = true;
-    depthTypeInt_ = 1;
-    depthMap_.setType(depthTypeInt_);
     activeFeature_ = 0;
     activeCameraCounter_ = 0;
     timeSinceLastInertialMotion_ = 0.0;
@@ -303,6 +72,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
+    doPatchWarping_ = true;
   };
 
   /** \brief Destructor
@@ -315,17 +85,15 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   Eigen::Matrix2d A_red_[nMax];  /**<Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   Eigen::Vector2d b_red_[nMax];  /**<Reduced intensity errors, needed for the multilevel patch alignment. \see rovio::MultilevelPatchFeature::A_ \see rovio::getLinearAlignEquationsReduced()*/
   LWF::NormalVectorElement bearingMeas_[nMax];  /**<Intermediate variable for storing the measured bearing vectors.*/
-  int camID_[nMax];  /**<%Camera ID*/
-  BearingCorners bearingCorners_[nMax];
   QPD qCM_[nCam];  /**<Quaternion Array: IMU coordinates to camera coordinates.*/
   V3D MrMC_[nCam];  /**<Position Vector Array: Vectors pointing from IMU to the camera frame, expressed in the IMU frame.*/
   bool doVECalibration_;  /**<Do Camera-IMU extrinsic parameter calibration?*/
-  DepthMap depthMap_;
-  int depthTypeInt_;  /**<Integer enum value of the chosen DepthMap::DepthType.*/
   int activeFeature_;  /**< Active Feature ID. ID of the currently updated feature. Needed in the image update procedure.*/
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
+  FeatureWarping warping_[nMax];  /**<FeatureWarpings.*/
+  bool doPatchWarping_; /**<Should patches be warped.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -343,8 +111,7 @@ LWF::TH_multiple_elements<LWF::VectorElement<3>,4>,
 LWF::QuaternionElement,
 LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
 LWF::ArrayElement<LWF::QuaternionElement,nCam>,
-LWF::ArrayElement<LWF::ScalarElement,nMax>,
-LWF::ArrayElement<LWF::NormalVectorElement,nMax>,
+LWF::ArrayElement<RobocentricFeatureElement,nMax>,
 StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
  public:
   typedef LWF::State<
@@ -352,8 +119,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
       LWF::QuaternionElement,
       LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
       LWF::ArrayElement<LWF::QuaternionElement,nCam>,
-      LWF::ArrayElement<LWF::ScalarElement,nMax>,
-      LWF::ArrayElement<LWF::NormalVectorElement,nMax>,
+      LWF::ArrayElement<RobocentricFeatureElement,nMax>,
       StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;  /**<State definition.*/
   using Base::D_;
   using Base::E_;
@@ -368,9 +134,8 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int _att = _gyb+1;  /**<Idx. Quaternion qWM: IMU coordinates to World coordinates.*/
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
-  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Depth Parameter*/
-  static constexpr unsigned int _nor = _dep+1;  /**<Idx. Bearing Vectors expressed in the Camera frame*/
-  static constexpr unsigned int _aux = _nor+1;  /**<Idx. Auxiliary state.*/
+  static constexpr unsigned int _fea = _vea+1;  /**<Idx. Robocentric feature parametrization.*/
+  static constexpr unsigned int _aux = _fea+1;  /**<Idx. Auxiliary state.*/
 
   /** \brief Constructor
    */
@@ -383,9 +148,32 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     this->template getName<_att>() = "att";
     this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
-    this->template getName<_dep>() = "dep";
-    this->template getName<_nor>() = "nor";
+    this->template getName<_fea>() = "fea";
     this->template getName<_aux>() = "auxiliary";
+  }
+
+  /** \brief Initializes the feature manager pointer as far as possible
+   *
+   *  @param featureManager* A pointer to a featureManagerArray
+   */
+  void initFeatureManagers(FeatureManager<nLevels,patchSize,nCam>** mpFeatureManager){
+    for(int i=0;i<nMax;i++){
+      mpFeatureManager[i]->mpCoordinates_ = &CfP(i);
+      mpFeatureManager[i]->mpDistance_ = &dep(i);
+      mpFeatureManager[i]->mpWarping_ = &aux().warping_[i];
+    }
+  }
+
+  /** \brief Initializes the feature manager pointer as far as possible
+   *
+   *  @param featureManager* A pointer to a featureManagerArray
+   */
+  void initFeatureManagers(FeatureSetManager<nLevels,patchSize,nCam,nMax>& fsm){
+    for(int i=0;i<nMax;i++){
+      fsm.features_[i].mpCoordinates_ = &CfP(i);
+      fsm.features_[i].mpDistance_ = &dep(i);
+      fsm.features_[i].mpWarping_ = &aux().warping_[i];
+    }
   }
 
   /** \brief Destructor
@@ -458,16 +246,16 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get/Set the bearing vector (NormalVectorElement) belonging to a specific feature i.
+  /** \brief Get/Set the feature coordinates belonging to a specific feature i.
    *
    *  @param i - Feature Index
-   *  @return a reference to the bearing vector (NormalVectorElement) of feature i.
+   *  @return a reference to the feature coordinates of feature i.
    */
-  inline LWF::NormalVectorElement& CfP(const int i = 0) {
-    return this->template get<_nor>(i);
+  inline FeatureCoordinates& CfP(const int i = 0) {
+    return this->template get<_fea>(i).coordinates_;
   }
-  inline const LWF::NormalVectorElement& CfP(const int i = 0) const{
-    return this->template get<_nor>(i);
+  inline const FeatureCoordinates& CfP(const int i = 0) const{
+    return this->template get<_fea>(i).coordinates_;
   }
   //@}
 
@@ -539,32 +327,19 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
-  /** \brief Get/Set the depth parameter of a specific feature i.
+  /** \brief Get/Set the distance parameter of a specific feature i.
    *
-   *  \note The depth parameter can be either defined as regular depth, inverse depth, logarithmic depth or hyperbolic depth.
-   *        The kind of the depth encoding depends on the defined DepthMap.
-   *
-   *  @param i - Feature Index
-   *  @return a reference to depth parameter of the feature.
-   */
-  inline double& dep(const int i){
-    return this->template get<_dep>(i);
-  }
-  inline const double& dep(const int i) const{
-    return this->template get<_dep>(i);
-  }
-  //@}
-
-  //@{
-  /** \brief Get the depth value of a specific feature.
+   *  \note The distance parameter can be either defined as regular distance, inverse distance, logarithmic distance or hyperbolic distance.
+   *        The kind of the distance encoding depends on the defined DepthMap.
    *
    *  @param i - Feature Index
-   *  @return the depth value d of the feature.
+   *  @return a reference to distance parameter of the feature.
    */
-  double get_depth(const int i) const{
-    double d, d_p, p_d, p_d_p;
-    this->template get<_aux>().depthMap_.map(this->template get<_dep>(i),d,d_p,p_d,p_d_p);
-    return d;
+  inline FeatureDistance& dep(const int i){
+    return this->template get<_fea>(i).distance_;
+  }
+  inline const FeatureDistance& dep(const int i) const{
+    return this->template get<_fea>(i).distance_;
   }
   //@}
 
@@ -582,6 +357,16 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   }
   //@}
 
+  /** \brief Update the extrinsics of the MultiCamera
+   *
+   *  @param mpMultiCamera - Pointer to the multicamera object
+   */
+  void updateMultiCameraExtrinsics(MultiCamera<nCam>* mpMultiCamera) const{
+    for(int i=0;i<nCam;i++){
+      mpMultiCamera->BrBC_[i] = MrMC(i);
+      mpMultiCamera->qCB_[i] = qCM(i);
+    }
+  }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -610,20 +395,17 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
  *
  *  \see State
  *  @tparam STATE - Filter State
- *  @todo complete
  */
 template<typename STATE>
 class PredictionNoise: public LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
 LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
 LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
-LWF::ArrayElement<LWF::ScalarElement,STATE::nMax_>,
-LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
+LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>{
  public:
   using LWF::State<LWF::TH_multiple_elements<LWF::VectorElement<3>,5>,
       LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
       LWF::ArrayElement<LWF::VectorElement<3>,STATE::nCam_>,
-      LWF::ArrayElement<LWF::ScalarElement,STATE::nMax_>,
-      LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>::E_;
+      LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>::E_;
   static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
   static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the IMU-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/
@@ -631,13 +413,12 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
   static constexpr unsigned int _att = _gyb+1;  /**<Idx. Quaternion qWM: IMU coordinates to World coordinates.*/
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
-  static constexpr unsigned int _dep = _vea+1;  /**<Idx. Depth Parameters @todo complete*/
-  static constexpr unsigned int _nor = _dep+1;  /**<Idx. Bearing Vectors expressed in Camera-Coordinates.*/
+  static constexpr unsigned int _fea = _vea+1;  /**<Idx. Feature parametrizations (bearing + depth parameter), array*/
 
   /** \brief Constructor
    */
   PredictionNoise(){
-    static_assert(_nor+1==E_,"Error with indices");
+    static_assert(_fea+1==E_,"Error with indices");
     this->template getName<_pos>() = "pos";
     this->template getName<_vel>() = "vel";
     this->template getName<_acb>() = "acb";
@@ -645,8 +426,7 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
     this->template getName<_att>() = "att";
     this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
-    this->template getName<_dep>() = "dep";
-    this->template getName<_nor>() = "nor";
+    this->template getName<_fea>() = "fea";
   }
 
   /** \brief Destructor
@@ -664,17 +444,17 @@ LWF::ArrayElement<LWF::VectorElement<2>,STATE::nMax_>>{
  *  @tparam nCam      - Used total number of cameras.
  */
 template<unsigned int nMax, int nLevels, int patchSize,int nCam>
-class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true>{
+class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0>{
  public:
-  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0,true> Base;
+  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0> Base;
   typedef typename Base::mtState mtState;  /**<Local Filter %State Type. \see LWF::FilterState*/
   using Base::state_;  /**<Filter State. \see LWF::FilterState*/
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/
   using Base::usePredictionMerge_;  /**<Whether multiple subsequent prediction steps should be merged into one.*/
-  MultilevelPatchSet<nLevels,patchSize,nMax> mlps_;
-  FeatureLocationOutputCF<mtState> featureLocationOutputCF_;
-  FeatureLocationOutput featureLocationOutput_;
-  typename FeatureLocationOutputCF<mtState>::mtOutputCovMat featureLocationOutputCov_;
+  FeatureSetManager<nLevels,patchSize,nCam,nMax> fsm_;
+  mutable rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
+  mutable FeatureOutput featureOutput_;
+  mutable MXD featureOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
@@ -690,7 +470,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
 
   /** \brief Constructor
    */
-  FilterState(){
+  FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)){
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
@@ -701,6 +481,17 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     groundtruth_qCB_.setIdentity();
     groundtruth_BrBC_.setZero();
     plotGroundtruth_ = true;
+    state_.initFeatureManagers(fsm_);
+    fsm_.allocateMissing();
+  }
+
+  /** \brief Sets the multicamera pointer
+   *
+   * @param mpMultiCamera - multicamera pointer;
+   */
+  void setCamera(MultiCamera<nCam>* mpMultiCamera){
+    fsm_.setCamera(mpMultiCamera);
+    transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
@@ -726,93 +517,60 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     }
   }
 
-  /** \brief Initializes a specific feature in the filter state.
+  /** \brief Resets the covariance of a feature
    *
-   *  Note that a bearing vector is described with only 2 parameters.
    *  @param i       - Feature index.
-   *  @param n       - Bearing vector of the feature (unit length not necessary).
-   *  @param d       - Depth value.
    *  @param initCov - Initialization 3x3 Covariance-Matrix.
-   *
-   *                   [ Cov(d,d)      Cov(d,nor_1)      Cov(d,nor_2)
-   *                     Cov(nor_1,d)  Cov(nor_1,nor_1)  Cov(nor_1,nor_2)
-   *                     Cov(nor_2,d)  Cov(nor_2,nor_1)  Cov(nor_2,nor_2) ]
    */
-  void initializeFeatureState(unsigned int i, V3D n, double d,const Eigen::Matrix<double,3,3>& initCov){
-    state_.dep(i) = d;
-    state_.CfP(i).setFromVector(n);
-    cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_dep>(i)).setZero();
-    cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_dep>(i),0).setZero();
-    cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_nor>(i)).setZero();
-    cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_nor>(i),0).setZero();
-    cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)) = initCov.block<1,1>(0,0);
-    cov_.template block<1,2>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_nor>(i)) = initCov.block<1,2>(0,1);
-    cov_.template block<2,1>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_dep>(i)) = initCov.block<2,1>(1,0);
-    cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)) = initCov.block<2,2>(1,1);
+  void resetFeatureCovariance(unsigned int i,const Eigen::Matrix<double,3,3>& initCov){
+    cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_fea>(i)+2).setZero();
+    cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_fea>(i)+2,0).setZero();
+    cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_fea>(i)).setZero();
+    cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_fea>(i),0).setZero();
+    cov_.template block<1,1>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = initCov.block<1,1>(0,0);
+    cov_.template block<1,2>(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)) = initCov.block<1,2>(0,1);
+    cov_.template block<2,1>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)+2) = initCov.block<2,1>(1,0);
+    cov_.template block<2,2>(mtState::template getId<mtState::_fea>(i),mtState::template getId<mtState::_fea>(i)) = initCov.block<2,2>(1,1);
   }
 
-  /** \brief Removes a feature from the state.
+  /** \brief Get the median distance parameter values of the state features for each camera.
    *
-   *  @param i       - Feature index.
-   */
-  void removeFeature(unsigned int i){
-    state_.dep(i) = 1.0;
-    state_.CfP(i).setIdentity();
-    cov_.template block<mtState::D_,1>(0,mtState::template getId<mtState::_dep>(i)).setZero();
-    cov_.template block<1,mtState::D_>(mtState::template getId<mtState::_dep>(i),0).setZero();
-    cov_.template block<mtState::D_,2>(0,mtState::template getId<mtState::_nor>(i)).setZero();
-    cov_.template block<2,mtState::D_>(mtState::template getId<mtState::_nor>(i),0).setZero();
-    cov_.template block<1,1>(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i)).setIdentity();
-    cov_.template block<2,2>(mtState::template getId<mtState::_nor>(i),mtState::template getId<mtState::_nor>(i)).setIdentity();
-  }
-
-  /** \brief Get the median depth parameter values of the state features for each camera.
-   *
-   *  \note The depth parameter type depends on the set \ref DepthType.
-   *  @param initDepthParameter     - Depth parameter value which is set, if no median depth parameter could be
+   *  \note The distance parameter type depends on the set \ref DepthType.
+   *  @param initDistanceParameter     - Depth parameter value which is set, if no median distance parameter could be
    *                                  computed from the state features for a specific camera.
-   *  @param medianDepthParameters  - Array, containing the median depth parameter values for each camera.
+   *  @param medianDistanceParameters  - Array, containing the median distance parameter values for each camera.
+   *  @param maxUncertaintyToDistanceRatio  - Maximal uncertainty where feature gets considered
    * */
-  void getMedianDepthParameters(double initDepthParameter, std::array<double,nCam>* medianDepthParameters, const float maxUncertaintyToDepthRatio) {
+  void getMedianDepthParameters(double initDistanceParameter, std::array<double,nCam>* medianDistanceParameters, const float maxUncertaintyToDistanceRatio) {
     // Fill array with initialization value.
-    // The initialization value is set, if no median depth value can be computed for a given camera frame.
-    medianDepthParameters->fill(initDepthParameter);
-    // Collect the depth values of the features for each camera frame.
-    std::vector<double> depthValueCollection[nCam];
-    unsigned int camID, activeCamCounter, activeCamID;
-    double depth, sigmaDepth;
+    // The initialization value is set, if no median distance value can be computed for a given camera frame.
+    medianDistanceParameters->fill(initDistanceParameter);
+    // Collect the distance values of the features for each camera frame.
+    std::vector<double> distanceParameterCollection[nCam];
     for (unsigned int i = 0; i < nMax; i++) {
-      if (mlps_.isValid_[i]) {
-        activeCamCounter = 0;
-        camID = mlps_.features_[i].camID_;
-        featureLocationOutputCF_.setFeatureID(i);
-        while (activeCamCounter != nCam) {
-          activeCamID = (activeCamCounter + camID)%nCam;
-          featureLocationOutputCF_.setOutputCameraID(activeCamID);
-          featureLocationOutputCF_.transformCovMat(state_, cov_, featureLocationOutputCov_);
-          sigmaDepth = std::sqrt(featureLocationOutputCov_(FeatureLocationOutput::_dep,FeatureLocationOutput::_dep));
-          featureLocationOutputCF_.transformState(state_, featureLocationOutput_);
-          depth = featureLocationOutput_.dep();
-          if (featureLocationOutput_.CfP().getVec()(2) <= 0.0) {   // Abort if the bearing vector in the current frame has a negative z-component. Todo: Change this. Should check if vector intersects with image plane.
-            activeCamCounter++;
-            continue;
+      if (fsm_.isValid_[i]) {
+        for(int camID = 0;camID<nCam;camID++){
+          transformFeatureOutputCT_.setFeatureID(i);
+          transformFeatureOutputCT_.setOutputCameraID(camID);
+          transformFeatureOutputCT_.transformState(state_, featureOutput_);
+          if(featureOutput_.c().isInFront()){
+            transformFeatureOutputCT_.transformCovMat(state_, cov_, featureOutputCov_);
+            const double uncertainty = sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative();
+            const double depth = fsm_.features_[i].mpDistance_->getDistance();
+            if(uncertainty/depth > maxUncertaintyToDistanceRatio){
+              distanceParameterCollection[camID].push_back(featureOutput_.d().p_);
+            }
           }
-          // Collect depth data if uncertainty-depth ratio small enough.
-          if (sigmaDepth/depth <= maxUncertaintyToDepthRatio) {
-            depthValueCollection[activeCamID].push_back(depth);
-          }
-          activeCamCounter++;
         }
       }
     }
-    // Compute and store the median depth parameter.
+    // Compute and store the median distance parameter.
     int size;
     for (unsigned int i = 0; i < nCam; i++) {
-      size = depthValueCollection[i].size();
-      if(size > 2) { // Require a minimum of three features
-        std::nth_element(depthValueCollection[i].begin(), depthValueCollection[i].begin() + size / 2, depthValueCollection[i].end());
-        DepthMap::convertDepthType(DepthMap::REGULAR, depthValueCollection[i][size/2],
-                                   state_.aux().depthMap_.getType(), (*medianDepthParameters)[i]);
+      size = distanceParameterCollection[i].size();
+      if(size > 3) { // Require a minimum of three features
+        std::nth_element(distanceParameterCollection[i].begin(), distanceParameterCollection[i].begin() + size / 2, distanceParameterCollection[i].end());
+        (*medianDistanceParameters)[i] = distanceParameterCollection[i][size/2];
       }
     }
   }

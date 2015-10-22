@@ -29,7 +29,7 @@
 #ifndef ROVIO_YPROUTPUT_HPP_
 #define ROVIO_YPROUTPUT_HPP_
 
-#include "rovio/FilterStates.hpp"
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
@@ -52,20 +52,17 @@ class YprOutput: public LWF::State<LWF::VectorElement<3>>{
 
 };
 
-class AttitudeToYprCF:public LWF::CoordinateTransform<AttitudeOutput,YprOutput,true>{
+class AttitudeToYprCT:public LWF::CoordinateTransform<AttitudeOutput,YprOutput>{
  public:
-  typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput,true> Base;
+  typedef LWF::CoordinateTransform<AttitudeOutput,YprOutput> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
-  typedef typename Base::mtMeas mtMeas;
-  typedef typename Base::mtJacInput mtJacInput;
-  typedef typename Base::mtOutputCovMat mtOutputCovMat;
-  AttitudeToYprCF(){};
-  ~AttitudeToYprCF(){};
-  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  AttitudeToYprCT(){};
+  ~AttitudeToYprCT(){};
+  void evalTransform(mtOutput& output, const mtInput& input) const{
     output.template get<mtOutput::_ypr>() = rot::EulerAnglesYprPD(input.template get<mtInput::_att>()).vector();
   }
-  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void jacTransform(MXD& J, const mtInput& input) const{
     J.setZero();
 
     rot::EulerAnglesYprPD ypr(input.template get<mtInput::_att>());

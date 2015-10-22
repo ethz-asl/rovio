@@ -29,7 +29,7 @@
 #ifndef ROVIO_CAMERAOUTPUT_HPP_
 #define ROVIO_CAMERAOUTPUT_HPP_
 
-#include "rovio/FilterStates.hpp"
+#include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/CoordinateTransform.hpp"
 
 namespace rovio {
@@ -98,20 +98,17 @@ class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEle
 };
 
 template<typename STATE>
-class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
+class CameraOutputCT:public LWF::CoordinateTransform<STATE,StandardOutput>{
  public:
-  typedef LWF::CoordinateTransform<STATE,StandardOutput,true> Base;
+  typedef LWF::CoordinateTransform<STATE,StandardOutput> Base;
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
-  typedef typename Base::mtMeas mtMeas;
-  typedef typename Base::mtJacInput mtJacInput;
-  typedef typename Base::mtOutputCovMat mtOutputCovMat;
   int camID_;
-  CameraOutputCF(){
+  CameraOutputCT(){
     camID_ = 0;
   };
-  ~CameraOutputCF(){};
-  void eval(mtOutput& output, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  ~CameraOutputCT(){};
+  void evalTransform(mtOutput& output, const mtInput& input) const{
     // WrWC = WrWM + qWM*(MrMC)
     // CwWC = qCM*MwWM
     // CvC  = qCM*(MvM + MwWM x MrMC)
@@ -121,7 +118,7 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
     output.CvC()  = input.qCM(camID_).rotate(V3D(-input.MvM() + gSM(V3D(input.aux().MwWMmeas_-input.gyb()))*input.MrMC(camID_)));
     output.qCW()  = input.qCM(camID_)*input.qWM().inverted();
   }
-  void jacInput(mtJacInput& J, const mtInput& input, const mtMeas& meas, double dt = 0.0) const{
+  void jacTransform(MXD& J, const mtInput& input) const{
     J.setZero();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) = M3D::Identity();
     J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_att>()) =
@@ -145,7 +142,7 @@ class CameraOutputCF:public LWF::CoordinateTransform<STATE,StandardOutput,true>{
           M3D::Identity();
     }
   }
-  void postProcess(mtOutputCovMat& cov,const mtInput& input){
+  void postProcess(MXD& cov,const mtInput& input){
     cov.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtOutput::template getId<mtOutput::_ror>()) += input.aux().wMeasCov_;
   }
 };

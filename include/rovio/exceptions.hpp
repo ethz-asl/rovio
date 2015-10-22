@@ -26,49 +26,45 @@
 *
 */
 
-#include <ros/package.h>
+#ifndef ROVIO_EXCEPTION_HPP_
+#define ROVIO_EXCEPTION_HPP_
 
-#include "rovio/RovioFilter.hpp"
-#include "rovio/RovioNode.hpp"
+#include <string>
+#include <iostream>
+#include <exception>
+#include <typeinfo>
 
-// TODO(helenol): expose these as ROS params as well?
-static constexpr unsigned int nMax_ = 25;    // Maximal number of considered features in the filter state.
-static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
-static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
-static constexpr int nCam_ = 1;              // Used total number of cameras.
-typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
-
-int main(int argc, char** argv){
-  ros::init(argc, argv, "rovio");
-  ros::NodeHandle nh;
-  ros::NodeHandle nh_private("~");
-
-  std::string filter_config = ros::package::getPath("rovio") +
-      "/cfg/rovio.info";
-
-  nh_private.param("filter_config", filter_config, filter_config);
-
-  // Filter
-  mtFilter* mpFilter = new mtFilter;
-
-  mpFilter->readFromInfo(filter_config);
-
-  // Force the camera calibration paths to the ones from ROS parameters.
-  for (unsigned int camID = 0; camID < nCam_; ++camID) {
-    std::string camera_config;
-    if (nh_private.getParam("camera" + std::to_string(camID)
-                            + "_config", camera_config)) {
-      mpFilter->cameraCalibrationFile_[camID] = camera_config;
-    }
-  }
-  mpFilter->refreshProperties();
-
-  // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
-  rovioNode.makeTest();
-
-  ros::spin();
-
-  delete mpFilter;
-  return 0;
+#define ROVIO_THROW(exceptionType) {                    \
+  throw exceptionType(__FUNCTION__,__FILE__,__LINE__);  \
 }
+
+namespace rovio {
+  struct ExceptionBase : public std::exception
+  {
+    std::string message_;
+    std::string function_;
+    std::string file_;
+    int line_;
+    ExceptionBase(std::string message,std::string function, std::string file, int line){
+      message_ = message;
+      function_ = function;
+      file_ = file;
+      line_ = line;
+    }
+    virtual const char * what () const throw ()
+    {
+      return (file_ + ":" + std::to_string(line_) + ": " + function_ + "()" + " " + message_).c_str();
+    }
+  };
+
+  struct CameraNullPtrException : public ExceptionBase
+  {
+    CameraNullPtrException(std::string function, std::string file, int line): ExceptionBase("Camera pointer is null!",function,file,line){}
+  };
+}
+
+/* Usage:
+ * ROVIO_THROW(rovio::CameraNullPtrException);
+ */
+
+#endif /* ROVIO_EXCEPTION_HPP_ */

@@ -29,10 +29,7 @@
 #ifndef ROVIO_ROVIOSCENE_HPP_
 #define ROVIO_ROVIOSCENE_HPP_
 
-#include "kindr/rotations/RotationEigen.hpp"
-#include <Eigen/Dense>
-
-#include "commonVision.hpp"
+#include "lightweight_filtering/common.hpp"
 #include "rovio/Scene.hpp"
 
 namespace rot = kindr::rotations::eigen_impl;
@@ -123,7 +120,7 @@ class RovioScene{
   }
   void drawScene(mtFilterState& filterState){
     const mtState& state = filterState.state_;
-    const typename mtFilterState::mtFilterCovMat& cov = filterState.cov_;
+    const MXD& cov = filterState.cov_;
 
     if(filterState.plotGroundtruth_){
       mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;
@@ -134,6 +131,10 @@ class RovioScene{
       mpGroundtruth_->draw_ = false;
     }
 
+    for(unsigned int i=0;i<mtState::nMax_;i++){
+      mpPatches_[i]->draw_ = false;
+    }
+
     for(unsigned int camID=0;camID<mtState::nCam_;camID++){
       mpSensor_[camID]->W_r_WB_ = state.WrWC(camID).template cast<float>();
       mpSensor_[camID]->q_BW_ = state.qCW(camID);
@@ -142,27 +143,33 @@ class RovioScene{
       std::vector<Eigen::Vector3f> lines;
       mpLines_[camID]->clear();
       mpDepthVar_[camID]->clear();
-      double d, d_far, d_near, d_p, p_d, p_d_p;
-      const double stretchFactor = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-1)/(filterState.mlps_.features_[0].warpDistance_*2.0);
+      FeatureDistance d;
+      double d_far,d_near;
+      const float s = pow(2.0,mtState::nLevels_-1)*0.5*mtState::patchSize_;
       for(unsigned int i=0;i<mtState::nMax_;i++){
-        if(filterState.mlps_.isValid_[i] && filterState.mlps_.features_[i].camID_ == camID){
-          state.aux().depthMap_.map(filterState.state_.dep(i),d,d_p,p_d,p_d_p);
-          const double sigma = cov(mtState::template getId<mtState::_dep>(i),mtState::template getId<mtState::_dep>(i));
-          state.aux().depthMap_.map(filterState.state_.dep(i)-sigma,d_far,d_p,p_d,p_d_p);
-          if(state.aux().depthMap_.type_ == DepthMap::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
-          state.aux().depthMap_.map(filterState.state_.dep(i)+sigma,d_near,d_p,p_d,p_d_p);
-          const LWF::NormalVectorElement middle = filterState.state_.CfP(i);
-          LWF::NormalVectorElement corner[4];
+        if(filterState.fsm_.isValid_[i] && filterState.fsm_.features_[i].mpCoordinates_->camID_ == camID){
+          mpPatches_[i]->draw_ = true;
+          d = state.dep(i);
+          const double sigma = cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2);
+          d.p_ -= sigma;
+          d_far = d.getDistance();
+          if(d.getType() == FeatureDistance::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+          d.p_ += 2*sigma;
+          d_near = d.getDistance();
+          const LWF::NormalVectorElement middle = state.CfP(i).get_nor();
           Eigen::Vector3d cornerVec[4];
-          const BearingCorners& bearingCorners = filterState.mlps_.features_[i].get_bearingCorners();
+          const double s = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-2);
+          if(!filterState.fsm_.features_[i].mpWarping_->com_bearingCorners(filterState.fsm_.features_[i].mpCoordinates_)){
+            mpPatches_[i]->draw_ = false;
+            continue;
+          }
+          PatchCorners patchCorners = filterState.fsm_.features_[i].mpWarping_->get_patchCorners(filterState.fsm_.features_[i].mpCoordinates_,s);
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){
-              const Eigen::Vector2d dif = stretchFactor*((2*x-1)*filterState.state_.aux().bearingCorners_[i][0]+(2*y-1)*filterState.state_.aux().bearingCorners_[i][1]); // TODO: factor 4
-              middle.boxPlus(dif,corner[y*2+x]);
-              cornerVec[y*2+x] = corner[y*2+x].getVec()*d;
+              cornerVec[y*2+x] = patchCorners(x,y).get_nor().getVec()*state.dep(i).getDistance();
             }
           }
-          const Eigen::Vector3d pos = middle.getVec()*d;
+          const Eigen::Vector3d pos = middle.getVec()*state.dep(i).getDistance();
           const Eigen::Vector3d pos_far = middle.getVec()*d_far;
           const Eigen::Vector3d pos_near = middle.getVec()*d_near;
 
@@ -177,19 +184,17 @@ class RovioScene{
 
           mpDepthVar_[camID]->prolonge(pos_far.cast<float>());
           mpDepthVar_[camID]->prolonge(pos_near.cast<float>());
-          if(filterState.mlps_.features_[i].status_.inFrame_){
-            if(filterState.mlps_.features_[i].status_.trackingStatus_ == TRACKED){
-              std::next(mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
-              mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
-              for(int j=0;j<8;j++){
-                std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
-              }
-            } else {
-              std::next( mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
-              mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
-              for(int j=0;j<8;j++){
-                std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
-              }
+          if(filterState.fsm_.features_[i].mpStatistics_->trackedInSomeFrame()){
+            std::next(mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+            mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+            for(int j=0;j<8;j++){
+              std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(0.0f,1.0f,0.0f,1.0f));
+            }
+          } else if(filterState.fsm_.features_[i].mpStatistics_->inSomeFrame()){
+            std::next( mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+            mpDepthVar_[camID]->vertices_.rbegin()->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
+            for(int j=0;j<8;j++){
+              std::next(mpLines_[camID]->vertices_.rbegin(),j)->color_.fromEigen(Eigen::Vector4f(1.0f,0.0f,0.0f,1.0f));
             }
           } else {
             std::next( mpDepthVar_[camID]->vertices_.rbegin())->color_.fromEigen(Eigen::Vector4f(0.5f,0.5f,0.5f,1.0f));
@@ -202,7 +207,7 @@ class RovioScene{
           mpPatches_[i]->clear();
           mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
           cv::Mat patch = cv::Mat::zeros(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1),CV_8UC1);
-          filterState.mlps_.features_[i].drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
+          filterState.fsm_.features_[i].mpMultilevelPatch_->drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
           mpPatches_[i]->setTexture(patch);
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){

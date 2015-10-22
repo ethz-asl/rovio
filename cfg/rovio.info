@@ -61,27 +61,28 @@ Init
         gyb_0 3e-4
         gyb_1 3e-4
         gyb_2 3e-4
-        vep_0 0.01
-        vep_1 0.01
-        vep_2 0.01
-        vep_3 0.01
-        vep_4 0.01
-        vep_5 0.01
+        vep_0 1
+        vep_1 1
+        vep_2 1
+        vep_3 1
+        vep_4 1
+        vep_5 1
         att_0 0.1
         att_1 0.1
         att_2 0.1
-        vea_0 0.01
-        vea_1 0.01
-        vea_2 0.01
-        vea_3 0.01
-        vea_4 0.01
-        vea_5 0.01
+        vea_0 0.1
+        vea_1 0.1
+        vea_2 0.1
+        vea_3 0.1
+        vea_4 0.1
+        vea_5 0.1
     }
 }
 Update0
 {
     doPatchWarping true
     doFrameVisualisation true
+    visualizePatches false
     useDirectMethod true
     startLevel 3
     endLevel 1
@@ -89,7 +90,8 @@ Update0
     MahalanobisTh 5.8858356 ;5.8858356
     UpdateNoise
     {
-        nor 4 ; rad (~1/f ~ 1/400^2 = 1/160000)
+        nor 1e-5 ; rad (~1/f ~ 1/400^2 = 1/160000)
+        int 4    ; intensity error
     }
     initCovFeature_0 0.5
     initCovFeature_1 1e-5
@@ -107,9 +109,10 @@ Update0
     minRelativeSTScore 0.75
     minAbsoluteSTScore 5.0
     fastDetectionThreshold 10
-    matchingPixelThreshold 0.0
+    matchingPixelThreshold 4.0
     specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
-    patchRejectionTh 10.0;
+    patchRejectionTh 10;
+    bearingVectorMahalTh 9.21;
     removeNegativeFeatureAfterUpdate true;
     maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
     MotionDetection
