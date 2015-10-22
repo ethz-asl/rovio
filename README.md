@@ -2,6 +2,8 @@
 
 This repository contains the ROVIO (Robust Visual Inertial Odometry) framework. The code is open-source, but please remember that it is strongly coupled to on-going research and thus some parts are not fully mature yet. Furthermore, the code will also be subject to changes in the future which could include greater re-factoring of some parts.
 
+Video: https://youtu.be/ZMAISVy-6ao
+
 ### Install without opengl scene ###
 Dependencies:
 * ros
