@@ -213,6 +213,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double bearingVectorMahalTh_; /**<Mahalnobis distance threshold of bearing error in search frame*/
   double updateNoiseNor_; /**<Update noise of update normal, used for inderect case (reprojection error)*/
   double updateNoiseInt_; /**<Update noise of intensity error, used for direct approach*/
+  double alignConvergencePixelRange_;
+  double alignCoverageRatio_;
+  int alignMaxUniSample_;
+
 
   // Temporary
   mutable PixelOutputCT pixelOutputCT_;
@@ -269,6 +273,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     bearingVectorMahalTh_ = 9.21;
     updateNoiseNor_ = 1e-5;
     updateNoiseInt_ = 4;
+    alignConvergencePixelRange_ = 1.0;
+    alignCoverageRatio_ = 2.0;
+    alignMaxUniSample_ = 5;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -289,11 +296,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("MotionDetection.pixelCoordinateMotionTh",pixelCoordinateMotionTh_);
     doubleRegister_.registerScalar("maxUncertaintyToDepthRatioForDepthInitialization",maxUncertaintyToDepthRatioForDepthInitialization_);
     doubleRegister_.registerScalar("bearingVectorMahalTh",bearingVectorMahalTh_);
+    doubleRegister_.registerScalar("alignConvergencePixelRange",alignConvergencePixelRange_);
+    doubleRegister_.registerScalar("alignCoverageRatio",alignCoverageRatio_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     intRegister_.registerScalar("MotionDetection.minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
+    intRegister_.registerScalar("alignMaxUniSample",alignMaxUniSample_);
     boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -520,7 +530,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 //          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(255,255,0),f.mpWarping_);
           pixelOutputCT_.transformState(featureOutput_,pixelOutput_);
           pixelOutputCT_.transformCovMat(featureOutput_,featureOutputCov_,pixelOutputCov_);
-          featureOutput_.c().setSigmaFromCov(pixelOutputCov_);
+          featureOutput_.c().setPixelCov(pixelOutputCov_);
 
           // Visualization
           if(doFrameVisualisation_){
@@ -539,7 +549,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           // Search patch
           bool attemptUpdate = false;
           if(!useDirectMethod_ || featureOutput_.c().sigma1_ > matchingPixelThreshold_){ // TODO: make adaptive (sample if covariance to large)
-            if(alignment_.align2DComposed(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_,startLevel_,endLevel_,endLevel_)){
+            if(alignment_.align2DAdaptive(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_,startLevel_,endLevel_,
+                                          alignConvergencePixelRange_,alignCoverageRatio_,alignMaxUniSample_)){
               if(verbose_) std::cout << "    Found match: " << alignedCoordinates_.get_nor().getVec().transpose() << std::endl;
               if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false)){
                 mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false);
@@ -598,7 +609,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                 if(!useDirectMethod_ || alignment_.getLinearAlignEquationsReduced(meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_
                                                                                   ,endLevel_,startLevel_,state.aux().A_red_[ID],state.aux().b_red_[ID])){
                   if(useSpecialLinearizationPoint_) linearizationPoint_.boxMinus(state,filterState.difVecLin_);
-                  state.aux().bearingMeas_[ID] = alignedCoordinates_.get_nor();
+                  if(!useDirectMethod_) state.aux().bearingMeas_[ID] = alignedCoordinates_.get_nor();
                   foundValidMeasurement = true;
                   if(doFrameVisualisation_){
                     featureOutput_.c().drawPoint(filterState.img_[activeCamID], cv::Scalar(0,255,0));

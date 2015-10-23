@@ -112,6 +112,8 @@ static cv::Point2f vecToPoint2f(const Eigen::Vector2f& v){
 }
 
 /** \brief Class taking care of tracking the feature warping
+ *
+ * @todo keep track of associated feature coordinates
  */
 class FeatureWarping{
  public:

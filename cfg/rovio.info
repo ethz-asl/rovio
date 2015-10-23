@@ -109,6 +109,9 @@ Update0
     minRelativeSTScore 0.75
     minAbsoluteSTScore 5.0
     fastDetectionThreshold 10
+    alignConvergencePixelRange 1 ; assumed convergence range in pixel (gets scaled with the level)
+    alignCoverageRatio 2         ; how many sigma of the uncertainty should be covered
+    alignMaxUniSample 5          ; maximal number of alignment on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
     matchingPixelThreshold 4.0
     specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10;

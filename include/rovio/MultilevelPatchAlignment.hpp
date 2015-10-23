@@ -45,10 +45,13 @@ namespace rovio{
 template<int nLevels,int patch_size>
 class MultilevelPatchAlignment {
  public:
-  Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
-  Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
-  Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;
-  Eigen::JacobiSVD<Eigen::MatrixXf> svd_;
+  mutable Eigen::MatrixXf A_;  /**<A matrix of the linear system of equations, needed for the multilevel patch alignment.*/
+  mutable Eigen::MatrixXf b_;  /**<b matrix/vector of the linear system of equations, needed for the multilevel patch alignment.*/
+  mutable Eigen::ColPivHouseholderQR<Eigen::MatrixXf> mColPivHouseholderQR_;  /**<QR decomposition module. Used for computiong reduces system of equations.*/
+  mutable Eigen::JacobiSVD<Eigen::MatrixXf> svd_; /**<SVD module. Used for solving linear equation systems.*/
+  mutable FeatureCoordinates bestCoordinateMatch_; /**<Best current pixel coordinate match.*/
+  mutable double bestIntensityError_; /**<Intensity error for the match.*/
+  mutable MultilevelPatch<nLevels,patch_size> mlpTemp_; /**<Temporary multilevel patch used for various computations.*/
 
   /** \brief Get the raw linear align equations (A*x=b), given by the [(#pixel)x2] Matrix  A (float) and the [(#pixel)x1] vector b (float).
    *
@@ -438,10 +441,52 @@ class MultilevelPatchAlignment {
     for(int l = start_level;l>=highest_level;--l){
       if(!align2D(cOut,pyr,mp,cOut,mpWarp,l,lowest_level)){
         return false;
-        break;
       }
     }
     return true;
+  }
+
+  /** \brief Aligns a MultilevelPatchFeature to a given image pyramid, adapts the algorithm to the uncertainty of cInit
+   *
+   * @param cOut          - Estimated coordinates for the patch alignment.
+   * @param pyr           - Considered image pyramid.
+   * @param mp            - \ref MultilevelPatch, which contains the patches.
+   * @param cInit         - Coordinates of the patch in the reference image, initial guess.
+   * @param mpWarp        - Affine warping matrix. If nullptr not warping is considered.
+   * @param lowest_level  - Lowest pyramid level to be considered
+   * @param highest_level - Highest pyramid level to be considered (should be smaller than lowest_level)
+   * @param convergencePixelRange - what is the expected converges range (one-sided, gets scaled by the patch level), 1 is a good value
+   * @param coverageRatio - How much of the uncertainty should be covered, 2 is a good value
+   * @param maxUniSample  - How many samples should maximally be evaluated, one-sided
+   * @return true, if alignment converged!
+   */
+  bool align2DAdaptive(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp,
+                       const int lowest_level = nLevels,const int highest_level = 0, const double convergencePixelRange = 1.0,  const double coverageRatio = 2.0, const int maxUniSample = 5){
+    bestIntensityError_ = -1;
+    cOut = cInit;
+    const int n = std::min(std::max(static_cast<int>(ceil((cInit.sigma1_*coverageRatio)/(convergencePixelRange*pow(2.0,lowest_level+1))-0.5)),0),maxUniSample); // (n+0.5)*r*2^(l+1) > s*f
+    if(n==0){ // Catch simple case
+      return align2D(cOut,pyr,mp,cInit,mpWarp,highest_level,lowest_level);
+    }
+    for(int i = -n;i<=n;i++){ // i is the multiple of steps which should be taken along the directions
+      cOut.set_c(cInit.get_c() + vecToPoint2f(cInit.eigenVector1_.cast<float>()*i*convergencePixelRange*pow(2.0,lowest_level+1)));
+      if(align2D(cOut,pyr,mp,cOut,mpWarp,highest_level,lowest_level)){
+        if(mlpTemp_.isMultilevelPatchInFrame(pyr,cOut,lowest_level,mpWarp,false)){
+          mlpTemp_.extractMultilevelPatchFromImage(pyr,cOut,lowest_level,mpWarp,false);
+          const float avgError = mlpTemp_.computeAverageDifference(mp,highest_level,lowest_level);
+          if(bestIntensityError_ == -1 || avgError<bestIntensityError_){
+            bestCoordinateMatch_ = cOut;
+            bestIntensityError_ = avgError;
+          }
+        }
+      }
+    }
+    if(bestIntensityError_ == -1){
+      return false;
+    } else {
+      cOut = bestCoordinateMatch_;
+      return true;
+    }
   }
 };
 
