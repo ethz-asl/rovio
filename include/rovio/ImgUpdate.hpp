@@ -548,7 +548,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
           // Search patch
           bool attemptUpdate = false;
-          if(!useDirectMethod_ || featureOutput_.c().sigma1_ > matchingPixelThreshold_){ // TODO: make adaptive (sample if covariance to large)
+          if(!useDirectMethod_ || featureOutput_.c().sigma1_ > matchingPixelThreshold_){
             if(alignment_.align2DAdaptive(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_,startLevel_,endLevel_,
                                           alignConvergencePixelRange_,alignCoverageRatio_,alignMaxUniSample_)){
               if(verbose_) std::cout << "    Found match: " << alignedCoordinates_.get_nor().getVec().transpose() << std::endl;
