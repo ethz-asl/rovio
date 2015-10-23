@@ -1,4 +1,6 @@
-#version 330
+#version 300 es
+
+precision highp float;
 
 layout (location = 0) in vec3 Position;
 layout (location = 1) in vec3 Normal;
@@ -13,7 +15,7 @@ out vec2 TexCoord0;
 
 void main()
 {
-    gl_Position = V_TF_B * vec4(Position, 1.0);
+    gl_Position = V_TF_B * vec4(Position, 1.0f);
     Color0 = Color;
     Normal0 = (W_TF_B * vec4(Normal, 0.0)).xyz;
     TexCoord0 = Color.xy;
