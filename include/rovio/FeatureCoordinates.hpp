@@ -37,6 +37,11 @@
 
 namespace rovio{
 
+/** \brief FeatureCoordinates class, contains information about the location of the feature.
+ *
+ * Automatically transforms between pixel coordinates and bearing vector (has an internal pointer on a camera).
+ * Furthermore it also stores the cam ID, and handles uncertainties associated with the feature location.
+ */
 class FeatureCoordinates{
  public:
   mutable cv::Point2f c_;  /**<Pixel coordinates of the feature.*/
@@ -44,10 +49,13 @@ class FeatureCoordinates{
   mutable LWF::NormalVectorElement nor_;  /**<Bearing vector, belonging to the feature.*/
   mutable bool valid_nor_;  /**<Bool, indicating if the current bearing vector \ref nor_ is valid.*/
   const Camera* mpCamera_;  /**<Pointer to the associated camera object.*/
+  Eigen::Matrix2d pixelCov_;  /**<Estimated covariance of pixel coordinates.*/
+  Eigen::Vector2d eigenVector1_;  /**<Estimated eigenvector of major uncertainty axis.*/
+  Eigen::Vector2d eigenVector2_;  /**<Estimated eigenvector of minor uncertainty axis.*/
   double sigma1_;  /**<Standard deviation in the direction of the major axis of the uncertainty ellipse belonging to \ref c_.*/
   double sigma2_;  /**<Standard deviation in the direction of the semi-major axis of the uncertainty ellipse belonging to \ref c_.*/
   double sigmaAngle_; /**<Angle between the x-axis and the major axis of the uncertainty ellipse belonging to \ref c_.*/
-  Eigen::EigenSolver<Eigen::Matrix2d> es_; /**<Solver for computing the geometry of the pixel uncertainty.*/
+  mutable Eigen::EigenSolver<Eigen::Matrix2d> es_; /**<Solver for computing the geometry of the pixel uncertainty.*/
   int camID_; /**<Camera ID.*/
 
   /** \brief Constructor
@@ -85,20 +93,17 @@ class FeatureCoordinates{
     resetCoordinates();
   }
 
-  /** \brief Resets the feature coordinates \ref c_, \ref nor_, \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_.
+  /** \brief Resets the feature coordinates \ref c_, \ref nor_.
    *
-   *  Note, that the values of the feature coordinates \ref c_ and \ref nor_ are not deleted. They are just set invalid.
+   *  Note: that the values of the feature coordinates \ref c_ and \ref nor_ are not deleted. They are just set invalid.
    */
   void resetCoordinates(){
     valid_c_ = false;
     valid_nor_ = false;
-    sigma1_ = 0.0;
-    sigma2_ = 0.0;
-    sigmaAngle_ = 0.0;
     camID_ = -1;
   }
 
-  /** \brief Compute the feature's pixel coordinates \ref c_.
+  /** \brief Compute the feature's pixel coordinates \ref c_. Typically used in conjunction with \ref get_c.
    *
    *   If there are no valid feature pixel coordinates \ref c_ available, the feature pixel coordinates are computed
    *   from the bearing vector \ref nor_ (if valid).
@@ -114,7 +119,7 @@ class FeatureCoordinates{
     return valid_c_;
   }
 
-  /** \brief Get the feature's pixel coordinates \ref c_.
+  /** \brief Get the feature's pixel coordinates \ref c_. Typically used in conjunction with \ref com_c.
    *
    *  @return the valid feature pixel coordinates \ref c_.
    */
@@ -125,7 +130,7 @@ class FeatureCoordinates{
     return c_;
   }
 
-  /** \brief Compute the feature's bearing vector \ref nor_.
+  /** \brief Compute the feature's bearing vector \ref nor_. Typically used in conjunction with \ref get_nor.
    *
    *  If there is no valid bearing vector \ref nor_ available, the bearing vector is computed from the
    *  feature pixel coordinates \ref c_ (if valid).
@@ -141,7 +146,7 @@ class FeatureCoordinates{
     return valid_nor_;
   }
 
-  /** \brief Get the feature's bearing vector \ref nor_.
+  /** \brief Get the feature's bearing vector \ref nor_. Typically used in conjunction with \ref com_nor.
    *
    *  @return the valid bearing vector \ref nor_.
    */
@@ -152,9 +157,9 @@ class FeatureCoordinates{
     return nor_;
   }
 
-  /** \brief Get the feature's pixel coordinates Jacobian
+  /** \brief Get the feature's pixel coordinates Jacobian.
    *
-   *  Note: Validity can be checked with com_bearingCorners()
+   *  Note: Validity can be checked with \ref com_c
    *  @return The Jacobian of the pixel output w.r.t. the bearing vector
    */
   Eigen::Matrix<double,2,2> get_J() const{
@@ -199,21 +204,27 @@ class FeatureCoordinates{
     return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
   }
 
-  /** \brief Sets the feature coordinates standard deviation values \ref sigma1_, \ref sigma2_ and \ref sigmaAngle_
+  /** \brief Sets the feature coordinates standard deviation values \ref pixelCov_, \ref sigma1_, \ref sigma2_, \ref eigenVector1_, \ref eigenVector2_, \ref sigmaAngle_
    *         from a 2x2 covariance matrix.
    *
    *  @param cov - Covariance matrix (2x2).
    */
-  void setSigmaFromCov(const Eigen::Matrix2d& cov){
+  void setPixelCov(const Eigen::Matrix2d& cov){
+    pixelCov_ = cov;
     es_.compute(cov);
     sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real());
     sigma1_ = sqrt(es_.eigenvalues()(0).real());
     sigma2_ = sqrt(es_.eigenvalues()(1).real());
-    if(sigma1_<sigma2_){
+    if(sigma1_<sigma2_){ // Get larger axis on index 1
       const double temp = sigma1_;
       sigma1_ = sigma2_;
       sigma2_ = temp;
       sigmaAngle_ += 0.5*M_PI;
+      eigenVector1_ = es_.eigenvectors().col(1).real();
+      eigenVector2_ = es_.eigenvectors().col(0).real();
+    } else {
+      eigenVector1_ = es_.eigenvectors().col(0).real();
+      eigenVector2_ = es_.eigenvectors().col(1).real();
     }
   }
 
@@ -268,7 +279,7 @@ class FeatureCoordinates{
    *  @param d       - Triangulated depth value along the bearing vector C1fP.
    *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
    *
-   *  @todo compare woth d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
+   *  @todo compare with d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
    */
   bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
     Eigen::Matrix<double,3,2> B;
