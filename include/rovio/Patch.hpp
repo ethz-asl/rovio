@@ -63,7 +63,7 @@ class Patch {
   }
   /** \brief Destructor
    */
-  ~Patch(){}
+  virtual ~Patch(){}
 
   /** \brief Computes the gradient parameters of the patch (patch gradient components dx_ dy_, Hessian H_, Shi-Tomasi Score s_, Eigenvalues of the Hessian e0_ and e1_).
    *         The expanded patch patchWithBorder_ must be set.
@@ -143,7 +143,8 @@ class Patch {
    *                       patchWithBorder_ (withBorder = true).
    */
   void drawPatch(cv::Mat& drawImg,const cv::Point2i& c,int stretch = 1,const bool withBorder = false) const{
-    const int refStep = drawImg.step.p[0];
+    const int refStepY = drawImg.step.p[0];
+    const int refStepX = drawImg.step.p[1];
     uint8_t* img_ptr;
     const float* it_patch;
     if(withBorder){
@@ -152,11 +153,13 @@ class Patch {
       it_patch = patch_;
     }
     for(int y=0; y<patchSize+2*(int)withBorder; ++y, it_patch += patchSize+2*(int)withBorder){
-      img_ptr = (uint8_t*) drawImg.data + (c.y+y*stretch)*refStep + c.x;
+      img_ptr = (uint8_t*) drawImg.data + (c.y+y*stretch)*refStepY + c.x*refStepX;
       for(int x=0; x<patchSize+2*(int)withBorder; ++x)
         for(int i=0;i<stretch;++i){
           for(int j=0;j<stretch;++j){
-            img_ptr[x*stretch+i*refStep+j] = (uint8_t)(it_patch[x]);
+            img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+0] = (uint8_t)(it_patch[x]);
+            img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+1] = (uint8_t)(it_patch[x]);
+            img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+2] = (uint8_t)(it_patch[x]);
           }
         }
     }

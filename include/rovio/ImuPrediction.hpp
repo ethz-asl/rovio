@@ -73,7 +73,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     }
     disablePreAndPostProcessingWarning_ = true;
   };
-  ~ImuPrediction(){};
+
+  /** \brief Destructor
+   */
+  virtual ~ImuPrediction(){};
+
   /* /brief Evaluation of prediction
    *
    * @todo implement without noise for speed

@@ -53,6 +53,11 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
     coordinates_ = other.coordinates_;
     distance_ = other.distance_;
   }
+
+  /** \brief Destructor
+   */
+  virtual ~RobocentricFeatureElement(){};
+
   void boxPlus(const mtDifVec& vecIn, RobocentricFeatureElement& stateOut) const{
     coordinates_.get_nor().boxPlus(vecIn.template block<2,1>(0,0),norTemp_);
     stateOut.coordinates_.set_nor(norTemp_);

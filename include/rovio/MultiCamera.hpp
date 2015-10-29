@@ -52,7 +52,7 @@ class MultiCamera{
       BrBC_[i].setZero();
     }
   };
-  ~MultiCamera(){};
+  virtual ~MultiCamera(){};
 
   /** \brief Sets the extrinsics of the i'th camera
    *

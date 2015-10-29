@@ -85,7 +85,7 @@ class FeatureManager{
 
   /** Destructor
    */
-  ~FeatureManager(){
+  virtual ~FeatureManager(){
     delete _mpCoordinates;
     delete _mpDistance;
     delete _mpWarping;
@@ -97,6 +97,7 @@ class FeatureManager{
     idx_ = other.idx_;
     log_previous_ = other.log_previous_;
     log_prediction_ = other.log_prediction_;
+    log_meas_ = other.log_meas_;
     return *this;
   }
 
@@ -151,7 +152,7 @@ class FeatureSetManager{
 
   /** \brief Destructor
      */
-  ~FeatureSetManager(){}
+  virtual ~FeatureSetManager(){}
 
   /** \brief Allocates all pointer which are still nullptr
    */

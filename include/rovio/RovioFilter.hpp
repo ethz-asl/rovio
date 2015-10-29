@@ -134,7 +134,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
 
   /** \brief Destructor
    */
-  ~RovioFilter(){};
+  virtual ~RovioFilter(){};
 //  void resetToImuPose(V3D WrWM, QPD qMW, double t = 0.0){
 //    init_.state_.initWithImuPose(WrWM,qMW);
 //    reset(t);
@@ -161,17 +161,6 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
     init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM);
   }
-//  void resetToKeyframe(double t = 0.0) {
-//    std::cout << "Reseting to keyframe" << std::endl;
-//    double imuMeasTime = 0.0;
-//    if(predictionTimeline_.getNextTime(t,imuMeasTime)){  // Find close accelerometer measurement
-//      resetWithAccelerometer(predictionTimeline_.measMap_[imuMeasTime].template get<mtPrediction::mtMeas::_acc>(),t); // Initialize with accelerometer
-//    } else {
-//      reset(t);
-//    }
-//    safe_.state_.cloneCurrentToKeyframe(safe_.cov_,t);
-//    front_ = safe_;
-//  }
 };
 
 }

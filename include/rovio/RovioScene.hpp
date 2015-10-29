@@ -61,6 +61,7 @@ class RovioScene{
       mpPatches_[i] = nullptr;
     }
   }
+  virtual ~RovioScene(){};
   void addKeyboardCB(unsigned char Key, std::function<void()> f){
     mScene.addKeyboardCB(Key,f);
   }

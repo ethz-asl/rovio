@@ -77,7 +77,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
 
   /** \brief Destructor
    */
-  ~StateAuxiliary(){};
+  virtual ~StateAuxiliary(){};
 
   V3D MwWMest_;  /**<Estimated rotational rate.*/
   V3D MwWMmeas_;  /**<Measured rotational rate.*/
@@ -152,6 +152,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     this->template getName<_aux>() = "auxiliary";
   }
 
+  /** \brief Destructor
+   */
+  virtual ~State(){};
+
   /** \brief Initializes the feature manager pointer as far as possible
    *
    *  @param featureManager* A pointer to a featureManagerArray
@@ -175,10 +179,6 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
       fsm.features_[i].mpWarping_ = &aux().warping_[i];
     }
   }
-
-  /** \brief Destructor
-   */
-  ~State(){};
 
   //@{
   /** \brief Get/Set the position vector pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates (World->IMU, expressed in World).
@@ -386,7 +386,7 @@ class PredictionMeas: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement
   }
   /** \brief Destructor
    */
-  ~PredictionMeas(){};
+  virtual ~PredictionMeas(){};
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +431,7 @@ LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>{
 
   /** \brief Destructor
    */
-  ~PredictionNoise(){};
+  virtual ~PredictionNoise(){};
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -457,6 +457,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
   mutable MXD featureOutputCov_;
   cv::Mat img_[nCam];     /**<Mainly used for drawing.*/
   cv::Mat patchDrawing_;  /**<Mainly used for drawing.*/
+  int drawPB_;  /**<Size of border around patch.*/
+  int drawPS_;  /**<Size of patch with border for drawing.*/
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
   ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
@@ -483,7 +485,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,Pr
     plotGroundtruth_ = true;
     state_.initFeatureManagers(fsm_);
     fsm_.allocateMissing();
+    drawPB_ = 1;
+    drawPS_ = mtState::patchSize_*pow(2,mtState::nLevels_-1)+2*drawPB_;
   }
+
+  /** \brief Destructor
+   */
+  virtual ~FilterState(){};
 
   /** \brief Sets the multicamera pointer
    *

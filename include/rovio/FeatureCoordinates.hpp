@@ -93,6 +93,10 @@ class FeatureCoordinates{
     resetCoordinates();
   }
 
+  /** \brief Destructor
+   */
+  virtual ~FeatureCoordinates(){};
+
   /** \brief Resets the feature coordinates \ref c_, \ref nor_.
    *
    *  Note: that the values of the feature coordinates \ref c_ and \ref nor_ are not deleted. They are just set invalid.

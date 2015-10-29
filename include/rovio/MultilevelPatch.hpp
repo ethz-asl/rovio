@@ -61,7 +61,7 @@ class MultilevelPatch{
 
   /** Destructor
    */
-  ~MultilevelPatch(){}
+  virtual ~MultilevelPatch(){}
 
   /** \brief Resets the MultilevelPatch.
    *

@@ -2,7 +2,7 @@ Common
 {
 	doVECalibration true
 	depthType 1
-	verbose false
+	verbose true
 }
 Camera0
 {
@@ -82,7 +82,7 @@ Update0
 {
     doPatchWarping true
     doFrameVisualisation true
-    visualizePatches false
+    visualizePatches true
     useDirectMethod true
     startLevel 3
     endLevel 1
@@ -112,12 +112,13 @@ Update0
     alignConvergencePixelRange 1 ; assumed convergence range in pixel (gets scaled with the level)
     alignCoverageRatio 2         ; how many sigma of the uncertainty should be covered
     alignMaxUniSample 5          ; maximal number of alignment on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
-    matchingPixelThreshold 4.0
-    specialLinearizationThreshold 0.0025 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
+    matchingPixelThreshold 0.0
+    specialLinearizationThreshold 0.00 ; (set to 0 for always, and to large value for never, 1 pixel ~ 0.0025)
     patchRejectionTh 10;
     bearingVectorMahalTh 9.21;
     removeNegativeFeatureAfterUpdate true;
     maxUncertaintyToDepthRatioForDepthInitialization 0.3 ; if set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in the frame
+    useCrossCameraMeasurements false;
     MotionDetection
     {
     	isEnabled 1
@@ -154,12 +155,12 @@ Prediction
         gyb_0 3.8e-7
         gyb_1 3.8e-7
         gyb_2 3.8e-7
-        vep_0 1e-8
-        vep_1 1e-8
-        vep_2 1e-8
-        vep_3 1e-8
-        vep_4 1e-8
-        vep_5 1e-8
+        vep_0 1e-6
+        vep_1 1e-6
+        vep_2 1e-6
+        vep_3 1e-6
+        vep_4 1e-6
+        vep_5 1e-6
         att_0 7.6e-6 ;7.6e-7
         att_1 7.6e-6
         att_2 7.6e-6

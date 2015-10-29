@@ -43,7 +43,7 @@ class FeatureOutput: public LWF::State<RobocentricFeatureElement>{
     static_assert(_fea+1==E_,"Error with indices");
     this->template getName<_fea>() = "fea";
   }
-  ~FeatureOutput(){};
+  virtual ~FeatureOutput(){};
 
   //@{
   /** \brief Get/Set the distance parameter
@@ -82,7 +82,7 @@ class FeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutput>{
   FeatureOutputCT(){
     ID_ = -1;
   };
-  ~FeatureOutputCT(){};
+  virtual ~FeatureOutputCT(){};
   void setFeatureID(int ID){
     ID_ = ID;
   }
@@ -110,7 +110,7 @@ class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutp
     ID_ = -1;
     ignoreDistanceOutput_ = false;
   };
-  ~TransformFeatureOutputCT(){};
+  virtual ~TransformFeatureOutputCT(){};
   void setFeatureID(int ID){
     ID_ = ID;
   }

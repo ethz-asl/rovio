@@ -64,7 +64,7 @@ class Camera{
     K_.setIdentity();
     type_ = RADTAN;
   };
-  ~Camera(){};
+  virtual ~Camera(){};
 
   /** \brief Loads and sets the intrinsic parameter matrix K_ from yaml-file.
    *

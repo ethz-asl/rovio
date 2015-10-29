@@ -50,7 +50,7 @@ class ZeroVelocityInnovation: public LWF::State<LWF::VectorElement<3>>{
     static_assert(_vel+1==E_,"Error with indices");
     this->template getName<_vel>() = "vel";
   };
-  ~ZeroVelocityInnovation(){};
+  virtual ~ZeroVelocityInnovation(){};
 };
 
 /** \brief Class, dummy auxillary class for Zero velocity update
@@ -59,7 +59,7 @@ class ZeroVelocityUpdateMeasAuxiliary: public LWF::AuxiliaryBase<ZeroVelocityUpd
  public:
   ZeroVelocityUpdateMeasAuxiliary(){
   };
-  ~ZeroVelocityUpdateMeasAuxiliary(){};
+  virtual ~ZeroVelocityUpdateMeasAuxiliary(){};
 };
 
 /**  \brief Empty measurement
@@ -74,7 +74,7 @@ class ZeroVelocityUpdateMeas: public LWF::State<ZeroVelocityUpdateMeasAuxiliary>
     static_assert(_aux+1==E_,"Error with indices");
     this->template getName<_aux>() = "aux";
   };
-  ~ZeroVelocityUpdateMeas(){};
+  virtual ~ZeroVelocityUpdateMeas(){};
 };
 
 /**  \brief Class holding the update noise.
@@ -89,13 +89,15 @@ class ZeroVelocityUpdateNoise: public LWF::State<LWF::VectorElement<3>>{
     static_assert(_vel+1==E_,"Error with indices");
     this->template getName<_vel>() = "vel";
   };
-  ~ZeroVelocityUpdateNoise(){};
+  virtual ~ZeroVelocityUpdateNoise(){};
 };
 
 /** \brief Outlier Detection.
  */
 template<typename STATE>
 class ZeroVelocityOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<ZeroVelocityInnovation<STATE>::template getId<ZeroVelocityInnovation<STATE>::_vel>(),3>>{
+ public:
+  virtual ~ZeroVelocityOutlierDetection(){};
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -131,7 +133,7 @@ ZeroVelocityUpdateNoise<typename FILTERSTATE::mtState>,ZeroVelocityOutlierDetect
 
   /** \brief Destructor
    */
-  ~ZeroVelocityUpdate(){};
+  virtual ~ZeroVelocityUpdate(){};
 
   /** \brief Compute the inovvation term
    *

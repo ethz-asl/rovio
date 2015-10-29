@@ -79,7 +79,7 @@ class FeatureStatistics{
     localVisibilityRange_ = 100;
     minFrameGlobalQuality_ = 100;
   };
-  ~FeatureStatistics(){};
+  virtual ~FeatureStatistics(){};
 
   /** \brief Resets the statistics
    */
@@ -234,6 +234,20 @@ class FeatureStatistics{
     return trackingRatio*std::min(static_cast<double>(countTot())/minFrameGlobalQuality_,1.0);
   }
 
+  /** \brief Gets the local quality in a specific camera
+   *
+   * @return quality value in the range [0, 1] (tracking ratio of feature for frame where the feature is predicted to be in).
+   *         1 means that the feature was always tracked
+   */
+  double getLocalQuality(const int camID) const{
+    if(status_[camID] == TRACKED){
+      return localQuality_[camID]*(1-1.0/localQualityRange_) + 1.0/localQualityRange_;
+    } else if(status_[camID] == FAILED_ALIGNEMENT || status_[camID] == FAILED_TRACKING){
+      return localQuality_[camID]*(1-1.0/localQualityRange_);
+    }
+    return localQuality_[camID];
+  }
+
   /** \brief Compute the average of the local qualities for the tracking in each camera
    *
    * @return quality value in the range [0, 1] (tracking ratio of feature for frame where the feature is predicted to be in).
@@ -242,11 +256,35 @@ class FeatureStatistics{
   double getAverageLocalQuality() const{
     double q = 0;;
     for(int i=0;i<nCam;i++){
-      q += localQuality_[i];
+      q += getLocalQuality(i);
     }
     return q/nCam;
   }
 
+  /** \brief Returns the maximum local quality
+   *
+   * @return Maximum local quality
+   */
+  double getMaxLocalQuality() const{
+    double q = 0;;
+    for(int i=0;i<nCam;i++){
+      if(q < getLocalQuality(i)) q = getLocalQuality(i);
+    }
+    return q;
+  }
+
+  /** \brief Get the local visibility (how often was the feature seen within the last few steps in any camera)
+   *
+   * @return Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.
+   */
+  double getLocalVisibility() const{
+    if(inSomeFrame()){
+      return localVisibility_*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
+    } else {
+      return localVisibility_*(1-1.0/localVisibilityRange_);
+    }
+    return localVisibility_;
+  }
 
   /** \brief Is the current feature a good feature. Combines different quality criteria for deciding if it is a good feature.
    * The product of local quality and visibility quality is compared with a threshold. This threshold depends on the global
@@ -260,7 +298,7 @@ class FeatureStatistics{
    * @todo consider information quality (neibours, shape)
    */
   bool isGoodFeature(const double upper = 0.8, const double lower = 0.1) const{
-    return getAverageLocalQuality()*localVisibility_ > upper-(upper-lower)*getGlobalQuality();
+    return getMaxLocalQuality()*getLocalVisibility() > upper-(upper-lower)*getGlobalQuality();
 
   }
 };

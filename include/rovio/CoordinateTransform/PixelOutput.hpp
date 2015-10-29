@@ -40,7 +40,7 @@ class PixelOutput: public LWF::State<LWF::VectorElement<2>>{
   static constexpr unsigned int _pix = 0;
   PixelOutput(){
   }
-  ~PixelOutput(){};
+  virtual ~PixelOutput(){};
   cv::Point2f getPoint2f() const{
     return cv::Point2f(static_cast<float>(this->get<_pix>()(0)),static_cast<float>(this->get<_pix>()(1)));
   }
@@ -53,7 +53,7 @@ class PixelOutputCT:public LWF::CoordinateTransform<FeatureOutput,PixelOutput>{
   typedef typename Base::mtOutput mtOutput;
   PixelOutputCT(){
   };
-  ~PixelOutputCT(){};
+  virtual ~PixelOutputCT(){};
   void evalTransform(mtOutput& output, const mtInput& input) const{
     cv::Point2f c = input.c().get_c();
     output.template get<mtOutput::_pix>() = Eigen::Vector2d(c.x,c.y);

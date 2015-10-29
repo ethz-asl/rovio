@@ -53,6 +53,10 @@ class MultilevelPatchAlignment {
   mutable double bestIntensityError_; /**<Intensity error for the match.*/
   mutable MultilevelPatch<nLevels,patch_size> mlpTemp_; /**<Temporary multilevel patch used for various computations.*/
 
+  /** \brief Destructor
+   */
+  virtual ~MultilevelPatchAlignment(){};
+
   /** \brief Get the raw linear align equations (A*x=b), given by the [(#pixel)x2] Matrix  A (float) and the [(#pixel)x1] vector b (float).
    *
    *  \see MultilevelPatchFeature::A_ and MultilevelPatchFeature::b_.

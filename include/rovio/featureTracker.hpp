@@ -84,7 +84,7 @@ class FeatureTrackerNode{
 
   /** \brief Destructor.
    */
-  ~FeatureTrackerNode(){
+  virtual ~FeatureTrackerNode(){
     cv::destroyWindow("Tracker");
   }
 

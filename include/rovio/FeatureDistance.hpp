@@ -55,6 +55,10 @@ class FeatureDistance{
     p_ = 1.0;
   }
 
+  /** \brief Destructor
+   */
+  virtual ~FeatureDistance(){};
+
   /** \brief Set the \ref Type type_ using the enum \ref Type.
    *
    *  @param type - Enum \ref Type.

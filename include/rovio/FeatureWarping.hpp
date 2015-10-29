@@ -136,6 +136,10 @@ class FeatureWarping{
     reset();
   }
 
+  /** \brief Destructor
+   */
+  virtual ~FeatureWarping(){};
+
   /** \brief Resets the FeatureWarping.
    *
    */

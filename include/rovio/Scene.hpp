@@ -157,6 +157,7 @@ class SceneObject{
     useTexture_ = false;
     draw_ = true;
   }
+  virtual ~SceneObject(){};
   void setTexture(const int& cols, const int& rows, const float* ptr){
     glBindTexture(GL_TEXTURE_2D, textureID_);
     glTexImage2D(GL_TEXTURE_2D,0,GL_LUMINANCE,cols,rows,0,GL_LUMINANCE,GL_FLOAT,ptr);
@@ -468,7 +469,7 @@ class Scene{
     addSpecialKeyboardCB(104,[&]() mutable {W_r_WC_ += (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);}); // PAGE_UP
     addSpecialKeyboardCB(105,[&]() mutable {W_r_WC_ -= (q_CW_.inverseRotate(Eigen::Vector3f(0.0,1.0,0.0)) * stepScale_);}); // PAGE_DOWN
   };
-  ~Scene(){
+  virtual ~Scene(){
     for(int i=0;i<mSceneObjects_.size();i++){
       delete mSceneObjects_[i];
     }

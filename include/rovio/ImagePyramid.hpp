@@ -67,7 +67,7 @@ template<int n_levels>
 class ImagePyramid{
  public:
   ImagePyramid(){};
-  ~ImagePyramid(){};
+  virtual ~ImagePyramid(){};
   cv::Mat imgs_[n_levels]; /**<Array, containing the pyramid images.*/
   cv::Point2f centers_[n_levels]; /**<Array, containing the image center coordinates (in pixel), defined in an
                                       image centered coordinate system of the image at level 0.*/
