@@ -1,27 +1,29 @@
+; You can partially override parameter set in this file by creating your own subset of parameter in a separate info-file and include it with:
+; #include "/home/michael/workspace/rovio/cfg/rovio_custom.info"
 Common
 {
-	doVECalibration true;	Should the camera-IMU extrinsics be calibrated online
-	depthType 1;			Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
-	verbose true;			Is the verbose active
+	doVECalibration true;		Should the camera-IMU extrinsics be calibrated online
+	depthType 1;				Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
+	verbose false;				Is the verbose active
 }
 Camera0
 {
-	CalibrationFile /home/michael/calibrations/p22035_equidist.yaml;		Camera-Calibration file for intrinsics (Sammy11_02_2015_equidist.yaml, p21012_equidist_190215.yaml, p22035_equidist.yaml)
+	CalibrationFile /home/user/calibrations/cam0.yaml;						Camera-Calibration file for intrinsics
 	qCM_x  0.0;																X-entry of IMU to Camera quaterion (JPL)
 	qCM_y  0.0;																Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.7071;															Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  0.7071;															W-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.0;																Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w  1.0;																W-entry of IMU to Camera quaterion (JPL)
 	MrMC_x 0;																X-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_y 0;																Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_z 0;																Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Camera1
 {
-	CalibrationFile /home/michael/calibrations/p22035_equidist_cam1.yaml;	Camera-Calibration file for intrinsics
+	CalibrationFile /home/user/calibrations/cam1.yaml;						Camera-Calibration file for intrinsics
 	qCM_x  0.0;																X-entry of IMU to Camera quaterion (JPL)
 	qCM_y  0.0;																Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.7071;															Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  0.7071;															W-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.0;																Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w  1.0;																W-entry of IMU to Camera quaterion (JPL)
 	MrMC_x 0;																X-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_y 0;																Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_z 0;																Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
@@ -72,7 +74,7 @@ Update0
 {
     doPatchWarping true;										Should the patches be warped
     doFrameVisualisation true;									Should the frames be visualized
-    visualizePatches true;										Should the patches be visualized
+    visualizePatches false;										Should the patches be visualized
     useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
     startLevel 3;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
     endLevel 1;													Lowest patch level which is being employed
