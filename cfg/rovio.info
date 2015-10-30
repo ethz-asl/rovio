@@ -99,6 +99,7 @@ Update0
     trackingUpperBound 0.9;										Threshold for local quality for min overall global quality
     trackingLowerBound 0.1;										Threshold for local quality for max overall global quality
     minTrackedAndFreeFeatures 0.5;								Minimum of amount of feature which are either tracked or free
+    removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
     minAbsoluteSTScore 5.0;										Minimum absolute ST-score for extracting new feature patch
     fastDetectionThreshold 10;									ST-score treshold while adding new feature
