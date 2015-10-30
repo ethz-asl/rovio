@@ -71,6 +71,20 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       doubleRegister_.removeScalarByVar(prenoiP_(ind,ind));
       doubleRegister_.registerScalar("PredictionNoise.dep",prenoiP_(ind,ind));
     }
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+0,mtNoise::template getId<mtNoise::_vep>(camID)+0));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+1,mtNoise::template getId<mtNoise::_vep>(camID)+1));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+2,mtNoise::template getId<mtNoise::_vep>(camID)+2));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+0,mtNoise::template getId<mtNoise::_vea>(camID)+0));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+1,mtNoise::template getId<mtNoise::_vea>(camID)+1));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+2,mtNoise::template getId<mtNoise::_vea>(camID)+2));
+      doubleRegister_.registerScalar("PredictionNoise.vep",prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+0,mtNoise::template getId<mtNoise::_vep>(camID)+0));
+      doubleRegister_.registerScalar("PredictionNoise.vep",prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+1,mtNoise::template getId<mtNoise::_vep>(camID)+1));
+      doubleRegister_.registerScalar("PredictionNoise.vep",prenoiP_(mtNoise::template getId<mtNoise::_vep>(camID)+2,mtNoise::template getId<mtNoise::_vep>(camID)+2));
+      doubleRegister_.registerScalar("PredictionNoise.vea",prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+0,mtNoise::template getId<mtNoise::_vea>(camID)+0));
+      doubleRegister_.registerScalar("PredictionNoise.vea",prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+1,mtNoise::template getId<mtNoise::_vea>(camID)+1));
+      doubleRegister_.registerScalar("PredictionNoise.vea",prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+2,mtNoise::template getId<mtNoise::_vea>(camID)+2));
+    }
     disablePreAndPostProcessingWarning_ = true;
   };
 

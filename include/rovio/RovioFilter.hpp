@@ -73,7 +73,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     init_.setCamera(&multiCamera_);
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",depthTypeInt_);
-    for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
+    for(int camID=0;camID<mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.aux().MrMC_[camID]);
@@ -85,6 +85,18 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().z());
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+0,mtState::template getId<mtState::_vep>(camID)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+1,mtState::template getId<mtState::_vep>(camID)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+2,mtState::template getId<mtState::_vep>(camID)+2));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+0,mtState::template getId<mtState::_vea>(camID)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+1,mtState::template getId<mtState::_vea>(camID)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+2,mtState::template getId<mtState::_vea>(camID)+2));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+0,mtState::template getId<mtState::_vep>(camID)+0));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+1,mtState::template getId<mtState::_vep>(camID)+1));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+2,mtState::template getId<mtState::_vep>(camID)+2));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+0,mtState::template getId<mtState::_vea>(camID)+0));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+1,mtState::template getId<mtState::_vea>(camID)+1));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+2,mtState::template getId<mtState::_vea>(camID)+2));
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.MrMC(camID));
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.qCM(camID));
     }
@@ -100,6 +112,9 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().z());
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalQualityRange",init_.fsm_.features_[i].mpStatistics_->localQualityRange_);
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalVisibilityRange",init_.fsm_.features_[i].mpStatistics_->localVisibilityRange_);
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statMinGlobalQualityRange",init_.fsm_.features_[i].mpStatistics_->minGlobalQualityRange_);
     }
     std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));

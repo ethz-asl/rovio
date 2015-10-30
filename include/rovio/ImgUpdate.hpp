@@ -192,7 +192,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double scoreDetectionExponent_;
   double penaltyDistance_;
   double zeroDistancePenalty_;
-  double trackingLocalRange_,trackingLocalVisibilityRange_;
   double trackingUpperBound_,trackingLowerBound_;
   double minTrackedAndFreeFeatures_;
   double minRelativeSTScore_;
@@ -258,8 +257,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doFrameVisualisation_ = true;
     visualizePatches_ = false;
     verbose_ = false;
-    trackingLocalRange_ = 20;
-    trackingLocalVisibilityRange_ = 200;
     trackingUpperBound_ = 0.9;
     trackingLowerBound_ = 0.1;
     minTrackedAndFreeFeatures_ = 0.5;
@@ -288,8 +285,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("scoreDetectionExponent",scoreDetectionExponent_);
     doubleRegister_.registerScalar("penaltyDistance",penaltyDistance_);
     doubleRegister_.registerScalar("zeroDistancePenalty",zeroDistancePenalty_);
-    doubleRegister_.registerScalar("trackingLocalRange",trackingLocalRange_);
-    doubleRegister_.registerScalar("trackingLocalVisibilityRange",trackingLocalVisibilityRange_);
     doubleRegister_.registerScalar("trackingUpperBound",trackingUpperBound_);
     doubleRegister_.registerScalar("trackingLowerBound",trackingLowerBound_);
     doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);

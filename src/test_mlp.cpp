@@ -49,8 +49,8 @@ class MLPTesting : public virtual ::testing::Test {
     bearingCorners_ = warp_.get_bearingCorners(&c_);
 
     stat_.localQualityRange_ = 3;
-    stat_.localQualityRange_ = 4;
-    stat_.minFrameGlobalQuality_ = 5;
+    stat_.localVisibilityRange_ = 4;
+    stat_.minGlobalQualityRange_ = 5;
 
     img1_ = cv::Mat::zeros(imgSize_,imgSize_,CV_8UC1);
     uint8_t* img_ptr = (uint8_t*) img1_.data;

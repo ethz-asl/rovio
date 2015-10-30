@@ -98,6 +98,7 @@ class FeatureManager{
     log_previous_ = other.log_previous_;
     log_prediction_ = other.log_prediction_;
     log_meas_ = other.log_meas_;
+    *mpStatistics_ = *other.mpStatistics_;
     return *this;
   }
 

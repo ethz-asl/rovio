@@ -55,7 +55,7 @@ class FeatureStatistics{
    *         1 means very good tracking quality. How is the tracking within the local range, FAILED_ALIGNEMENT or FAILED_TRACKING is worse than not in image.*/
   int localVisibilityRange_; /**Range for local visibility evaluation.*/
   double localVisibility_; /**Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.*/
-  int minFrameGlobalQuality_ = 100; /**Minimum of frames for maximal quality.*/
+  int minGlobalQualityRange_; /**Minimum of frames for maximal quality.*/
 
   /** \brief Get the local visibility quality of the MultilevelPatchFeature.
    *
@@ -77,7 +77,7 @@ class FeatureStatistics{
     resetStatistics(currentTime);
     localQualityRange_ = 10;
     localVisibilityRange_ = 100;
-    minFrameGlobalQuality_ = 100;
+    minGlobalQualityRange_ = 100;
   };
   virtual ~FeatureStatistics(){};
 
@@ -222,16 +222,16 @@ class FeatureStatistics{
   }
 
   /** \brief How was the overall tracking of the feature. What is the tracking ratio of the feature, whereby the maximal value
-   * is only obtained if a minimum of "minFrameGlobalQuality_" frames has passed since initialization (punishes feature with low feature
+   * is only obtained if a minimum of "minGlobalQualityRange_" frames has passed since initialization (punishes feature with low feature
    * count)
    *
    * @return quality value in the range [0, 1] (tracking ratio of feature).
    *         1 means that the feature was always tracked
-   *         gets further penalized if a feature has not a minimum of "minFrameGlobalQuality_" frames
+   *         gets further penalized if a feature has not a minimum of "minGlobalQualityRange_" frames
    */
   double getGlobalQuality() const{
     const double trackingRatio = static_cast<double>(countTracked())/countTot();
-    return trackingRatio*std::min(static_cast<double>(countTot())/minFrameGlobalQuality_,1.0);
+    return trackingRatio*std::min(static_cast<double>(countTot())/minGlobalQualityRange_,1.0);
   }
 
   /** \brief Gets the local quality in a specific camera
