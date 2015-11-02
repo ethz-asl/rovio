@@ -33,7 +33,6 @@
 #include "rovio/ImagePyramid.hpp"
 #include "rovio/MultilevelPatch.hpp"
 #include "rovio/FeatureCoordinates.hpp"
-#include "rovio/FeatureWarping.hpp"
 
 namespace rovio{
 
@@ -65,7 +64,6 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param c           - Coordinates of the patch in the reference image.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l1          - Start pyramid level (l1<l2)
    * @param l2          - End pyramid level (l1<l2)
    * @param A           - Jacobian of the pixel intensities w.r.t. to pixel coordinates
@@ -73,21 +71,15 @@ class MultilevelPatchAlignment {
    * @return true, if successful.
    * @todo catch if warping too distorted
    */
-  bool getLinearAlignEquations(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const FeatureWarping* mpWarp, const int l1, const int l2,
+  bool getLinearAlignEquations(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const int l1, const int l2,
                                Eigen::MatrixXf& A, Eigen::MatrixXf& b){
     A.resize(0,0);
     b.resize(0,0);
-    Eigen::Matrix2f W;
     Eigen::Matrix2f affInv;
-    if(!c.com_c() || (mpWarp != nullptr && !mpWarp->com_affineTransform(&c))){
+    if(!c.com_c() || !c.com_warp_c()){
       return false;
     }
-    if(mpWarp != nullptr){
-      W = mpWarp->get_affineTransform(&c);
-    } else {
-      W.setIdentity();
-    }
-    affInv = W.inverse();
+    affInv = c.get_warp_c().inverse();
     int numLevel = 0;
     FeatureCoordinates c_level;
     const int halfpatch_size = patch_size/2;
@@ -97,7 +89,7 @@ class MultilevelPatchAlignment {
     Patch<patch_size> extractedPatch;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
+      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level.get_c(),c.get_warp_c(),false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -107,7 +99,7 @@ class MultilevelPatchAlignment {
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level.get_c(),W,false);
+          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level.get_c(),c.get_warp_c(),false);
           const float* it_patch_extracted = extractedPatch.patch_;
           for(int y=0; y<patch_size; ++y){
             for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
@@ -116,7 +108,7 @@ class MultilevelPatchAlignment {
               const float Jy = -pow(0.5,l)*(*it_dy);
               mean_diff += res;
               b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = res;
-              if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
+              if(c.isNearIdentityWarping()){
                 mean_diff_dx += Jx;
                 mean_diff_dy += Jy;
                 A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
@@ -157,16 +149,15 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param c           - Coordinates of the patch in the reference image.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l1          - Start pyramid level (l1<l2)
    * @param l2          - End pyramid level (l1<l2)
    * @param A_red       - Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates
    * @param b_red       - Reduced intensity errors
    * @return true, if successful.
    */
-  bool getLinearAlignEquationsReduced(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const FeatureWarping* mpWarp, const int l1, const int l2,
+  bool getLinearAlignEquationsReduced(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const int l1, const int l2,
                                       Eigen::Matrix2f& A_red, Eigen::Vector2f& b_red){
-    bool success = getLinearAlignEquations(pyr,mp,c,mpWarp,l1,l2,A_,b_);
+    bool success = getLinearAlignEquations(pyr,mp,c,l1,l2,A_,b_);
     if(success){
       mColPivHouseholderQR_.compute(A_);
       b_red = (mColPivHouseholderQR_.householderQ().inverse()*b_).template block<2,1>(0,0); // TODO: reduce
@@ -188,18 +179,17 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param c           - Coordinates of the patch in the reference image.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l1          - Start pyramid level (l1<l2)
    * @param l2          - End pyramid level (l1<l2)
    * @param A_red       - Reduced Jacobian of the pixel intensities w.r.t. to pixel coordinates
    * @param b_red       - Reduced intensity errors
    * @return true, if successful.
    */
-  bool getLinearAlignEquationsReduced(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const FeatureWarping* mpWarp, const int l1, const int l2,
+  bool getLinearAlignEquationsReduced(const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& c, const int l1, const int l2,
                                       Eigen::Matrix2d& A_red, Eigen::Vector2d& b_red){
     Eigen::Matrix2f A_red_;
     Eigen::Vector2f b_red_;
-    bool success = getLinearAlignEquationsReduced(pyr,mp,c,mpWarp,l1,l2,A_red_,b_red_);
+    bool success = getLinearAlignEquationsReduced(pyr,mp,c,l1,l2,A_red_,b_red_);
     if(success){
       A_red = A_red_.cast<double>();
       b_red = b_red_.cast<double>();
@@ -213,7 +203,6 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param cInit       - Coordinates of the patch in the reference image, initial guess.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l1          - Start pyramid level (l1<l2)
    * @param l2          - End pyramid level (l1<l2)
    * @param maxIter     - Maximal number of iterations
@@ -221,24 +210,18 @@ class MultilevelPatchAlignment {
    * @return true, if alignment converged!
    * @todo catch if warping too distorted
    */
-  bool align2D_old(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp, const int l1, const int l2,
+  bool align2D_old(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const int l1, const int l2,
                    const int maxIter = 10, const double minPixUpd = 0.03){
-    Eigen::Matrix2f W;
     Eigen::Matrix2f WInv;
-    if(!cInit.com_c() || (mpWarp != nullptr && !mpWarp->com_affineTransform(&cInit))){
+    if(!cInit.com_c() || !cInit.com_warp_c()){
       return false;
     }
-    if(mpWarp != nullptr){
-      W = mpWarp->get_affineTransform(&cInit);
-    } else {
-      W.setIdentity();
-    }
-    WInv = W.inverse();
+    WInv = cInit.get_warp_c().inverse();
     int numLevel = 0;
     FeatureCoordinates c_level;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -249,16 +232,14 @@ class MultilevelPatchAlignment {
       return false;
     }
     Eigen::Matrix3f aff = Eigen::Matrix3f::Identity();
-    if(mpWarp != nullptr){
-      aff.block<2,2>(0,0) = W;
-    }
+    aff.block<2,2>(0,0) = cInit.get_warp_c();
     Eigen::Matrix3f affInv = aff.inverse();
     const int halfpatch_size = patch_size/2;
     bool converged=false;
     Eigen::Matrix3f H; H.setZero();
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
         mp.patches_[l].computeGradientParameters();
         H(0,0) += pow(0.25,l)*mp.patches_[l].H_(0,0);
         H(0,1) += pow(0.25,l)*mp.patches_[l].H_(0,1);
@@ -287,13 +268,13 @@ class MultilevelPatchAlignment {
       int count = 0;
       for(int l = l1; l <= l2; l++){
         pyr.levelTranformCoordinates(cOut,c_level,0,l);
-        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),W,false)){
+        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
           const int refStep = pyr.imgs_[l].step.p[0];
 
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
+          if(cInit.isNearIdentityWarping()){
             const int u_r = floor(c_level.get_c().x);
             const int v_r = floor(c_level.get_c().y);
             if(u_r < halfpatch_size || v_r < halfpatch_size || u_r >= pyr.imgs_[l].cols-halfpatch_size || v_r >= pyr.imgs_[l].rows-halfpatch_size){ // TODO: check limits
@@ -323,8 +304,8 @@ class MultilevelPatchAlignment {
               for(int x=0; x<patch_size; ++x, ++it_patch, ++it_dx, ++it_dy){
                 const float dx = x - halfpatch_size + 0.5;
                 const float dy = y - halfpatch_size + 0.5;
-                const float wdx = W(0,0)*dx + W(0,1)*dy;
-                const float wdy = W(1,0)*dx + W(1,1)*dy;
+                const float wdx = cInit.get_warp_c()(0,0)*dx + cInit.get_warp_c()(0,1)*dy;
+                const float wdy = cInit.get_warp_c()(1,0)*dx + cInit.get_warp_c()(1,1)*dy;
                 const float u_pixel = c_level.get_c().x + wdx - 0.5;
                 const float v_pixel = c_level.get_c().y + wdy - 0.5;
                 const int u_pixel_r = floor(u_pixel);
@@ -353,7 +334,7 @@ class MultilevelPatchAlignment {
       if(count==0){
         return false;
       }
-      if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
+      if(cInit.isNearIdentityWarping()){
         update = Hinv * Jres;
       } else {
         update = aff * Hinv * Jres;
@@ -375,14 +356,13 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param cInit       - Coordinates of the patch in the reference image, initial guess.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l1          - Start pyramid level (l1<l2)
    * @param l2          - End pyramid level (l1<l2)
    * @param maxIter     - Maximal number of iterations
    * @param minPixUpd   - Termination condition on absolute pixel update
    * @return true, if alignment converged!
    */
-  bool align2D(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp,
+  bool align2D(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit,
                const int l1, const int l2, const int maxIter = 10, const double minPixUpd = 0.03){
     // termination condition
     const float min_update_squared = minPixUpd*minPixUpd;
@@ -395,7 +375,7 @@ class MultilevelPatchAlignment {
         assert(false);
         return false;
       }
-      if(!getLinearAlignEquations(pyr,mp,cOut,mpWarp,l1,l2,A_,b_)){
+      if(!getLinearAlignEquations(pyr,mp,cOut,l1,l2,A_,b_)){
         return false;
       }
       svd_.compute(A_, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -419,12 +399,11 @@ class MultilevelPatchAlignment {
    * @param pyr         - Considered image pyramid.
    * @param mp          - \ref MultilevelPatch, which contains the patches.
    * @param cInit       - Coordinates of the patch in the reference image, initial guess.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param l           - Pyramid level which is used for the alignement
    * @return true, if alignment converged!
    */
-  bool align2DSingleLevel(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp, const int l){
-    return align2D(cOut,pyr,mp,cInit,mpWarp,l,l);
+  bool align2DSingleLevel(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const int l){
+    return align2D(cOut,pyr,mp,cInit,l,l);
   }
 
   /** \brief Aligns a MultilevelPatchFeature to a given image pyramid, coarse to fine
@@ -433,17 +412,16 @@ class MultilevelPatchAlignment {
    * @param pyr           - Considered image pyramid.
    * @param mp            - \ref MultilevelPatch, which contains the patches.
    * @param cInit         - Coordinates of the patch in the reference image, initial guess.
-   * @param mpWarp        - Affine warping matrix. If nullptr not warping is considered.
    * @param lowest_level  - Lowest pyramid level to be considered
    * @param highest_level - Highest pyramid level to be considered (should be smaller than lowest_level)
    * @param start_level   - Start pyramid level for the coarse to fine alignment  (should be SEQ than lowest_level and LEQ than highest_level)
    * @return true, if alignment converged!
    */
-  bool align2DComposed(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp,
+  bool align2DComposed(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit,
                        const int lowest_level,const int highest_level, const int start_level){
     cOut = cInit;
     for(int l = start_level;l>=highest_level;--l){
-      if(!align2D(cOut,pyr,mp,cOut,mpWarp,l,lowest_level)){
+      if(!align2D(cOut,pyr,mp,cOut,l,lowest_level)){
         return false;
       }
     }
@@ -456,7 +434,6 @@ class MultilevelPatchAlignment {
    * @param pyr           - Considered image pyramid.
    * @param mp            - \ref MultilevelPatch, which contains the patches.
    * @param cInit         - Coordinates of the patch in the reference image, initial guess.
-   * @param mpWarp        - Affine warping matrix. If nullptr not warping is considered.
    * @param lowest_level  - Lowest pyramid level to be considered
    * @param highest_level - Highest pyramid level to be considered (should be smaller than lowest_level)
    * @param convergencePixelRange - what is the expected converges range (one-sided, gets scaled by the patch level), 1 is a good value
@@ -464,19 +441,19 @@ class MultilevelPatchAlignment {
    * @param maxUniSample  - How many samples should maximally be evaluated, one-sided
    * @return true, if alignment converged!
    */
-  bool align2DAdaptive(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit, const FeatureWarping* mpWarp,
+  bool align2DAdaptive(FeatureCoordinates& cOut, const ImagePyramid<nLevels>& pyr, const MultilevelPatch<nLevels,patch_size>& mp, const FeatureCoordinates& cInit,
                        const int lowest_level = nLevels,const int highest_level = 0, const double convergencePixelRange = 1.0,  const double coverageRatio = 2.0, const int maxUniSample = 5){
     bestIntensityError_ = -1;
     cOut = cInit;
     const int n = std::min(std::max(static_cast<int>(ceil((cInit.sigma1_*coverageRatio)/(convergencePixelRange*pow(2.0,lowest_level+1))-0.5)),0),maxUniSample); // (n+0.5)*r*2^(l+1) > s*f
     if(n==0){ // Catch simple case
-      return align2D(cOut,pyr,mp,cInit,mpWarp,highest_level,lowest_level);
+      return align2D(cOut,pyr,mp,cInit,highest_level,lowest_level);
     }
     for(int i = -n;i<=n;i++){ // i is the multiple of steps which should be taken along the directions
       cOut.set_c(cInit.get_c() + vecToPoint2f(cInit.eigenVector1_.cast<float>()*i*convergencePixelRange*pow(2.0,lowest_level+1)));
-      if(align2D(cOut,pyr,mp,cOut,mpWarp,highest_level,lowest_level)){
-        if(mlpTemp_.isMultilevelPatchInFrame(pyr,cOut,lowest_level,mpWarp,false)){
-          mlpTemp_.extractMultilevelPatchFromImage(pyr,cOut,lowest_level,mpWarp,false);
+      if(align2D(cOut,pyr,mp,cOut,highest_level,lowest_level)){
+        if(mlpTemp_.isMultilevelPatchInFrame(pyr,cOut,lowest_level,false)){
+          mlpTemp_.extractMultilevelPatchFromImage(pyr,cOut,lowest_level,false);
           const float avgError = mlpTemp_.computeAverageDifference(mp,highest_level,lowest_level);
           if(bestIntensityError_ == -1 || avgError<bestIntensityError_){
             bestCoordinateMatch_ = cOut;

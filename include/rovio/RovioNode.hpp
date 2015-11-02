@@ -171,14 +171,12 @@ class RovioNode{
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
-    BearingCorners bearingCorners;
-    bearingCorners[0].setZero();
-    bearingCorners[1].setZero();
-
     for(int i=0;i<mtState::nMax_;i++){
       testState.CfP(i).camID_ = 0;
+      testState.CfP(i).nor_.setRandom(s);
+      testState.CfP(i).valid_nor_ = true;
+      testState.CfP(i).trackWarping_ = false;
       testState.aux().bearingMeas_[i].setRandom(s);
-      testState.aux().warping_[i].set_bearingCorners(bearingCorners);
     }
     testState.CfP(0).camID_ = mtState::nCam_-1;
     mpTestFilterState->fsm_.setAllCameraPointers();

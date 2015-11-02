@@ -37,13 +37,34 @@
 
 namespace rovio{
 
+/** \brief Helper function for transforming a cv::Point2f to a Eigen::Vector2f
+ *
+ * @param p - cv::Point2f
+ * @return Eigen::Vector2f
+ */
+static Eigen::Vector2f pointToVec2f(const cv::Point2f& p){
+  return Eigen::Vector2f(p.x,p.y);
+}
+
+
+/** \brief Helper function for transforming a cv::Point2f to a Eigen::Vector2f
+ *
+ * @param v - Eigen::Vector2f
+ * @return cv::Point2f
+ */
+static cv::Point2f vecToPoint2f(const Eigen::Vector2f& v){
+  return cv::Point2f(v(0),v(1));
+}
+
 /** \brief FeatureCoordinates class, contains information about the location of the feature.
  *
  * Automatically transforms between pixel coordinates and bearing vector (has an internal pointer on a camera).
  * Furthermore it also stores the cam ID, and handles uncertainties associated with the feature location.
+ * It also handles local patch warping.
  */
 class FeatureCoordinates{
  public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   mutable cv::Point2f c_;  /**<Pixel coordinates of the feature.*/
   mutable bool valid_c_;  /**<Bool, indicating if the current feature pixel coordinates \ref c_ are valid.*/
   mutable LWF::NormalVectorElement nor_;  /**<Bearing vector, belonging to the feature.*/
@@ -58,10 +79,21 @@ class FeatureCoordinates{
   mutable Eigen::EigenSolver<Eigen::Matrix2d> es_; /**<Solver for computing the geometry of the pixel uncertainty.*/
   int camID_; /**<Camera ID.*/
 
+  mutable Eigen::Matrix2f warp_c_;  /**<Transformation matrix for pixel coordinates (from current patch to the current frame).*/
+  mutable bool valid_warp_c_;  /**<Specifies if the transformation \ref warp_c_ is valid.*/
+  mutable Eigen::Matrix2d warp_nor_;  /**<Transformation matrix for bearing vector (from current patch to the current frame).*/
+  mutable bool valid_warp_nor_;  /**<Specifies if the transformation \ref warp_nor_ is valid.*/
+  bool isWarpIdentity_; /**<Is the warping equal to identity (on pixel level, warp_c_).*/
+  bool trackWarping_; /**<Should the warping be tracked.*/
+  mutable Eigen::Matrix2d matrix2dTemp_; /**<Temporary Matrix2d.*/
+  mutable Eigen::FullPivLU<Eigen::Matrix2d> fullPivLU2d_; /**<Full pivot LU decomposition for rank and inverse computation of Matrix2d.*/
+  mutable LWF::NormalVectorElement norTemp_; /**<Temporary normal vector.*/
+
   /** \brief Constructor
    */
   FeatureCoordinates(){
     mpCamera_ = nullptr;
+    trackWarping_ = false;
     resetCoordinates();
   }
 
@@ -71,6 +103,7 @@ class FeatureCoordinates{
    */
   FeatureCoordinates(const cv::Point2f& pixel){
     mpCamera_ = nullptr;
+    trackWarping_ = false;
     resetCoordinates();
     c_ = pixel;
     valid_c_ = true;
@@ -82,6 +115,7 @@ class FeatureCoordinates{
    */
   FeatureCoordinates(const LWF::NormalVectorElement& nor){
     mpCamera_ = nullptr;
+    trackWarping_ = false;
     resetCoordinates();
     nor_ = nor;
     valid_nor_ = true;
@@ -90,6 +124,7 @@ class FeatureCoordinates{
   /** \brief Constructor
    */
   FeatureCoordinates(const Camera* mpCamera): mpCamera_(mpCamera){
+    trackWarping_ = false;
     resetCoordinates();
   }
 
@@ -104,6 +139,7 @@ class FeatureCoordinates{
   void resetCoordinates(){
     valid_c_ = false;
     valid_nor_ = false;
+    set_warp_identity();
     camID_ = -1;
   }
 
@@ -168,12 +204,11 @@ class FeatureCoordinates{
    */
   Eigen::Matrix<double,2,2> get_J() const{
     assert(mpCamera_ != nullptr);
-    Eigen::Matrix<double,2,2> J;
-    if(!mpCamera_->bearingToPixel(get_nor(),c_,J)){
-      J.setZero();
+    if(!mpCamera_->bearingToPixel(get_nor(),c_,matrix2dTemp_)){
+      matrix2dTemp_.setZero();
       std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
     }
-    return J;
+    return matrix2dTemp_;
   }
 
   /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).
@@ -200,12 +235,140 @@ class FeatureCoordinates{
     valid_c_ = false;
   }
 
+  /** \brief Compute the pixel warping. If necessary derives it from the bearing warping.
+   *
+   * @return Whether the computation was successfull.
+   */
+  bool com_warp_c() const{
+    if(!valid_warp_c_){
+      if(valid_warp_nor_ && com_c() && com_nor()){
+        matrix2dTemp_ = get_J();
+        warp_c_ = (matrix2dTemp_*warp_nor_).cast<float>();
+        valid_warp_c_ = true;
+      }
+    }
+    return valid_warp_c_;
+  }
+
+  /** \brief Get the pixel warping. If necessary derives it from the bearing warping.
+   *
+   * @return The valid warping matrix for pixel coordinates.
+   */
+  Eigen::Matrix2f& get_warp_c() const{
+    if(!com_warp_c()){
+      std::cout << "    \033[31mERROR: No valid warping data in get_warp_c!\033[0m" << std::endl;
+    }
+    return warp_c_;
+  }
+
+  /** \brief Compute the bearing vector warping. If necessary derives it from the pixel warping.
+   *
+   * @return Whether the computation was successfull.
+   */
+  bool com_warp_nor() const{
+    if(!valid_warp_nor_){
+      if(valid_warp_c_ && com_c() && com_nor()){
+        matrix2dTemp_ = get_J();
+        fullPivLU2d_.compute(matrix2dTemp_);
+        if(fullPivLU2d_.rank() == 2){
+          warp_nor_ = fullPivLU2d_.inverse()*warp_c_.cast<double>();
+          valid_warp_nor_ = true;
+        }
+      }
+    }
+    return valid_warp_nor_;
+  }
+
+  /** \brief Get the bearing vector warping. If necessary derives it from the pixel warping.
+   *
+   * @return The valid warping matrix for pixel coordinates.
+   */
+  Eigen::Matrix2d& get_warp_nor() const{
+    if(!com_warp_nor()){
+      std::cout << "    \033[31mERROR: No valid warping data in get_warp_nor!\033[0m" << std::endl;
+    }
+    return warp_nor_;
+  }
+
+  /** \brief Returns a desired corner coordinate (in the patch) as FeatureCoordinate
+   *
+   * Note: Validity can be checked with com_warp_nor
+   * @param x - x coordinate of corner
+   * @param y - y coordinate of corner
+   * @return the corner coordinate
+   */
+  FeatureCoordinates get_patchCorner(int x, int y) const{
+    FeatureCoordinates temp;
+    get_nor().boxPlus(get_warp_nor()*Eigen::Vector2d(x,y),norTemp_);
+    temp.set_nor(norTemp_);
+    temp.mpCamera_ = mpCamera_;
+    temp.camID_ = camID_;
+    return temp;
+  }
+
+  /** \brief Set the warping matrix for pixel coordinates \ref warp_c_.
+   *
+   * Note: The validity of \ref warp_nor_ is set to invalid.
+   * @param warp_c - warping matrix in pixel coordinates.
+   */
+  void set_warp_c(const Eigen::Matrix2f& warp_c){
+    warp_c_ = warp_c;
+    valid_warp_c_ = true;
+    valid_warp_nor_ = false;
+    isWarpIdentity_ = false;
+  }
+
+  /** \brief Set the warping matrix for bearing coordinates \ref warp_nor_.
+   *
+   * Note: The validity of \ref warp_c_ is set to invalid.
+   * @param warp_nor - warping matrix for bearing vector.
+   */
+  void set_warp_nor(const Eigen::Matrix2d& warp_nor){
+    warp_nor_ = warp_nor;
+    valid_warp_nor_ = true;
+    valid_warp_c_ = false;
+    isWarpIdentity_ = false;
+  }
+
+  /** \brief Set the warping to identity (pixel coordinates).
+   *
+   * Note: The validity of \ref warp_nor_ is set to invalid.
+   */
+  void set_warp_identity(){
+    warp_c_.setIdentity();
+    valid_warp_c_ = true;
+    valid_warp_nor_ = false;
+    isWarpIdentity_ = true;
+  }
+
+  /** \brief Applies the a transform to warp_nor_.
+   *
+   * Note: The validity of \ref warp_c_ is set to invalid.
+   * @param J - Jacobian of applied transformation.
+   */
+  void transform_warp_nor(const Eigen::Matrix2d& J){
+    if(!com_warp_nor()){
+      std::cout << "    \033[31mERROR: No valid warping data in transform_warp_nor!\033[0m" << std::endl;
+    }
+    warp_nor_ = J*warp_nor_;
+    valid_warp_c_ = false;
+    isWarpIdentity_ = false;
+  }
+
   /** \brief Checks if the feature coordinates can be associated with a landmark in front of the camera.
    *
    *   @return true, if the feature coordinates can be associated with a landmark in front of the camera.
    */
   bool isInFront() const{
     return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
+  }
+
+  /** \brief Checks if warping is near identity for pixel coordinates
+   *
+   *   @return true, if the feature warping is near identity
+   */
+  bool isNearIdentityWarping() const{
+    return isWarpIdentity_ || (com_warp_c() && (get_warp_c()-Eigen::Matrix2f::Identity()).norm() < 1e-6);
   }
 
   /** \brief Sets the feature coordinates standard deviation values \ref pixelCov_, \ref sigma1_, \ref sigma2_, \ref eigenVector1_, \ref eigenVector2_, \ref sigmaAngle_

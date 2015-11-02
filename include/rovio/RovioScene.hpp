@@ -160,14 +160,13 @@ class RovioScene{
           const LWF::NormalVectorElement middle = state.CfP(i).get_nor();
           Eigen::Vector3d cornerVec[4];
           const double s = mtState::patchSize_*std::pow(2.0,mtState::nLevels_-2);
-          if(!filterState.fsm_.features_[i].mpWarping_->com_bearingCorners(filterState.fsm_.features_[i].mpCoordinates_)){
+          if(!filterState.fsm_.features_[i].mpCoordinates_->com_warp_nor()){
             mpPatches_[i]->draw_ = false;
             continue;
           }
-          PatchCorners patchCorners = filterState.fsm_.features_[i].mpWarping_->get_patchCorners(filterState.fsm_.features_[i].mpCoordinates_,s);
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){
-              cornerVec[y*2+x] = patchCorners(x,y).get_nor().getVec()*state.dep(i).getDistance();
+              cornerVec[y*2+x] = filterState.fsm_.features_[i].mpCoordinates_->get_patchCorner(s*(2*x-1),s*(2*y-1)).get_nor().getVec()*state.dep(i).getDistance();
             }
           }
           const Eigen::Vector3d pos = middle.getVec()*state.dep(i).getDistance();

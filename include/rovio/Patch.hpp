@@ -30,7 +30,7 @@
 #define ROVIO_PATCH_HPP_
 
 #include "lightweight_filtering/common.hpp"
-#include "rovio/FeatureWarping.hpp"
+#include "rovio/FeatureCoordinates.hpp"
 
 namespace rovio{
 
@@ -169,7 +169,7 @@ class Patch {
    *
    * @param drawImg     - Image in which the patch borders should be drawn.
    * @param c           - Coordinates of the patch in the reference image.
-   * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
+   * @param W           - Affine warping matrix.
    * @param s           - Scaling factor.
    * @param color       - Line color.
    */
@@ -189,7 +189,7 @@ class Patch {
    *
    *   @param img        - Reference Image.
    *   @param c          - Coordinates of the patch in the reference image.
-   *   @param mpWarp     - Affine warping matrix. If nullptr not warping is considered.
+   *   @param W          - Affine warping matrix.
    *   @param withBorder - Check, using either the patch-patchSize of Patch::patch_ (withBorder = false) or the patch-patchSize
    *                       of the expanded patch Patch::patchWithBorder_ (withBorder = true).
    *   @return true, if the patch is completely located within the reference image.
@@ -224,7 +224,7 @@ class Patch {
    *
    *   @param img        - Reference Image.
    *   @param c          - Coordinates of the patch in the reference image (subpixel coordinates possible).
-   *   @param mpWarp     - Affine warping matrix. If nullptr not warping is considered.
+   *   @param W          - Affine warping matrix.
    *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
    *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_)
    *                       and the patch data of the expanded patch (Patch::patchWithBorder_).

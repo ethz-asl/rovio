@@ -141,14 +141,10 @@ class MultilevelPatch{
    * @param s           - Scaling factor.
    * @param color       - Line color.
    */
-  void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color,const FeatureWarping* mpWarp = nullptr) const{
+  void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color) const{
     if(!c.isInFront()) return;
-    if(mpWarp == nullptr){
-      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,Eigen::Matrix2f::Identity());
-    } else {
-      if(mpWarp->com_affineTransform(&c)){
-        patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,mpWarp->get_affineTransform(&c));
-      }
+    if(c.com_warp_c()){
+      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,c.get_warp_c());
     }
   }
 
@@ -195,17 +191,13 @@ class MultilevelPatch{
    * @param withBorder  - If true, the check is executed with the expanded patch dimensions (incorporates the general patch dimensions).
    *                      If false, the check is only executed with the general patch dimensions.
    */
-  bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false) const{
+  bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false) const{
     if(!c.isInFront()) return false;
     pyr.levelTranformCoordinates(c,coorTemp_,0,l);
-    if(mpWarp == nullptr){
-      return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),Eigen::Matrix2f::Identity(),withBorder);
-    } else {
-      if(!mpWarp->com_affineTransform(&c)){
-        return false;
-      }
-      return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),mpWarp->get_affineTransform(&c),withBorder);
+    if(!c.com_warp_c()){
+      return false;
     }
+    return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),c.get_warp_c(),withBorder);
   }
 
   /** \brief Extracts a multilevel patch from a given image pyramid.
@@ -216,15 +208,11 @@ class MultilevelPatch{
    * @param mpWarp      - Affine warping matrix. If nullptr not warping is considered.
    * @param withBorder  - If true, both, the general patches and the corresponding expanded patches are extracted.
    */
-  void extractMultilevelPatchFromImage(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const FeatureWarping* mpWarp = nullptr,const bool withBorder = false){
+  void extractMultilevelPatchFromImage(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false){
     for(unsigned int i=0;i<=l;i++){
       pyr.levelTranformCoordinates(c,coorTemp_,0,i);
       isValidPatch_[i] = true;
-      if(mpWarp == nullptr){
-        patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),Eigen::Matrix2f::Identity(),withBorder);
-      } else {
-        patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),mpWarp->get_affineTransform(&c),withBorder);
-      }
+      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),c.get_warp_c(),withBorder);
     }
   }
 };

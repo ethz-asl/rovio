@@ -5,6 +5,7 @@ Makefile
 cmake_install.cmake
 install_manifest.txt
 gtest
+rovio_custom.info
 
 # Compiled Object files
 *.slo

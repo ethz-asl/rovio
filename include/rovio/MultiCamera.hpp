@@ -101,6 +101,12 @@ class MultiCamera{
       vecOut.valid_nor_ = true;
       vecOut.camID_ = i;
       vecOut.mpCamera_ = &cameras_[i];
+      vecOut.warp_c_ = vecIn.warp_c_;
+      vecOut.valid_warp_c_ = vecIn.valid_warp_c_;
+      vecOut.warp_nor_ = vecIn.warp_nor_;
+      vecOut.valid_warp_nor_ = vecIn.valid_warp_nor_;
+      vecOut.isWarpIdentity_ = vecIn.isWarpIdentity_;
+      vecOut.trackWarping_ = vecIn.trackWarping_;
     } else {
       vecOut = vecIn;
       dOut = dIn;

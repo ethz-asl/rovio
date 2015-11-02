@@ -234,6 +234,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   mutable MultilevelPatch<mtState::nLevels_,mtState::patchSize_> mlpTemp1_;
   mutable MultilevelPatch<mtState::nLevels_,mtState::patchSize_> mlpTemp2_;
   mutable FeatureCoordinates alignedCoordinates_;
+  mutable FeatureCoordinates tempCoordinates_;
   mutable mtState linearizationPoint_;
   mutable MultilevelPatchAlignment<mtState::nLevels_,mtState::patchSize_> alignment_; /**<Patch aligner*/
   mutable std::vector<FeatureCoordinates> candidates_;
@@ -454,10 +455,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       for(unsigned int i=0;i<mtState::nMax_;i++){
         if(filterState.fsm_.isValid_[i]){
           const int& camID = filterState.state_.CfP(i).camID_;   // Camera ID of the feature.
-          if(mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],*filterState.fsm_.features_[i].mpCoordinates_,startLevel_,nullptr,true)){
-            mlpTemp1_.extractMultilevelPatchFromImage(filterState.prevPyr_[camID],*filterState.fsm_.features_[i].mpCoordinates_,startLevel_,nullptr,true);
+          tempCoordinates_ = *filterState.fsm_.features_[i].mpCoordinates_;
+          tempCoordinates_.set_warp_identity();
+          if(mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],tempCoordinates_,startLevel_,true)){
+            mlpTemp1_.extractMultilevelPatchFromImage(filterState.prevPyr_[camID],tempCoordinates_,startLevel_,true);
             mlpTemp1_.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
-            mlpTemp2_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],*filterState.fsm_.features_[i].mpCoordinates_,startLevel_,nullptr,true);
+            mlpTemp2_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],tempCoordinates_,startLevel_,true);
             const float avgError = mlpTemp1_.computeAverageDifference(mlpTemp2_,endLevel_,startLevel_);
             if(avgError/std::sqrt(mlpTemp1_.e1_) > static_cast<float>(pixelCoordinateMotionTh_)) totCountInMotion++;
             totCountInFrame++;
@@ -532,7 +535,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         if(verbose_) std::cout << "    Normal in camera frame: " << featureOutput_.c().get_nor().getVec().transpose() << std::endl;
 
         // Check if feature in target frame
-        if(!featureOutput_.c().isInFront() || !mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],featureOutput_.c(),startLevel_,f.mpWarping_,false)){
+        if(!featureOutput_.c().isInFront() || !mlpTemp1_.isMultilevelPatchInFrame(filterState.prevPyr_[camID],featureOutput_.c(),startLevel_,false)){
           f.mpStatistics_->status_[activeCamID] = NOT_IN_FRAME;
           if(verbose_) std::cout << "    NOT in frame" << std::endl;
         } else {
@@ -551,8 +554,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             }
           }
           if(visualizePatches_){
-            if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,f.mpWarping_,false)){
-              mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,f.mpWarping_,false);
+            if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false)){
+              mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false);
               mlpTemp1_.drawMultilevelPatch(filterState.patchDrawing_,cv::Point2i(filterState.drawPB_+(1+2*activeCamID)*filterState.drawPS_,filterState.drawPB_+ID*filterState.drawPS_),1,false);
             }
           }
@@ -563,12 +566,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           // Do pre-alignment if required
           bool successfulPreAlignment = false;
           if(!useDirectMethod_ || featureOutput_.c().sigma1_ > matchingPixelThreshold_){
-            if(alignment_.align2DAdaptive(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_,startLevel_,endLevel_,
+            if(alignment_.align2DAdaptive(alignedCoordinates_,meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),startLevel_,endLevel_,
                                           alignConvergencePixelRange_,alignCoverageRatio_,alignMaxUniSample_)){
               if(activeCamID==camID) f.log_meas_ = alignedCoordinates_;
               if(verbose_) std::cout << "    Found match: " << alignedCoordinates_.get_nor().getVec().transpose() << std::endl;
-              if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false)){
-                mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,f.mpWarping_,false);
+              if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,false)){
+                mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,false);
                 const float avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
                 if(avgError > patchRejectionTh_){
                   f.mpStatistics_->status_[activeCamID] = FAILED_ALIGNEMENT;
@@ -624,7 +627,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             }
             if(successfullBackProjection || !useSpecialLinearizationPoint_){
               if(verbose_ && useSpecialLinearizationPoint_) std::cout << "    Backprojection: " << linearizationPoint_.CfP(ID).get_nor().getVec().transpose() << std::endl;
-              if(!useDirectMethod_ || alignment_.getLinearAlignEquationsReduced(meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c(),f.mpWarping_
+              if(!useDirectMethod_ || alignment_.getLinearAlignEquationsReduced(meas.aux().pyr_[activeCamID],*f.mpMultilevelPatch_,featureOutput_.c()
                                                                                 ,endLevel_,startLevel_,state.aux().A_red_[ID],state.aux().b_red_[ID])){
                 if(useSpecialLinearizationPoint_) linearizationPoint_.boxMinus(state,filterState.difVecLin_);
                 if(!useDirectMethod_) state.aux().bearingMeas_[ID] = alignedCoordinates_.get_nor();
@@ -695,13 +698,13 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       if(!outlierDetection.isOutlier(0)){
         if(activeCamID != camID){
           f.mpStatistics_->status_[activeCamID] = TRACKED;
-          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,180,0),f.mpWarping_);
-        } else if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,f.mpWarping_,false)){
-          mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,f.mpWarping_,false);
+          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,180,0));
+        } else if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,false)){
+          mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,false);
           const float avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
           if(avgError <= patchRejectionTh_){
             f.mpStatistics_->status_[activeCamID] = TRACKED;
-            if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,255,0),f.mpWarping_);
+            if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,255,0));
           } else {
             if(verbose_) std::cout << "    \033[31mToo large pixel error after update: " << avgError << "\033[0m" << std::endl;
           }
@@ -714,16 +717,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       if(f.mpStatistics_->status_[activeCamID] != TRACKED){
         f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
         if(activeCamID != camID){
-          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,180),f.mpWarping_);
+          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,180));
         } else {
-          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,255),f.mpWarping_);
+          if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,255));
         }
       }
 
       // Visualize patch tracking
       if(visualizePatches_){
-        if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,f.mpWarping_,false)){
-          mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,f.mpWarping_,false);
+        if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false)){
+          mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false);
           mlpTemp1_.drawMultilevelPatch(filterState.patchDrawing_,cv::Point2i(filterState.drawPB_+(2+2*activeCamID)*filterState.drawPS_,filterState.drawPB_+ID*filterState.drawPS_),1,false);
         }
         if(f.mpStatistics_->status_[activeCamID] == TRACKED){
@@ -785,12 +788,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           countTracked++;
         }
         if(f.mpStatistics_->status_[camID] == TRACKED){
-          if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,nullptr,true)){
-            mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],*f.mpCoordinates_,startLevel_,nullptr,true);
+          tempCoordinates_ = *f.mpCoordinates_;
+          tempCoordinates_.set_warp_identity();
+          if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],tempCoordinates_,startLevel_,true)){
+            mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],tempCoordinates_,startLevel_,true);
             mlpTemp1_.computeMultilevelShiTomasiScore(endLevel_,startLevel_);
             if(mlpTemp1_.s_ >= static_cast<float>(minAbsoluteSTScore_) || mlpTemp1_.s_ >= static_cast<float>(minRelativeSTScore_)*(f.mpMultilevelPatch_->s_)){
               *f.mpMultilevelPatch_ = mlpTemp1_;
-              f.mpWarping_->reset();
+              f.mpCoordinates_->set_warp_identity();
             }
           }
         }

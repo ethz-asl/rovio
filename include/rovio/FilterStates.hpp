@@ -72,7 +72,6 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
-    doPatchWarping_ = true;
   };
 
   /** \brief Destructor
@@ -92,8 +91,6 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
-  FeatureWarping warping_[nMax];  /**<FeatureWarpings.*/
-  bool doPatchWarping_; /**<Should patches be warped.*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +161,6 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     for(int i=0;i<nMax;i++){
       mpFeatureManager[i]->mpCoordinates_ = &CfP(i);
       mpFeatureManager[i]->mpDistance_ = &dep(i);
-      mpFeatureManager[i]->mpWarping_ = &aux().warping_[i];
     }
   }
 
@@ -176,7 +172,6 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     for(int i=0;i<nMax;i++){
       fsm.features_[i].mpCoordinates_ = &CfP(i);
       fsm.features_[i].mpDistance_ = &dep(i);
-      fsm.features_[i].mpWarping_ = &aux().warping_[i];
     }
   }
 

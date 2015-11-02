@@ -105,8 +105,8 @@ class ImagePyramid{
 
   /** \brief Transforms pixel coordinates between two pyramid levels.
    *
-   * @param mpCoorIn   - Input coordinates
-   * @param mpCoorOut  - Output coordinates
+   * @param cIn        - Input coordinates
+   * @param cOut       - Output coordinates
    * @param l1         - Input pyramid level.
    * @param l2         - Output pyramid level.
    * @return the corresponding pixel coordinates on pyramid level l2.
@@ -114,6 +114,15 @@ class ImagePyramid{
   void levelTranformCoordinates(const FeatureCoordinates& cIn,FeatureCoordinates& cOut,const int l1, const int l2) const{
     assert(l1<n_levels && l2<n_levels && l1>=0 && l2>=0);
     cOut.set_c((centers_[l1]-centers_[l2])*pow(0.5,l2)+cIn.get_c()*pow(0.5,l2-l1));
+    // This is a small hack, the transformation between warp_c and warp_nor does not work anymore if the feature is on a different level
+    if(cIn.mpCamera_ != nullptr){
+      if(cIn.com_warp_c()){
+        cOut.set_warp_c(cIn.get_warp_c());
+      }
+      if(cIn.com_warp_nor()){
+        cOut.set_warp_nor(cIn.get_warp_nor());
+      }
+    }
     cOut.camID_ = cIn.camID_;
     cOut.mpCamera_ = cIn.mpCamera_;
   }

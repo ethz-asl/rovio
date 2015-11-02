@@ -115,6 +115,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalQualityRange",init_.fsm_.features_[i].mpStatistics_->localQualityRange_);
       std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalVisibilityRange",init_.fsm_.features_[i].mpStatistics_->localVisibilityRange_);
       std::get<0>(mUpdates_).intRegister_.registerScalar("statMinGlobalQualityRange",init_.fsm_.features_[i].mpStatistics_->minGlobalQualityRange_);
+      std::get<0>(mUpdates_).boolRegister_.registerScalar("doPatchWarping",init_.state_.CfP(i).trackWarping_);
     }
     std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
@@ -128,7 +129,6 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     doubleRegister_.registerQuaternion("Groundtruth.qJI",init_.groundtruth_qJI_);
     doubleRegister_.registerVector("Groundtruth.BrBC",init_.groundtruth_BrBC_);
     doubleRegister_.registerQuaternion("Groundtruth.qCB",init_.groundtruth_qCB_);
-    std::get<0>(mUpdates_).boolRegister_.registerScalar("doPatchWarping",init_.state_.aux().doPatchWarping_);
     Eigen::Vector3d groundtruth_IrIJ_;
     Eigen::Vector3d groundtruth_BrBC_;
     reset(0.0);

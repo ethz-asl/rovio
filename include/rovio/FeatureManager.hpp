@@ -31,7 +31,6 @@
 
 #include "rovio/FeatureCoordinates.hpp"
 #include "rovio/FeatureDistance.hpp"
-#include "rovio/FeatureWarping.hpp"
 #include "rovio/FeatureStatistics.hpp"
 #include "rovio/MultilevelPatch.hpp"
 #include "rovio/MultiCamera.hpp"
@@ -56,14 +55,12 @@ class FeatureManager{
 
   FeatureCoordinates* mpCoordinates_;
   FeatureDistance* mpDistance_;
-  FeatureWarping* mpWarping_;
   FeatureStatistics<nCam>* mpStatistics_;
   MultilevelPatch<nLevels,patchSize>* mpMultilevelPatch_;
 
   // Internal objects, only used if no external objects are linked
   FeatureCoordinates* _mpCoordinates;
   FeatureDistance* _mpDistance;
-  FeatureWarping* _mpWarping;
   FeatureStatistics<nCam>* _mpStatistics;
   MultilevelPatch<nLevels,patchSize>* _mpMultilevelPatch;
 
@@ -73,12 +70,10 @@ class FeatureManager{
     idx_ = -1;
     mpCoordinates_ = nullptr;
     mpDistance_ = nullptr;
-    mpWarping_ = nullptr;
     mpStatistics_ = nullptr;
     mpMultilevelPatch_ = nullptr;
     _mpCoordinates = nullptr;
     _mpDistance = nullptr;
-    _mpWarping = nullptr;
     _mpStatistics = nullptr;
     _mpMultilevelPatch = nullptr;
   }
@@ -88,7 +83,6 @@ class FeatureManager{
   virtual ~FeatureManager(){
     delete _mpCoordinates;
     delete _mpDistance;
-    delete _mpWarping;
     delete _mpStatistics;
     delete _mpMultilevelPatch;
   }
@@ -112,10 +106,6 @@ class FeatureManager{
     if(mpDistance_ == nullptr){
       _mpDistance = new FeatureDistance();
       mpDistance_ = _mpDistance;
-    }
-    if(mpWarping_ == nullptr){
-      _mpWarping = new FeatureWarping();
-      mpWarping_ = _mpWarping;
     }
     if(mpStatistics_ == nullptr){
       _mpStatistics = new FeatureStatistics<nCam>();
@@ -299,8 +289,8 @@ class FeatureSetManager{
     float maxScore = -1.0;
     for(int i=0;i<candidates.size();i++){
       multilevelPatches.emplace_back();
-      if(multilevelPatches.back().isMultilevelPatchInFrame(pyr,candidates[i],l2,nullptr,true)){
-        multilevelPatches.back().extractMultilevelPatchFromImage(pyr,candidates[i],l2,nullptr,true);
+      if(multilevelPatches.back().isMultilevelPatchInFrame(pyr,candidates[i],l2,true)){
+        multilevelPatches.back().extractMultilevelPatchFromImage(pyr,candidates[i],l2,true);
         multilevelPatches.back().computeMultilevelShiTomasiScore(l1,l2);
         if(multilevelPatches.back().s_ > maxScore) maxScore = multilevelPatches.back().s_;
       } else {
@@ -364,11 +354,11 @@ class FeatureSetManager{
         const int nf = *(buckets[bucketID].begin());
         buckets[bucketID].erase(nf);
         const int ind = makeNewFeature(camID);
-        *(features_[ind].mpCoordinates_) = candidates[nf];
+        features_[ind].mpCoordinates_->set_c(candidates[nf].get_c());
         features_[ind].mpCoordinates_->camID_ = camID;
+        features_[ind].mpCoordinates_->set_warp_identity();
         features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
-        features_[ind].mpWarping_->reset();
         if(ind >= 0){
           newSet.insert(ind);
         }
