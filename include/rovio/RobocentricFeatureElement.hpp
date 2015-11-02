@@ -39,17 +39,16 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
  public:
   typedef LWF::ElementBase<RobocentricFeatureElement,RobocentricFeatureElement,3> Base;
   using typename Base::mtDifVec;
-  using typename Base::mtCovMat;
   using typename Base::mtGet;
   using Base::name_;
   mutable LWF::NormalVectorElement::mtDifVec norDifTemp_;
-  mutable LWF::NormalVectorElement::mtCovMat norCovMatTemp_;
+  mutable MXD norCovMatTemp_;
   mutable LWF::NormalVectorElement norTemp_;
   FeatureCoordinates coordinates_;
   FeatureDistance distance_;
-  RobocentricFeatureElement():distance_(FeatureDistance::REGULAR){}
-  RobocentricFeatureElement(const Camera* mpCameras, const FeatureDistance::Type depthType):coordinates_(mpCameras),distance_(depthType){}
-  RobocentricFeatureElement(const RobocentricFeatureElement& other):distance_(other.distance_.type_){
+  RobocentricFeatureElement():distance_(FeatureDistance::REGULAR), norCovMatTemp_(3,3){}
+  RobocentricFeatureElement(const Camera* mpCameras, const FeatureDistance::Type depthType):coordinates_(mpCameras),distance_(depthType), norCovMatTemp_(3,3){}
+  RobocentricFeatureElement(const RobocentricFeatureElement& other):distance_(other.distance_.type_), norCovMatTemp_(3,3){
     coordinates_ = other.coordinates_;
     distance_ = other.distance_;
   }
@@ -71,7 +70,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
     vecOut.template block<2,1>(0,0) = norDifTemp_;
     vecOut(2) = distance_.p_-stateIn.distance_.p_;
   }
-  void boxMinusJac(const RobocentricFeatureElement& stateIn, mtCovMat& matOut) const{
+  void boxMinusJac(const RobocentricFeatureElement& stateIn, MXD& matOut) const{
     matOut.setIdentity();
     coordinates_.get_nor().boxMinusJac(stateIn.coordinates_.get_nor(),norCovMatTemp_);
     matOut.template block<2,2>(0,0) = norCovMatTemp_;
