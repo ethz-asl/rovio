@@ -126,7 +126,7 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
                                   -1.0/oldD_.getDistance()*gSM(camVel)
                                   - (M3D::Identity()*(oldC_.get_nor().getVec().dot(camRor))+oldC_.get_nor().getVec()*camRor.transpose()))
                               +MPD(qm).matrix())*oldC_.get_nor().getM();
-          output.CfP(i).transform_warp_nor(bearingVectorJac_);
+          output.CfP(i).set_warp_nor(bearingVectorJac_*oldC_.get_warp_nor());
         }
       }
     }

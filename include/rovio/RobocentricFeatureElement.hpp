@@ -63,7 +63,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
       stateOut.distance_ = distance_;
     }
     coordinates_.get_nor().boxPlus(vecIn.template block<2,1>(0,0),norTemp_);
-    stateOut.coordinates_.set_nor(norTemp_);
+    stateOut.coordinates_.set_nor(norTemp_,false);
     stateOut.distance_.p_ = distance_.p_ + vecIn(2);
   }
   void boxMinus(const RobocentricFeatureElement& stateIn, mtDifVec& vecOut) const{
@@ -82,6 +82,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   void setIdentity(){
     norTemp_.setIdentity();
     coordinates_.set_nor(norTemp_);
+    coordinates_.set_warp_identity();
     distance_.p_ = 1.0;
   }
   void setRandom(unsigned int& s){
@@ -95,7 +96,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   void fix(){
     norTemp_ = coordinates_.get_nor();
     norTemp_.fix();
-    coordinates_.set_nor(norTemp_);
+    coordinates_.set_nor(norTemp_,false);
   }
   mtGet& get(unsigned int i = 0){
     assert(i==0);

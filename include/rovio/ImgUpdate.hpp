@@ -587,7 +587,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                     }
                     useSpecialLinearizationPoint_ = bearingError.norm() > specialLinearizationThreshold_;
                     if(verbose_) std::cout << "    useSpecialLinearizationPoint: " << useSpecialLinearizationPoint_ << std::endl;
-                    if(useSpecialLinearizationPoint_) featureOutput_.c().set_nor(alignedCoordinates_.get_nor());
+                    if(useSpecialLinearizationPoint_) featureOutput_.c() = alignedCoordinates_;
                     successfulPreAlignment = true;
                   } else {
                     f.mpStatistics_->status_[activeCamID] = FAILED_ALIGNEMENT;

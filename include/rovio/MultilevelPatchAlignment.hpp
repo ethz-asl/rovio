@@ -339,7 +339,7 @@ class MultilevelPatchAlignment {
       } else {
         update = aff * Hinv * Jres;
       }
-      cOut.set_c(cv::Point2f(cOut.get_c().x + update[0],cOut.get_c().y + update[1]));
+      cOut.set_c(cv::Point2f(cOut.get_c().x + update[0],cOut.get_c().y + update[1]),false);
       mean_diff += update[2];
 
       if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
@@ -383,7 +383,7 @@ class MultilevelPatchAlignment {
         return false;
       }
       update = svd_.solve(b_);
-      cOut.set_c(cv::Point2f(cOut.get_c().x + update[0],cOut.get_c().y + update[1]));
+      cOut.set_c(cv::Point2f(cOut.get_c().x + update[0],cOut.get_c().y + update[1]),false);
 
       if(update[0]*update[0]+update[1]*update[1] < min_update_squared){
         converged=true;
@@ -450,7 +450,7 @@ class MultilevelPatchAlignment {
       return align2D(cOut,pyr,mp,cInit,highest_level,lowest_level);
     }
     for(int i = -n;i<=n;i++){ // i is the multiple of steps which should be taken along the directions
-      cOut.set_c(cInit.get_c() + vecToPoint2f(cInit.eigenVector1_.cast<float>()*i*convergencePixelRange*pow(2.0,lowest_level+1)));
+      cOut.set_c(cInit.get_c() + vecToPoint2f(cInit.eigenVector1_.cast<float>()*i*convergencePixelRange*pow(2.0,lowest_level+1)),false);
       if(align2D(cOut,pyr,mp,cOut,highest_level,lowest_level)){
         if(mlpTemp_.isMultilevelPatchInFrame(pyr,cOut,lowest_level,false)){
           mlpTemp_.extractMultilevelPatchFromImage(pyr,cOut,lowest_level,false);

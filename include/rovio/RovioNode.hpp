@@ -211,7 +211,7 @@ class RovioNode{
     FeatureOutput featureOutput;
     transformFeatureOutputCT.transformState(testState,featureOutput);
     if(!featureOutput.c().isInFront()){
-      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)));
+      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
     }
     rovio::PixelOutputCT pixelOutputCT;
     pixelOutputCT.testTransformJac(featureOutput,1e-3,0.5); // Reduces accuracy due to float and strong camera distortion

@@ -216,11 +216,16 @@ class FeatureCoordinates{
    *  Note: The bearing vector nor_ is set invalid (valid_nor_ = false).
    *  \see set_nor()
    *  @param c - Feature pixel coordinates.
+   *  @param resetWarp - Should the warping be invalidated.
    */
-  void set_c(const cv::Point2f& c){
+  void set_c(const cv::Point2f& c, const bool resetWarp = true){
     c_ = c;
     valid_c_ = true;
     valid_nor_ = false;
+    if(trackWarping_ && resetWarp){
+      valid_warp_c_ = false;
+      valid_warp_nor_ = false;
+    }
   }
 
   /** \brief Sets the feature's bearing vector \ref nor_ and declares it valid (\ref valid_nor_ = true).
@@ -228,11 +233,16 @@ class FeatureCoordinates{
    *  Note: The feature pixel coordinates are set invalid (\ref valid_c_ = false).
    *  \see set_c()
    *  @param nor - Bearing vector.
+   *  @param resetWarp - Should the warping be invalidated.
    */
-  void set_nor(const LWF::NormalVectorElement& nor){
+  void set_nor(const LWF::NormalVectorElement& nor, const bool resetWarp = true){
     nor_ = nor;
     valid_nor_ = true;
     valid_c_ = false;
+    if(trackWarping_ && resetWarp){
+      valid_warp_c_ = false;
+      valid_warp_nor_ = false;
+    }
   }
 
   /** \brief Compute the pixel warping. If necessary derives it from the bearing warping.
@@ -339,20 +349,6 @@ class FeatureCoordinates{
     valid_warp_c_ = true;
     valid_warp_nor_ = false;
     isWarpIdentity_ = true;
-  }
-
-  /** \brief Applies the a transform to warp_nor_.
-   *
-   * Note: The validity of \ref warp_c_ is set to invalid.
-   * @param J - Jacobian of applied transformation.
-   */
-  void transform_warp_nor(const Eigen::Matrix2d& J){
-    if(!com_warp_nor()){
-      std::cout << "    \033[31mERROR: No valid warping data in transform_warp_nor!\033[0m" << std::endl;
-    }
-    warp_nor_ = J*warp_nor_;
-    valid_warp_c_ = false;
-    isWarpIdentity_ = false;
   }
 
   /** \brief Checks if the feature coordinates can be associated with a landmark in front of the camera.
