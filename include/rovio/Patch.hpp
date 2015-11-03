@@ -169,54 +169,59 @@ class Patch {
    *
    * @param drawImg     - Image in which the patch borders should be drawn.
    * @param c           - Coordinates of the patch in the reference image.
-   * @param W           - Affine warping matrix.
    * @param s           - Scaling factor.
    * @param color       - Line color.
    */
-  void drawPatchBorder(cv::Mat& drawImg,const cv::Point2f& c,const float s, const cv::Scalar& color,const Eigen::Matrix2f& W) const{
-    cv::Point2f c1 = c+vecToPoint2f(W*Eigen::Vector2f(1.0,1.0)*s*patchSize/2);
-    cv::Point2f c2 = c+vecToPoint2f(W*Eigen::Vector2f(1.0,-1.0)*s*patchSize/2);
-    cv::line(drawImg,c1,c2,color,1);
-    c1 = c+vecToPoint2f(W*Eigen::Vector2f(-1.0,-1.0)*s*patchSize/2);
-    cv::line(drawImg,c2,c1,color,1);
-    c2 = c+vecToPoint2f(W*Eigen::Vector2f(-1.0,1.0)*s*patchSize/2);
-    cv::line(drawImg,c1,c2,color,1);
-    c1 = c+vecToPoint2f(W*Eigen::Vector2f(1.0,1.0)*s*patchSize/2);
-    cv::line(drawImg,c2,c1,color,1);
+  void drawPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color) const{
+    const double half_length = s*patchSize/2;
+    if(c.isInFront() && c.com_warp_c()){
+      cv::Point2f c1 = c.get_patchCorner(half_length,half_length).get_c();
+      cv::Point2f c2 = c.get_patchCorner(half_length,-half_length).get_c();
+      cv::line(drawImg,c1,c2,color,1);
+      c1 = c.get_patchCorner(-half_length,-half_length).get_c();
+      cv::line(drawImg,c2,c1,color,1);
+      c2 = c.get_patchCorner(-half_length,half_length).get_c();
+      cv::line(drawImg,c1,c2,color,1);
+      c1 = c.get_patchCorner(half_length,half_length).get_c();
+      cv::line(drawImg,c2,c1,color,1);
+    }
   }
 
   /** \brief Checks if a patch at a specific image location is still within the reference image.
    *
    *   @param img        - Reference Image.
    *   @param c          - Coordinates of the patch in the reference image.
-   *   @param W          - Affine warping matrix.
    *   @param withBorder - Check, using either the patch-patchSize of Patch::patch_ (withBorder = false) or the patch-patchSize
    *                       of the expanded patch Patch::patchWithBorder_ (withBorder = true).
    *   @return true, if the patch is completely located within the reference image.
    */
-  static bool isPatchInFrame(const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& W,const bool withBorder = false){
-    const int halfpatch_size = patchSize/2+(int)withBorder;
-    if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
-      if(c.x < halfpatch_size || c.y < halfpatch_size || c.x > img.cols-halfpatch_size || c.y > img.rows-halfpatch_size){
-        return false;
+  static bool isPatchInFrame(const cv::Mat& img,const FeatureCoordinates& c,const bool withBorder = false){
+    if(c.isInFront() && c.com_warp_c()){
+      const int halfpatch_size = patchSize/2+(int)withBorder;
+      if(c.isNearIdentityWarping()){
+        if(c.get_c().x < halfpatch_size || c.get_c().y < halfpatch_size || c.get_c().x > img.cols-halfpatch_size || c.get_c().y > img.rows-halfpatch_size){
+          return false;
+        } else {
+          return true;
+        }
       } else {
+        for(int x = 0;x<2;x++){
+          for(int y = 0;y<2;y++){
+            const float dx = halfpatch_size*(2*x-1);
+            const float dy = halfpatch_size*(2*y-1);
+            const float wdx = c.get_warp_c()(0,0)*dx + c.get_warp_c()(0,1)*dy;
+            const float wdy = c.get_warp_c()(1,0)*dx + c.get_warp_c()(1,1)*dy;
+            const float c_x = c.get_c().x + wdx;
+            const float c_y = c.get_c().y + wdy;
+            if(c_x < 0 || c_y < 0 || c_x > img.cols || c_y > img.rows){
+              return false;
+            }
+          }
+        }
         return true;
       }
     } else {
-      for(int x = 0;x<2;x++){
-        for(int y = 0;y<2;y++){
-          const float dx = halfpatch_size*(2*x-1);
-          const float dy = halfpatch_size*(2*y-1);
-          const float wdx = W(0,0)*dx + W(0,1)*dy;
-          const float wdy = W(1,0)*dx + W(1,1)*dy;
-          const float c_x = c.x + wdx;
-          const float c_y = c.y + wdy;
-          if(c_x < 0 || c_y < 0 || c_x > img.cols || c_y > img.rows){
-            return false;
-          }
-        }
-      }
-      return true;
+      return false;
     }
   }
 
@@ -224,13 +229,12 @@ class Patch {
    *
    *   @param img        - Reference Image.
    *   @param c          - Coordinates of the patch in the reference image (subpixel coordinates possible).
-   *   @param W          - Affine warping matrix.
    *   @param withBorder - If false, the patch object is only initialized with the patch data of the general patch (Patch::patch_).
    *                       If true, the patch object is initialized with both, the patch data of the general patch (Patch::patch_)
    *                       and the patch data of the expanded patch (Patch::patchWithBorder_).
    */
-  void extractPatchFromImage(const cv::Mat& img,const cv::Point2f& c,const Eigen::Matrix2f& W,const bool withBorder = false){
-    assert(isPatchInFrame(img,c,W,withBorder));
+  void extractPatchFromImage(const cv::Mat& img,const FeatureCoordinates& c,const bool withBorder = false){
+    assert(isPatchInFrame(img,c,withBorder));
     const int halfpatch_size = patchSize/2+(int)withBorder;
     const int refStep = img.step.p[0];
 
@@ -243,13 +247,13 @@ class Patch {
       patch_ptr = patch_;
     }
 
-    if((W-Eigen::Matrix2f::Identity()).norm() < 1e-6){
-      const int u_r = floor(c.x);
-      const int v_r = floor(c.y);
+    if(c.isNearIdentityWarping()){
+      const int u_r = floor(c.get_c().x);
+      const int v_r = floor(c.get_c().y);
 
       // compute interpolation weights
-      const float subpix_x = c.x-u_r;
-      const float subpix_y = c.y-v_r;
+      const float subpix_x = c.get_c().x-u_r;
+      const float subpix_y = c.get_c().y-v_r;
       const float wTL = (1.0-subpix_x)*(1.0-subpix_y);
       const float wTR = subpix_x * (1.0-subpix_y);
       const float wBL = (1.0-subpix_x)*subpix_y;
@@ -269,10 +273,10 @@ class Patch {
         for(int x=0; x<2*halfpatch_size; ++x, ++patch_ptr){
           const float dx = x - halfpatch_size + 0.5;
           const float dy = y - halfpatch_size + 0.5;
-          const float wdx = W(0,0)*dx + W(0,1)*dy;
-          const float wdy = W(1,0)*dx + W(1,1)*dy;
-          const float u_pixel = c.x+wdx - 0.5;
-          const float v_pixel = c.y+wdy - 0.5;
+          const float wdx = c.get_warp_c()(0,0)*dx + c.get_warp_c()(0,1)*dy;
+          const float wdy = c.get_warp_c()(1,0)*dx + c.get_warp_c()(1,1)*dy;
+          const float u_pixel = c.get_c().x+wdx - 0.5;
+          const float v_pixel = c.get_c().y+wdy - 0.5;
           const int u_r = floor(u_pixel);
           const int v_r = floor(v_pixel);
           const float subpix_x = u_pixel-u_r;

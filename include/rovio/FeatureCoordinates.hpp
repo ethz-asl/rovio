@@ -297,8 +297,8 @@ class FeatureCoordinates{
    * @param y - y coordinate of corner
    * @return the corner coordinate
    */
-  FeatureCoordinates get_patchCorner(int x, int y) const{
-    FeatureCoordinates temp;
+  FeatureCoordinates get_patchCorner(const double x, const double y) const{
+    FeatureCoordinates temp; // TODO: avoid temp
     get_nor().boxPlus(get_warp_nor()*Eigen::Vector2d(x,y),norTemp_);
     temp.set_nor(norTemp_);
     temp.mpCamera_ = mpCamera_;

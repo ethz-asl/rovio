@@ -89,7 +89,7 @@ class MultilevelPatchAlignment {
     Patch<patch_size> extractedPatch;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level.get_c(),c.get_warp_c(),false)){
+      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -99,7 +99,7 @@ class MultilevelPatchAlignment {
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level.get_c(),c.get_warp_c(),false);
+          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level,false);
           const float* it_patch_extracted = extractedPatch.patch_;
           for(int y=0; y<patch_size; ++y){
             for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
@@ -221,7 +221,7 @@ class MultilevelPatchAlignment {
     FeatureCoordinates c_level;
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
           numLevel++;
@@ -239,7 +239,7 @@ class MultilevelPatchAlignment {
     Eigen::Matrix3f H; H.setZero();
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(cInit,c_level,0,l);
-      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
+      if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,false)){
         mp.patches_[l].computeGradientParameters();
         H(0,0) += pow(0.25,l)*mp.patches_[l].H_(0,0);
         H(0,1) += pow(0.25,l)*mp.patches_[l].H_(0,1);
@@ -268,7 +268,7 @@ class MultilevelPatchAlignment {
       int count = 0;
       for(int l = l1; l <= l2; l++){
         pyr.levelTranformCoordinates(cOut,c_level,0,l);
-        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level.get_c(),cInit.get_warp_c(),false)){
+        if(mp.isValidPatch_[l] && mp.patches_[l].isPatchInFrame(pyr.imgs_[l],c_level,false)){
           const int refStep = pyr.imgs_[l].step.p[0];
 
           const float* it_patch = mp.patches_[l].patch_;

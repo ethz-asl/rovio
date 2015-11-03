@@ -142,10 +142,7 @@ class MultilevelPatch{
    * @param color       - Line color.
    */
   void drawMultilevelPatchBorder(cv::Mat& drawImg,const FeatureCoordinates& c,const float s, const cv::Scalar& color) const{
-    if(!c.isInFront()) return;
-    if(c.com_warp_c()){
-      patches_[0].drawPatchBorder(drawImg,c.get_c(),s*pow(2.0,nLevels-1),color,c.get_warp_c());
-    }
+    patches_[0].drawPatchBorder(drawImg,c,s*pow(2.0,nLevels-1),color);
   }
 
   /** \brief Computes the RMSE (Root Mean Squared Error) with respect to the patches of an other MultilevelPatch
@@ -192,12 +189,9 @@ class MultilevelPatch{
    *                      If false, the check is only executed with the general patch dimensions.
    */
   bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false) const{
-    if(!c.isInFront()) return false;
+    if(!c.isInFront() || !c.com_warp_c()) return false;
     pyr.levelTranformCoordinates(c,coorTemp_,0,l);
-    if(!c.com_warp_c()){
-      return false;
-    }
-    return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_.get_c(),c.get_warp_c(),withBorder);
+    return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_,withBorder);
   }
 
   /** \brief Extracts a multilevel patch from a given image pyramid.
@@ -212,7 +206,7 @@ class MultilevelPatch{
     for(unsigned int i=0;i<=l;i++){
       pyr.levelTranformCoordinates(c,coorTemp_,0,i);
       isValidPatch_[i] = true;
-      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_.get_c(),c.get_warp_c(),withBorder);
+      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_,withBorder);
     }
   }
 };
