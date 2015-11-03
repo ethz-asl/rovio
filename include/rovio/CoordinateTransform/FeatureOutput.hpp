@@ -120,12 +120,26 @@ class TransformFeatureOutputCT:public LWF::CoordinateTransform<STATE,FeatureOutp
   void evalTransform(mtOutput& output, const mtInput& input) const{
     input.updateMultiCameraExtrinsics(mpMultiCamera_);
     mpMultiCamera_->transformFeature(outputCamID_,input.CfP(ID_),input.dep(ID_),output.c(),output.d());
+    if(input.CfP(ID_).trackWarping_ && input.CfP(ID_).com_warp_nor()){
+      const int& camID = input.CfP(ID_).camID_;
+      const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
+      const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
+      const V3D CrCP = input.dep(ID_).getDistance()*input.CfP(ID_).get_nor().getVec();
+      const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));
+      const double d_out = DrDP.norm();
+      const LWF::NormalVectorElement nor_out(DrDP);
+      const Eigen::Matrix<double,2,3> J_nor_DrDP = nor_out.getM().transpose()/d_out;
+      const Eigen::Matrix<double,3,3> J_DrDP_CrCP = MPD(qDC).matrix();
+      const Eigen::Matrix<double,3,2> J_CrCP_nor = input.dep(ID_).getDistance()*input.CfP(ID_).get_nor().getM();
+      output.c().set_warp_nor(J_nor_DrDP*J_DrDP_CrCP*J_CrCP_nor*input.CfP(ID_).get_warp_nor());
+    }
   }
   void jacTransform(MXD& J, const mtInput& input) const{
     J.setZero();
     const int& camID = input.CfP(ID_).camID_;
     if(camID != outputCamID_){
-      input.updateMultiCameraExtrinsics(mpMultiCamera_); const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
+      input.updateMultiCameraExtrinsics(mpMultiCamera_);
+      const QPD qDC = input.qCM(outputCamID_)*input.qCM(camID).inverted(); // TODO: avoid double computation
       const V3D CrCD = input.qCM(camID).rotate(V3D(input.MrMC(outputCamID_)-input.MrMC(camID)));
       const V3D CrCP = input.dep(ID_).getDistance()*input.CfP(ID_).get_nor().getVec();
       const V3D DrDP = qDC.rotate(V3D(CrCP-CrCD));

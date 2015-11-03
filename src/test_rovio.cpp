@@ -34,7 +34,7 @@
 #include "rovio/RovioScene.hpp"
 #endif
 
-static constexpr unsigned int nMax_ = 20;    // Maximal number of considered features in the filter state.
+static constexpr unsigned int nMax_ = 25;    // Maximal number of considered features in the filter state.
 static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
 static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
 static constexpr int nCam_ = 2;              // Used total number of cameras.

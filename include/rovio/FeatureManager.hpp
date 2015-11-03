@@ -320,7 +320,6 @@ class FeatureSetManager{
     bool doDelete;
     FeatureCoordinates featureCoordinates;
     FeatureDistance featureDistance;
-    featureCoordinates.mpCamera_ = &mpMultiCamera_->cameras_[camID];
     for(unsigned int i=0;i<nMax;i++){
       if(isValid_[i]){
         mpMultiCamera_->transformFeature(camID,*(features_[i].mpCoordinates_),*(features_[i].mpDistance_),featureCoordinates,featureDistance);
