@@ -8,7 +8,7 @@ Video: https://youtu.be/ZMAISVy-6ao
 Dependencies:
 * ros
 * kindr (https://github.com/ethz-asl/kindr)
-* lightweight_filtering (as submodule, "use git submodule update --init --recursive")
+* lightweight_filtering (as submodule, use "git submodule update --init --recursive")
 
 ```
 #!command
