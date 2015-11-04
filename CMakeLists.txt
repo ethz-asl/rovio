@@ -2,6 +2,8 @@ cmake_minimum_required (VERSION 2.6)
 project(rovio)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -march=native")
 
+add_subdirectory(lightweight_filtering)
+
 ##################### Find, include, and compile library #####################
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 if(0)
