@@ -49,7 +49,7 @@ int main(int argc, char** argv){
   nh_private.param("filter_config", filter_config, filter_config);
 
   // Filter
-  mtFilter* mpFilter = new mtFilter;
+  std::shared_ptr<mtFilter> mpFilter(new mtFilter);
 
   mpFilter->readFromInfo(filter_config);
 
@@ -68,7 +68,5 @@ int main(int argc, char** argv){
   rovioNode.makeTest();
 
   ros::spin();
-
-  delete mpFilter;
   return 0;
 }

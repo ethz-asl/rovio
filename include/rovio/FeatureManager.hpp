@@ -79,6 +79,8 @@ class FeatureManager{
   }
 
   /** Destructor
+   *
+   *  @todo complete rule of three
    */
   virtual ~FeatureManager(){
     delete _mpCoordinates;

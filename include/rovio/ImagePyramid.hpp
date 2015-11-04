@@ -62,6 +62,7 @@ void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
 /** \brief Image pyramid with selectable number of levels.
  *
  *   @tparam n_levels - Number of pyramid levels.
+ *   @todo: complete rule of three
  */
 template<int n_levels>
 class ImagePyramid{

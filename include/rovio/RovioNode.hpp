@@ -30,6 +30,7 @@
 #define ROVIO_ROVIONODE_HPP_
 
 #include <queue>
+#include <memory>
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -72,12 +73,12 @@ class RovioNode{
   ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
 
   typedef FILTER mtFilter;
-  mtFilter* mpFilter_;
+  std::shared_ptr<mtFilter> mpFilter_;
   typedef typename mtFilter::mtFilterState mtFilterState;
   typedef typename mtFilterState::mtState mtState;
-  typedef typename decltype(mpFilter_->mPrediction_)::mtMeas mtPredictionMeas;
+  typedef typename mtFilter::mtPrediction::mtMeas mtPredictionMeas;
   mtPredictionMeas predictionMeas_;
-  typedef typename std::tuple_element<0,decltype(mpFilter_->mUpdates_)>::type::mtMeas mtImgMeas;
+  typedef typename std::tuple_element<0,typename mtFilter::mtUpdates>::type::mtMeas mtImgMeas;
   mtImgMeas imgUpdateMeas_;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
@@ -109,7 +110,7 @@ class RovioNode{
 
   /** \brief Constructor
    */
-  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
+  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
       : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
@@ -124,7 +125,6 @@ class RovioNode{
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
-//    ros::Timer timer = nh_.createTimer(ros::Duration(0.1), &RovioNode::windowUpdateCallback);
 
     world_frame_ = "/world";
     camera_frame_ = "/camera";
@@ -140,22 +140,11 @@ class RovioNode{
     odometryMsg_.child_frame_id = camera_frame_;
     poseMsgSeq_ = 1;
     isInitialized_ = false;
-
-    for(int i=0;i<mtState::nCam_;i++){
-      cv::namedWindow("Tracker" + std::to_string(i),cv::WINDOW_AUTOSIZE | CV_GUI_NORMAL);
-    }
-    cv::namedWindow("Patches",cv::WINDOW_AUTOSIZE | CV_GUI_NORMAL);
   }
 
   /** \brief Destructor
    */
-  virtual ~RovioNode(){
-    cv::destroyAllWindows();
-  }
-//
-//  void windowUpdateCallback(const ros::TimerEvent&){
-//    std::cout << "asfd" << std::endl;
-//  }
+  virtual ~RovioNode(){}
 
   /** \brief Tests the functionality of the rovio node.
    *
@@ -337,12 +326,12 @@ class RovioNode{
         for(int i=0;i<mtState::nCam_;i++){
           if(!mpFilter_->safe_.img_[i].empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
             cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
-            cv::waitKey(1);
+            cv::waitKey(3);
           }
         }
         if(!mpFilter_->safe_.patchDrawing_.empty() && std::get<0>(mpFilter_->mUpdates_).visualizePatches_){
           cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
-          cv::waitKey(5);
+          cv::waitKey(3);
         }
 
         // Obtain the save filter state.

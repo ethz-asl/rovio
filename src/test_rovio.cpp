@@ -27,6 +27,7 @@
 */
 
 #include <ros/package.h>
+#include <memory>
 
 #include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
@@ -41,7 +42,7 @@ static constexpr int nCam_ = 2;              // Used total number of cameras.
 typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
 
 #ifdef MAKE_SCENE
-rovio::RovioScene<mtFilter> mRovioScene;
+static rovio::RovioScene<mtFilter> mRovioScene;
 
 void idleFunc(){
   ros::spinOnce();
@@ -53,10 +54,10 @@ int main(int argc, char** argv){
   ros::init(argc, argv, "TestFilter");
   ros::NodeHandle nh;
   ros::NodeHandle nh_private("~");
-  std::string rootdir = ros::package::getPath("rovio");
+  std::string rootdir = ros::package::getPath("rovio"); // Leaks memory
 
   // Filter
-  mtFilter* mpFilter = new mtFilter; // VERY important, needs to be allocated on heap, too large for stack!
+  std::shared_ptr<mtFilter> mpFilter(new mtFilter); // VERY important, needs to be allocated on heap, too large for stack!
   mpFilter->readFromInfo(rootdir + "/cfg/rovio.info");
 
   // Node
@@ -76,6 +77,5 @@ int main(int argc, char** argv){
   ros::spin();
 #endif
 
-  delete mpFilter;
   return 0;
 }

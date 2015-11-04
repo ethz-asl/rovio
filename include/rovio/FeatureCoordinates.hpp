@@ -91,57 +91,33 @@ class FeatureCoordinates{
 
   /** \brief Constructor
    */
-  FeatureCoordinates(){
-    mpCamera_ = nullptr;
-    trackWarping_ = false;
-    resetCoordinates();
-  }
+  FeatureCoordinates();
 
   /** \brief Constructor based on given pixel coordinates
    *
    *  @param pixel - the pixel coordinates the feature should be set to.
    */
-  FeatureCoordinates(const cv::Point2f& pixel){
-    mpCamera_ = nullptr;
-    trackWarping_ = false;
-    resetCoordinates();
-    c_ = pixel;
-    valid_c_ = true;
-  }
+  FeatureCoordinates(const cv::Point2f& pixel);
 
   /** \brief Constructor based on given pixel coordinates
    *
    *  @param nor - the bearing vector the feature should be set to.
    */
-  FeatureCoordinates(const LWF::NormalVectorElement& nor){
-    mpCamera_ = nullptr;
-    trackWarping_ = false;
-    resetCoordinates();
-    nor_ = nor;
-    valid_nor_ = true;
-  }
+  FeatureCoordinates(const LWF::NormalVectorElement& nor);
 
   /** \brief Constructor
    */
-  FeatureCoordinates(const Camera* mpCamera): mpCamera_(mpCamera){
-    trackWarping_ = false;
-    resetCoordinates();
-  }
+  FeatureCoordinates(const Camera* mpCamera);
 
   /** \brief Destructor
    */
-  virtual ~FeatureCoordinates(){};
+  virtual ~FeatureCoordinates();
 
   /** \brief Resets the feature coordinates \ref c_, \ref nor_.
    *
    *  Note: that the values of the feature coordinates \ref c_ and \ref nor_ are not deleted. They are just set invalid.
    */
-  void resetCoordinates(){
-    valid_c_ = false;
-    valid_nor_ = false;
-    set_warp_identity();
-    camID_ = -1;
-  }
+  void resetCoordinates();
 
   /** \brief Compute the feature's pixel coordinates \ref c_. Typically used in conjunction with \ref get_c.
    *
@@ -149,26 +125,13 @@ class FeatureCoordinates{
    *   from the bearing vector \ref nor_ (if valid).
    *  @return whether the computation was successful
    */
-  bool com_c() const{
-    if(!valid_c_){
-      assert(mpCamera_ != nullptr);
-      if(valid_nor_ && mpCamera_->bearingToPixel(nor_,c_)){
-        valid_c_ = true;
-      }
-    }
-    return valid_c_;
-  }
+  bool com_c() const;
 
   /** \brief Get the feature's pixel coordinates \ref c_. Typically used in conjunction with \ref com_c.
    *
    *  @return the valid feature pixel coordinates \ref c_.
    */
-  const cv::Point2f& get_c() const{
-    if(!com_c()){
-      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
-    }
-    return c_;
-  }
+  const cv::Point2f& get_c() const;
 
   /** \brief Compute the feature's bearing vector \ref nor_. Typically used in conjunction with \ref get_nor.
    *
@@ -176,40 +139,20 @@ class FeatureCoordinates{
    *  feature pixel coordinates \ref c_ (if valid).
    *  @return the valid bearing vector \ref nor_.
    */
-  bool com_nor() const{
-    if(!valid_nor_){
-      assert(mpCamera_ != nullptr);
-      if(valid_c_ && mpCamera_->pixelToBearing(c_,nor_)){
-        valid_nor_ = true;
-      }
-    }
-    return valid_nor_;
-  }
+  bool com_nor() const;
 
   /** \brief Get the feature's bearing vector \ref nor_. Typically used in conjunction with \ref com_nor.
    *
    *  @return the valid bearing vector \ref nor_.
    */
-  const LWF::NormalVectorElement& get_nor() const{
-    if(!com_nor()){
-      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
-    }
-    return nor_;
-  }
+  const LWF::NormalVectorElement& get_nor() const;
 
   /** \brief Get the feature's pixel coordinates Jacobian.
    *
    *  Note: Validity can be checked with \ref com_c
    *  @return The Jacobian of the pixel output w.r.t. the bearing vector
    */
-  Eigen::Matrix<double,2,2> get_J() const{
-    assert(mpCamera_ != nullptr);
-    if(!mpCamera_->bearingToPixel(get_nor(),c_,matrix2dTemp_)){
-      matrix2dTemp_.setZero();
-      std::cout << "    \033[31mERROR: No valid coordinate data!\033[0m" << std::endl;
-    }
-    return matrix2dTemp_;
-  }
+  Eigen::Matrix<double,2,2> get_J() const;
 
   /** \brief Sets the feature pixel coordinates \ref c_ and declares them valid (\ref valid_c_ = true).
    *
@@ -218,15 +161,7 @@ class FeatureCoordinates{
    *  @param c - Feature pixel coordinates.
    *  @param resetWarp - Should the warping be invalidated.
    */
-  void set_c(const cv::Point2f& c, const bool resetWarp = true){
-    c_ = c;
-    valid_c_ = true;
-    valid_nor_ = false;
-    if(trackWarping_ && resetWarp){
-      valid_warp_c_ = false;
-      valid_warp_nor_ = false;
-    }
-  }
+  void set_c(const cv::Point2f& c, const bool resetWarp = true);
 
   /** \brief Sets the feature's bearing vector \ref nor_ and declares it valid (\ref valid_nor_ = true).
    *
@@ -235,70 +170,31 @@ class FeatureCoordinates{
    *  @param nor - Bearing vector.
    *  @param resetWarp - Should the warping be invalidated.
    */
-  void set_nor(const LWF::NormalVectorElement& nor, const bool resetWarp = true){
-    nor_ = nor;
-    valid_nor_ = true;
-    valid_c_ = false;
-    if(trackWarping_ && resetWarp){
-      valid_warp_c_ = false;
-      valid_warp_nor_ = false;
-    }
-  }
+  void set_nor(const LWF::NormalVectorElement& nor, const bool resetWarp = true);
 
   /** \brief Compute the pixel warping. If necessary derives it from the bearing warping.
    *
    * @return Whether the computation was successfull.
    */
-  bool com_warp_c() const{
-    if(!valid_warp_c_){
-      if(valid_warp_nor_ && com_c() && com_nor()){
-        matrix2dTemp_ = get_J();
-        warp_c_ = (matrix2dTemp_*warp_nor_).cast<float>();
-        valid_warp_c_ = true;
-      }
-    }
-    return valid_warp_c_;
-  }
+  bool com_warp_c() const;
 
   /** \brief Get the pixel warping. If necessary derives it from the bearing warping.
    *
    * @return The valid warping matrix for pixel coordinates.
    */
-  Eigen::Matrix2f& get_warp_c() const{
-    if(!com_warp_c()){
-      std::cout << "    \033[31mERROR: No valid warping data in get_warp_c!\033[0m" << std::endl;
-    }
-    return warp_c_;
-  }
+  Eigen::Matrix2f& get_warp_c() const;
 
   /** \brief Compute the bearing vector warping. If necessary derives it from the pixel warping.
    *
    * @return Whether the computation was successfull.
    */
-  bool com_warp_nor() const{
-    if(!valid_warp_nor_){
-      if(valid_warp_c_ && com_c() && com_nor()){
-        matrix2dTemp_ = get_J();
-        fullPivLU2d_.compute(matrix2dTemp_);
-        if(fullPivLU2d_.rank() == 2){
-          warp_nor_ = fullPivLU2d_.inverse()*warp_c_.cast<double>();
-          valid_warp_nor_ = true;
-        }
-      }
-    }
-    return valid_warp_nor_;
-  }
+  bool com_warp_nor() const;
 
   /** \brief Get the bearing vector warping. If necessary derives it from the pixel warping.
    *
    * @return The valid warping matrix for pixel coordinates.
    */
-  Eigen::Matrix2d& get_warp_nor() const{
-    if(!com_warp_nor()){
-      std::cout << "    \033[31mERROR: No valid warping data in get_warp_nor!\033[0m" << std::endl;
-    }
-    return warp_nor_;
-  }
+  Eigen::Matrix2d& get_warp_nor() const;
 
   /** \brief Returns a desired corner coordinate (in the patch) as FeatureCoordinate
    *
@@ -307,99 +203,53 @@ class FeatureCoordinates{
    * @param y - y coordinate of corner
    * @return the corner coordinate
    */
-  FeatureCoordinates get_patchCorner(const double x, const double y) const{
-    FeatureCoordinates temp; // TODO: avoid temp
-    get_nor().boxPlus(get_warp_nor()*Eigen::Vector2d(x,y),norTemp_);
-    temp.set_nor(norTemp_);
-    temp.mpCamera_ = mpCamera_;
-    temp.camID_ = camID_;
-    return temp;
-  }
+  FeatureCoordinates get_patchCorner(const double x, const double y) const;
 
   /** \brief Set the warping matrix for pixel coordinates \ref warp_c_.
    *
    * Note: The validity of \ref warp_nor_ is set to invalid.
    * @param warp_c - warping matrix in pixel coordinates.
    */
-  void set_warp_c(const Eigen::Matrix2f& warp_c){
-    warp_c_ = warp_c;
-    valid_warp_c_ = true;
-    valid_warp_nor_ = false;
-    isWarpIdentity_ = false;
-  }
+  void set_warp_c(const Eigen::Matrix2f& warp_c);
 
   /** \brief Set the warping matrix for bearing coordinates \ref warp_nor_.
    *
    * Note: The validity of \ref warp_c_ is set to invalid.
    * @param warp_nor - warping matrix for bearing vector.
    */
-  void set_warp_nor(const Eigen::Matrix2d& warp_nor){
-    warp_nor_ = warp_nor;
-    valid_warp_nor_ = true;
-    valid_warp_c_ = false;
-    isWarpIdentity_ = false;
-  }
+  void set_warp_nor(const Eigen::Matrix2d& warp_nor);
 
   /** \brief Set the warping to identity (pixel coordinates).
    *
    * Note: The validity of \ref warp_nor_ is set to invalid.
    */
-  void set_warp_identity(){
-    warp_c_.setIdentity();
-    valid_warp_c_ = true;
-    valid_warp_nor_ = false;
-    isWarpIdentity_ = true;
-  }
+  void set_warp_identity();
 
   /** \brief Checks if the feature coordinates can be associated with a landmark in front of the camera.
    *
    *   @return true, if the feature coordinates can be associated with a landmark in front of the camera.
    */
-  bool isInFront() const{
-    return valid_c_ || (valid_nor_ && nor_.getVec()[2] > 0);
-  }
+  bool isInFront() const;
 
   /** \brief Checks if warping is near identity for pixel coordinates
    *
    *   @return true, if the feature warping is near identity
    */
-  bool isNearIdentityWarping() const{
-    return isWarpIdentity_ || (com_warp_c() && (get_warp_c()-Eigen::Matrix2f::Identity()).norm() < 1e-6);
-  }
+  bool isNearIdentityWarping() const;
 
   /** \brief Sets the feature coordinates standard deviation values \ref pixelCov_, \ref sigma1_, \ref sigma2_, \ref eigenVector1_, \ref eigenVector2_, \ref sigmaAngle_
    *         from a 2x2 covariance matrix.
    *
    *  @param cov - Covariance matrix (2x2).
    */
-  void setPixelCov(const Eigen::Matrix2d& cov){
-    pixelCov_ = cov;
-    es_.compute(cov);
-    sigmaAngle_ = std::atan2(es_.eigenvectors()(1,0).real(),es_.eigenvectors()(0,0).real());
-    sigma1_ = sqrt(es_.eigenvalues()(0).real());
-    sigma2_ = sqrt(es_.eigenvalues()(1).real());
-    if(sigma1_<sigma2_){ // Get larger axis on index 1
-      const double temp = sigma1_;
-      sigma1_ = sigma2_;
-      sigma2_ = temp;
-      sigmaAngle_ += 0.5*M_PI;
-      eigenVector1_ = es_.eigenvectors().col(1).real();
-      eigenVector2_ = es_.eigenvectors().col(0).real();
-    } else {
-      eigenVector1_ = es_.eigenvectors().col(0).real();
-      eigenVector2_ = es_.eigenvectors().col(1).real();
-    }
-  }
+  void setPixelCov(const Eigen::Matrix2d& cov);
 
   /** \brief Draws a point at given feature coordinates.
    *
    *  @param drawImg - Image in which the point should be drawn.
    *  @param color   - Color of the point.
    */
-  void drawPoint(cv::Mat& drawImg, const cv::Scalar& color) const{
-    cv::Size size(2,2);
-    cv::ellipse(drawImg,get_c(),size,0,0,360,color,-1,8,0);
-  }
+  void drawPoint(cv::Mat& drawImg, const cv::Scalar& color) const;
 
   /** \brief Draws an uncertainty ellipse at given feature coordinates.
    *
@@ -408,10 +258,7 @@ class FeatureCoordinates{
    *  @param scaleFactor     - Scale Factor of the uncertainty ellipse. If set to 1, the ellipse axes lengths match the true standard deviation values.
    *  @param withCenterPoint - Set to true if the center point of the ellipse should be drawn.
    */
-  void drawEllipse(cv::Mat& drawImg, const cv::Scalar& color, double scaleFactor = 2.0, const bool withCenterPoint = true) const{
-    if(withCenterPoint) drawPoint(drawImg,color);
-    cv::ellipse(drawImg,get_c(),cv::Size(std::max(static_cast<int>(scaleFactor*sigma1_+0.5),1),std::max(static_cast<int>(scaleFactor*sigma2_+0.5),1)),sigmaAngle_*180/M_PI,0,360,color,1,8,0);
-  }
+  void drawEllipse(cv::Mat& drawImg, const cv::Scalar& color, double scaleFactor = 2.0, const bool withCenterPoint = true) const;
 
   /** \brief Draws a line between two feature coordinates.
    *
@@ -420,9 +267,7 @@ class FeatureCoordinates{
    *  @param color       - Color of the line.
    *  @param thickness   - Thickness of the line.
    */
-  void drawLine(cv::Mat& drawImg, const FeatureCoordinates& other, const cv::Scalar& color, int thickness = 2) const{
-    cv::line(drawImg,get_c(),other.get_c(),color,thickness);
-  }
+  void drawLine(cv::Mat& drawImg, const FeatureCoordinates& other, const cv::Scalar& color, int thickness = 2) const;
 
   /** \brief Draws a text at specific feature coordinates.
    *
@@ -430,9 +275,7 @@ class FeatureCoordinates{
    *  @param s           - Text.
    *  @param color       - Color of the text.
    */
-  void drawText(cv::Mat& drawImg, const std::string& s, const cv::Scalar& color) const{
-    cv::putText(drawImg,s,get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
-  }
+  void drawText(cv::Mat& drawImg, const std::string& s, const cv::Scalar& color) const;
 
   /** \brief Get the depth value from the triangulation of two bearing vectors (this is in C1, other is in C2).
    *
@@ -444,17 +287,7 @@ class FeatureCoordinates{
    *
    *  @todo compare with d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
    */
-  bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
-    Eigen::Matrix<double,3,2> B;
-    B <<  qC2C1.rotate(get_nor().getVec()), other.get_nor().getVec();
-    const Eigen::Matrix2d BtB = B.transpose() * B;
-    if(BtB.determinant() < 0.000001){ // Projection rays almost parallel.
-      return false;
-    }
-    const Eigen::Vector2d dv = - BtB.inverse() * B.transpose() * C2rC2C1;
-    d.setParameter(fabs(dv[0]));
-    return true;
-  }
+  bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d);
 
   /** \brief Get the depth uncertainty tau of a triangulated depth value (this is in C1, other is in C2).
    *
@@ -477,24 +310,7 @@ class FeatureCoordinates{
    *
    * @todo rethink
    */
-  float getDepthUncertaintyTau(const V3D& C1rC1C2, const float d, const float px_error_angle)
-  {
-    const V3D C1fP = get_nor().getVec();
-    float t_0 = C1rC1C2(0);
-    float t_1 = C1rC1C2(1);
-    float t_2 = C1rC1C2(2);
-    float a_0 = C1fP(0) * d - t_0;
-    float a_1 = C1fP(1) * d - t_1;
-    float a_2 = C1fP(2) * d - t_2;
-    float t_norm = std::sqrt(t_0 * t_0 + t_1 * t_1 + t_2 * t_2);
-    float a_norm = std::sqrt(a_0 * a_0 + a_1 * a_1 + a_2 * a_2);
-    float alpha = std::acos((C1fP(0) * t_0 + C1fP(1) * t_1 + C1fP(2) * t_2) / t_norm);
-    float beta = std::acos(( a_0 * (-t_0) + a_1 * (-t_1) + a_2 * (-t_2) ) / (t_norm * a_norm));
-    float beta_plus = beta + px_error_angle;
-    float gamma_plus = M_PI - alpha - beta_plus;                             // Triangle angles sum to PI.
-    float d_plus = t_norm * std::sin(beta_plus) / std::sin(gamma_plus);      // Law of sines.
-    return (d_plus - d);                                                     // Tau.
-  }
+  float getDepthUncertaintyTau(const V3D& C1rC1C2, const float d, const float px_error_angle);
 };
 
 }

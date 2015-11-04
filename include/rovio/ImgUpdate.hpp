@@ -281,6 +281,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     alignCoverageRatio_ = 2.0;
     alignMaxUniSample_ = 5;
     useCrossCameraMeasurements_ = true;
+    removalFactor_ = 1.1;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);

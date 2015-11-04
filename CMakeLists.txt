@@ -86,7 +86,12 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
 
-add_library(${PROJECT_NAME} src/test_rovio.cpp)
+if(MAKE_SCENE)
+	add_library(${PROJECT_NAME} src/test_rovio.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp src/Scene.cpp)
+else()
+	add_library(${PROJECT_NAME} src/test_rovio.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
+endif()
+	
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
@@ -105,10 +110,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/")
 	#add_subdirectory(gtest gtest)
 	enable_testing()
 	include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
-	add_executable(test_patch src/test_patch.cpp)
-	target_link_libraries(test_patch gtest_main gtest pthread ${catkin_LIBRARIES})
+	add_executable(test_patch src/test_patch.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
+	target_link_libraries(test_patch gtest_main gtest pthread ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
 	add_test(test_patch test_patch)
-	add_executable(test_mlp src/test_mlp.cpp)
-	target_link_libraries(test_mlp gtest_main gtest pthread ${catkin_LIBRARIES})
+	add_executable(test_mlp src/test_mlp.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
+	target_link_libraries(test_mlp gtest_main gtest pthread ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
 	add_test(test_mlp test_mlp)
 endif()

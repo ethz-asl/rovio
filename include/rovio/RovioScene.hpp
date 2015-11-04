@@ -31,6 +31,7 @@
 
 #include "lightweight_filtering/common.hpp"
 #include "rovio/Scene.hpp"
+#include <memory>
 
 namespace rot = kindr::rotations::eigen_impl;
 
@@ -41,25 +42,17 @@ class RovioScene{
  public:
   typedef typename FILTER::mtFilterState mtFilterState;
   typedef typename mtFilterState::mtState mtState;
-  FILTER* mpFilter_;
+  std::shared_ptr<FILTER> mpFilter_;
 
   rovio::Scene mScene;
-  SceneObject* mpSensor_[mtState::nCam_];
-  SceneObject* mpGroundtruth_;
-  SceneObject* mpLines_[mtState::nCam_];
-  SceneObject* mpDepthVar_[mtState::nCam_];
-  SceneObject* mpPatches_[mtState::nMax_];
+  cv::Mat patch_;
+  std::shared_ptr<SceneObject> mpSensor_[mtState::nCam_];
+  std::shared_ptr<SceneObject> mpGroundtruth_;
+  std::shared_ptr<SceneObject> mpLines_[mtState::nCam_];
+  std::shared_ptr<SceneObject> mpDepthVar_[mtState::nCam_];
+  std::shared_ptr<SceneObject> mpPatches_[mtState::nMax_];
   RovioScene(){
-    mpFilter_ = nullptr;
-    for(int camID=0;camID<mtState::nCam_;camID++){
-      mpSensor_[camID] = nullptr;
-      mpGroundtruth_ = nullptr;
-      mpLines_[camID] = nullptr;
-      mpDepthVar_[camID] = nullptr;
-    }
-    for(int i=0;i<mtState::nMax_;i++){
-      mpPatches_[i] = nullptr;
-    }
+    patch_ = cv::Mat::zeros(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1),CV_8UC1);
   }
   virtual ~RovioScene(){};
   void addKeyboardCB(unsigned char Key, std::function<void()> f){
@@ -68,17 +61,17 @@ class RovioScene{
   void addSpecialKeyboardCB(int Key, std::function<void()> f){
     mScene.addSpecialKeyboardCB(Key,f);
   }
-  void initScene(int argc, char** argv, const std::string& mVSFileName,const std::string& mFSFileName,FILTER* mpFilter){
+  void initScene(int argc, char** argv, const std::string& mVSFileName,const std::string& mFSFileName,std::shared_ptr<FILTER> mpFilter){
     initGlut(argc,argv,mScene);
     mScene.init(argc, argv,mVSFileName,mFSFileName);
     mpFilter_ = mpFilter;
 
-    rovio::SceneObject* mpGroundplane1 = mScene.addSceneObject();
+    std::shared_ptr<SceneObject> mpGroundplane1(mScene.addSceneObject());
     mpGroundplane1->makeGroundPlaneMesh(0.25,40);
     mpGroundplane1->setColorFull(Eigen::Vector4f(0.6f,0.6f,0.6f,1.0f));
     mpGroundplane1->lineWidth_ = 1.0f;
     mpGroundplane1->W_r_WB_(2) = -1.0f;
-    rovio::SceneObject* mpGroundplane2 = mScene.addSceneObject();
+    std::shared_ptr<SceneObject> mpGroundplane2(mScene.addSceneObject());
     mpGroundplane2->makeGroundPlaneMesh(1.0,10);
     mpGroundplane2->setColorFull(Eigen::Vector4f(0.8f,0.8f,0.8f,1.0f));
     mpGroundplane2->lineWidth_ = 3.0f;
@@ -111,6 +104,7 @@ class RovioScene{
     mpGroundtruth_->allocateBuffer();
     for(int i=0;i<mtState::nMax_;i++){
       mpPatches_[i] = mScene.addSceneObject();
+      mpPatches_[i]->initTexture(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1));
     }
 
     mScene.setView(Eigen::Vector3f(-5.0f,-5.0f,5.0f),Eigen::Vector3f(0.0f,0.0f,0.0f));
@@ -206,9 +200,8 @@ class RovioScene{
 
           mpPatches_[i]->clear();
           mpPatches_[i]->makeTexturedRectangle(1.0f,1.0f);
-          cv::Mat patch = cv::Mat::zeros(mtState::patchSize_*pow(2,mtState::nLevels_-1),mtState::patchSize_*pow(2,mtState::nLevels_-1),CV_8UC1);
-          filterState.fsm_.features_[i].mpMultilevelPatch_->drawMultilevelPatch(patch,cv::Point2i(0,0),1,false);
-          mpPatches_[i]->setTexture(patch);
+          filterState.fsm_.features_[i].mpMultilevelPatch_->drawMultilevelPatch(patch_,cv::Point2i(0,0),1,false);
+          mpPatches_[i]->setTexture(patch_);
           for(int x=0;x<2;x++){
             for(int y=0;y<2;y++){
               mpPatches_[i]->vertices_[y*2+x].pos_.fromEigen(cornerVec[y*2+x].cast<float>());

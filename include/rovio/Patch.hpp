@@ -158,8 +158,10 @@ class Patch {
         for(int i=0;i<stretch;++i){
           for(int j=0;j<stretch;++j){
             img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+0] = (uint8_t)(it_patch[x]);
-            img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+1] = (uint8_t)(it_patch[x]);
-            img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+2] = (uint8_t)(it_patch[x]);
+            if(drawImg.channels() == 3){
+              img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+1] = (uint8_t)(it_patch[x]);
+              img_ptr[x*stretch*refStepX+i*refStepY+j*refStepX+2] = (uint8_t)(it_patch[x]);
+            }
           }
         }
     }

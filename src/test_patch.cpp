@@ -36,8 +36,7 @@ class PatchTesting : public virtual ::testing::Test {
       }
     }
   }
-  virtual ~PatchTesting() {
-  }
+  virtual ~PatchTesting() {}
 };
 
 // Test constructors
