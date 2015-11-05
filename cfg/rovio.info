@@ -167,24 +167,6 @@ Prediction
 	    inertialMotionAccTh 0.5;				Treshold on acceleration for motion detection [m/s^2]
 	}
 }
-Groundtruth
-{
-	doVisualization false;						Should the groundtruth be visualized (3D scene)
-	IrIJ_x 0.0;									X-position between inertial frames
-	IrIJ_y 0.0;									Y-position between inertial frames
-	IrIJ_z 0.0;									Z-position between inertial frames
-	qJI_x 0.0;									X-orientation between inertial frames
-	qJI_y 0.0;									Y-orientation between inertial frames
-	qJI_z 0.0;									Z-orientation between inertial frames
-	qJI_w 1.0;									W-orientation between inertial frames
-	BrBC_x 0.0;									X-position between body frames
-	BrBC_y 0.0;									Y-position between body frames
-	BrBC_z 0.0;									Z-position between body frames
-	qCB_x 0.0;									X-orientation between body frames
-	qCB_y 0.0;									Y-orientation between body frames
-	qCB_z 0.0;									Z-orientation between body frames
-	qCB_w 1.0;									W-orientation between body frames
-}
 PoseUpdate
 {
     UpdateNoise
@@ -197,6 +179,7 @@ PoseUpdate
         att_2 0.0001
     }
     MahalanobisTh0 12.6511204
+	doVisualization false;						Should the measured poses be vizualized
     qVM_x 0
     qVM_y 0
     qVM_z 0

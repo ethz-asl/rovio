@@ -80,6 +80,8 @@ class RovioNode{
   mtPredictionMeas predictionMeas_;
   typedef typename std::tuple_element<0,typename mtFilter::mtUpdates>::type::mtMeas mtImgMeas;
   mtImgMeas imgUpdateMeas_;
+  typedef typename std::tuple_element<1,typename mtFilter::mtUpdates>::type::mtMeas mtPoseMeas;
+  mtPoseMeas poseUpdateMeas_;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
   geometry_msgs::TransformStamped transformMsg_;
@@ -98,10 +100,6 @@ class RovioNode{
   AttitudeToYprCT attitudeToYprCF_;
   MXD attitudeOutputCov_;
   MXD yprOutputCov_;
-
-  static const int groundtruthN_ = 3;
-  std::queue<rot::RotationQuaternionPD> groundtruth_qCJ_;
-  std::queue<Eigen::Vector3d> groundtruth_JrJC_;
 
   // ROS names for output tf frames.
   std::string world_frame_;
@@ -292,15 +290,10 @@ class RovioNode{
    *  @param transform - Groundtruth message.
    */
   void groundtruthCallback(const geometry_msgs::TransformStamped::ConstPtr& transform){
-    groundtruth_qCJ_.push(QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z));
-    groundtruth_JrJC_.push(Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z));
-
-    mpFilter_->safe_.groundtruth_qCJ_ = groundtruth_qCJ_.front();
-    mpFilter_->safe_.groundtruth_JrJC_ = groundtruth_JrJC_.front();
-
-    while(groundtruth_qCJ_.size() > groundtruthN_){
-      groundtruth_qCJ_.pop();
-      groundtruth_JrJC_.pop();
+    if(isInitialized_){
+      poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
+      poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
+      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec());
     }
   }
 

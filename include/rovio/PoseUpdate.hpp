@@ -137,8 +137,10 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   V3D MrMV_;
 
   void evalInnovation(mtInnovation& y, const mtState& state, const mtNoise& noise) const{
+    // JrJV = JrJW + qWJ^T*(WrWM + qWM*MrMV)
+    // qVJ = qVM*qWM^T*qWJ
     if(poseIndex_ >= 0){
-      y.pos() = state.poseLin(poseIndex_) + (state.poseRot(poseIndex_).inverted()*state.qWM()).rotate(V3D(state.WrWM()+MrMV_)) - meas_.pos() + noise.pos();
+      y.pos() = state.poseLin(poseIndex_) + state.poseRot(poseIndex_).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(MrMV_))) - meas_.pos() + noise.pos();
       QPD attNoise = attNoise.exponentialMap(noise.att());
       y.att() = attNoise*qVM_*state.qWM().inverted()*state.poseRot(poseIndex_)*meas_.att().inverted();
     }
@@ -147,13 +149,13 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     if(poseIndex_ >= 0){
       F.setZero();
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pos>()) =
-          MPD(state.poseRot(poseIndex_).inverted()*state.qWM()).matrix();
+          MPD(state.poseRot(poseIndex_).inverted()).matrix();
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(poseIndex_)) =
                 M3D::Identity();
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_att>()) =
-          MPD(state.poseRot(poseIndex_).inverted()).matrix()*gSM(state.qWM().rotate(V3D(state.WrWM()+MrMV_)));
+          MPD(state.poseRot(poseIndex_).inverted()).matrix()*gSM(state.qWM().rotate(MrMV_));
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
-          -gSM((state.poseRot(poseIndex_).inverted()*state.qWM()).rotate(V3D(state.WrWM()+MrMV_)))*MPD(state.poseRot(poseIndex_).inverted()).matrix();
+          -gSM(state.poseRot(poseIndex_).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(MrMV_))))*MPD(state.poseRot(poseIndex_).inverted()).matrix();
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_att>()) =
           -MPD(qVM_*state.qWM().inverted()).matrix();
       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
@@ -172,6 +174,10 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     isFinished = true;
+    // JrJM = JrJV - qWJ^T*qWM*MrMV
+    filterstate.state_.aux().poseMeasLin_ = meas.pos() - (filterstate.state_.poseRot(poseIndex_).inverted()*filterstate.state_.qWM()).rotate(MrMV_);
+    // qMJ = qVM^T*qVJ;
+    filterstate.state_.aux().poseMeasRot_ = qVM_.inverted()*meas.att();
   }
 };
 

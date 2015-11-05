@@ -72,6 +72,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
       qCM_[i].setIdentity();
       MrMC_[i].setZero();
     }
+    poseMeasRot_.setIdentity();
+    poseMeasLin_.setZero();
   };
 
   /** \brief Destructor
@@ -91,6 +93,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
+  rot::RotationQuaternionPD poseMeasRot_; /**<Groundtruth attitude measurement. qMJ.*/
+  Eigen::Vector3d poseMeasLin_; /**<Groundtruth position measurement. JrJM*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,8 +142,8 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
   static constexpr unsigned int _fea = _vea+1;  /**<Idx. Robocentric feature parametrization.*/
-  static constexpr unsigned int _pop = _fea+1;  /**<Idx. Additonial pose in state, linear part.*/
-  static constexpr unsigned int _poa = _pop+1;  /**<Idx. Additonial pose in state, rotational part.*/
+  static constexpr unsigned int _pop = _fea+1;  /**<Idx. Additonial pose in state, linear part. JrJW.*/
+  static constexpr unsigned int _poa = _pop+1;  /**<Idx. Additonial pose in state, rotational part. qWJ.*/
   static constexpr unsigned int _aux = _poa+1;  /**<Idx. Auxiliary state.*/
 
   /** \brief Constructor
@@ -391,6 +395,39 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   //@}
 
   //@{
+  /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
+   *
+   *  @note - This is compute based on the external pose measurement
+   *  @param i - Pose index
+   *  @param camID - %Camera ID
+   *  @return the position vector WrWC (World->%Camera, expressed in World).
+   */
+  inline V3D WrWC_ext(const int i, const int camID = 0) const{
+    assert(i<nPose_);
+    assert(camID<nCam_);
+    // WrWC = qWJ*(JrJM-JrJW)+qWM*MrMC
+    return poseRot(i).rotate(V3D(this->aux().poseMeasLin_-poseLin(i)))+this->template get<_att>().rotate(MrMC(camID));
+  }
+
+  //@}
+
+  //@{
+  /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
+   *
+   *  @note - This is compute based on the external pose measurement
+   *  @param i - Pose index
+   *  @param camID - %Camera ID
+   *  @return he quaternion qCW (World Coordinates->%Camera Coordinates).
+   */
+  inline QPD qCW_ext(const int i, const int camID = 0) const{
+    assert(i<nPose_);
+    assert(camID<nCam_);
+    // qCW = qCM*qMJ*qWJ^T;
+    return qCM(camID)*this->aux().poseMeasRot_*poseRot(i).inverted();
+  }
+  //@}
+
+  //@{
   /** \brief Get the auxiliary state.
    *
    *  \see StateAuxiliary;
@@ -519,13 +556,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   double imgTime_;        /**<Time of the last image, which was processed.*/
   int imageCounter_;      /**<Total number of images, used so far for updates. Same as total number of update steps.*/
   ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
-  rot::RotationQuaternionPD groundtruth_qCJ_; /**<Groundtruth attitude measurement.*/
-  rot::RotationQuaternionPD groundtruth_qJI_; /**<Transformtion to groundtruth inertial frame (rotation).*/
-  rot::RotationQuaternionPD groundtruth_qCB_; /**<Transformtion to groundtruth body frame (rotation).*/
-  Eigen::Vector3d groundtruth_JrJC_; /**<Groundtruth position measurement.*/
-  Eigen::Vector3d groundtruth_IrIJ_; /**<Transformtion to groundtruth inertial frame (translation).*/
-  Eigen::Vector3d groundtruth_BrBC_; /**<Transformtion to groundtruth body frame (translation).*/
-  bool plotGroundtruth_; /**<Should the groundtruth be plotted.*/
+  bool plotPoseMeas_; /**<Should the pose measurement be plotted.*/
 
   /** \brief Constructor
    */
@@ -533,13 +564,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
     usePredictionMerge_ = true;
     imgTime_ = 0.0;
     imageCounter_ = 0;
-    groundtruth_qCJ_.setIdentity();
-    groundtruth_JrJC_.setZero();
-    groundtruth_qJI_.setIdentity();
-    groundtruth_IrIJ_.setZero();
-    groundtruth_qCB_.setIdentity();
-    groundtruth_BrBC_.setZero();
-    plotGroundtruth_ = true;
+    plotPoseMeas_ = true;
     state_.initFeatureManagers(fsm_);
     fsm_.allocateMissing();
     drawPB_ = 1;

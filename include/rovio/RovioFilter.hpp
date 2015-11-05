@@ -45,9 +45,9 @@ namespace rovio {
  *  @tparam FILTERSTATE - \ref rovio::FilterState
  */
 template<typename FILTERSTATE>
-class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,0>>{
+class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1>>{
  public:
-  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,0>> Base;
+  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
@@ -154,13 +154,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     mPrediction_.doubleRegister_.removeScalarByStr("alpha");
     mPrediction_.doubleRegister_.removeScalarByStr("beta");
     mPrediction_.doubleRegister_.removeScalarByStr("kappa");
-    boolRegister_.registerScalar("Groundtruth.doVisualization",init_.plotGroundtruth_);
-    doubleRegister_.registerVector("Groundtruth.IrIJ",init_.groundtruth_IrIJ_);
-    doubleRegister_.registerQuaternion("Groundtruth.qJI",init_.groundtruth_qJI_);
-    doubleRegister_.registerVector("Groundtruth.BrBC",init_.groundtruth_BrBC_);
-    doubleRegister_.registerQuaternion("Groundtruth.qCB",init_.groundtruth_qCB_);
-    Eigen::Vector3d groundtruth_IrIJ_;
-    Eigen::Vector3d groundtruth_BrBC_;
+    boolRegister_.registerScalar("PoseUpdate.doVisualization",init_.plotPoseMeas_);
     reset(0.0);
   }
 
