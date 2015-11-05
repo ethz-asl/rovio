@@ -26,8 +26,8 @@
 *
 */
 
-#ifndef POSEUPDATE_HPP_
-#define POSEUPDATE_HPP_
+#ifndef ROVIO_POSEUPDATE_HPP_
+#define ROVIO_POSEUPDATE_HPP_
 
 #include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/Update.hpp"
@@ -112,6 +112,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   using Base::eval;
   using Base::intRegister_;
   using Base::doubleRegister_;
+  using Base::meas_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtInnovation mtInnovation;
@@ -136,29 +137,35 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   V3D MrMV_;
 
   void evalInnovation(mtInnovation& y, const mtState& state, const mtNoise& noise) const{
-    y.pos() = state.poseLin(poseIndex_) + (state.poseRot(poseIndex_).inverted()*state.att()).rotate(V3D(state.pos()+MrMV_)) - meas_.pos() + noise.pos();
-    QPD attNoise = attNoise.exponentialMap(noise.att());
-    y.att() = attNoise*qVM_*state.att().inverted()*state.poseRot(poseIndex_)*meas_.att().inverted();
+    if(poseIndex_ >= 0){
+      y.pos() = state.poseLin(poseIndex_) + (state.poseRot(poseIndex_).inverted()*state.qWM()).rotate(V3D(state.WrWM()+MrMV_)) - meas_.pos() + noise.pos();
+      QPD attNoise = attNoise.exponentialMap(noise.att());
+      y.att() = attNoise*qVM_*state.qWM().inverted()*state.poseRot(poseIndex_)*meas_.att().inverted();
+    }
   }
   void jacState(MXD& F, const mtState& state) const{
-    F.setZero();
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pos>()) =
-        MPD(state.poseRot(poseIndex_).inverted()*state.att()).matrix();
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(poseIndex_)) =
-              M3D::Identity();
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_att>()) =
-        MPD(state.poseRot(poseIndex_).inverted()).matrix()*gSM(state.att().rotate(V3D(state.pos()+MrMV_)));
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
-        -gSM((state.poseRot(poseIndex_).inverted()*state.att()).rotate(V3D(state.pos()+MrMV_)))*MPD(state.poseRot(poseIndex_).inverted()).matrix();
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_att>()) =
-        -MPD(qVM_*state.att().inverted()).matrix();
-    F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
-        MPD(qVM_*state.att().inverted()).matrix();
+    if(poseIndex_ >= 0){
+      F.setZero();
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pos>()) =
+          MPD(state.poseRot(poseIndex_).inverted()*state.qWM()).matrix();
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(poseIndex_)) =
+                M3D::Identity();
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_att>()) =
+          MPD(state.poseRot(poseIndex_).inverted()).matrix()*gSM(state.qWM().rotate(V3D(state.WrWM()+MrMV_)));
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
+          -gSM((state.poseRot(poseIndex_).inverted()*state.qWM()).rotate(V3D(state.WrWM()+MrMV_)))*MPD(state.poseRot(poseIndex_).inverted()).matrix();
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_att>()) =
+          -MPD(qVM_*state.qWM().inverted()).matrix();
+      F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
+          MPD(qVM_*state.qWM().inverted()).matrix();
+    }
   }
   void jacNoise(MXD& G, const mtState& state) const{
-    G.setZero();
-    G.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity();
-    G.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtNoise::template getId<mtNoise::_att>()) = M3D::Identity();
+    if(poseIndex_ >= 0){
+      G.setZero();
+      G.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity();
+      G.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtNoise::template getId<mtNoise::_att>()) = M3D::Identity();
+    }
   }
   void preProcess(mtFilterState& filterstate, const mtMeas& meas, bool& isFinished){
     isFinished = false;
@@ -171,4 +178,4 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
 }
 
 
-#endif /* POSEUPDATE_HPP_ */
+#endif /* ROVIO_POSEUPDATE_HPP_ */

@@ -125,11 +125,11 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
       StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;  /**<State definition.*/
   using Base::D_;
   using Base::E_;
-  static constexpr unsigned int nMax_ = nMax;
-  static constexpr unsigned int nLevels_ = nLevels;
-  static constexpr unsigned int patchSize_ = patchSize;
-  static constexpr unsigned int nCam_ = nCam;   /**<Total number of cameras.*/
-  static constexpr unsigned int nPose_ = nPose; /**<Total number of addtional pose states.*/
+  static constexpr int nMax_ = nMax;            /**<Max number of features.*/
+  static constexpr int nLevels_ = nLevels;      /**<Max number of image levels.*/
+  static constexpr int patchSize_ = patchSize;  /**<Patch size.*/
+  static constexpr int nCam_ = nCam;            /**<Total number of cameras.*/
+  static constexpr int nPose_ = nPose;          /**<Total number of addtional pose states.*/
   static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
   static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the of the IMU-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/

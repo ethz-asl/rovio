@@ -70,7 +70,7 @@ Init
         vea 0.1;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
     }
 }
-Update0
+ImgUpdate
 {
     doPatchWarping true;										Should the patches be warped
     doFrameVisualisation true;									Should the frames be visualized
@@ -180,4 +180,24 @@ Groundtruth
 	qCB_y 0.0;									Y-orientation between body frames
 	qCB_z 0.0;									Z-orientation between body frames
 	qCB_w 1.0;									W-orientation between body frames
+}
+PoseUpdate
+{
+    UpdateNoise
+    {
+        pos_0 0.0001
+        pos_1 0.0001
+        pos_2 0.0001
+        att_0 0.0001
+        att_1 0.0001
+        att_2 0.0001
+    }
+    MahalanobisTh0 12.6511204
+    qVM_x 0
+    qVM_y 0
+    qVM_z 0
+    qVM_w 1
+    MrMV_x 0
+    MrMV_y 0
+    MrMV_z 0
 }
