@@ -101,14 +101,17 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
  *  @tparam nLevels   - Total number of pyramid levels considered.
  *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
  *  @tparam nCam      - Used total number of cameras.
+ *  @tparam nPose     - Additional 6D pose in state.
  */
-template<unsigned int nMax, int nLevels, int patchSize, int nCam>
+template<unsigned int nMax, int nLevels, int patchSize, int nCam, int nPose>
 class State: public LWF::State<
 LWF::TH_multiple_elements<LWF::VectorElement<3>,4>,
 LWF::QuaternionElement,
 LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
 LWF::ArrayElement<LWF::QuaternionElement,nCam>,
 LWF::ArrayElement<RobocentricFeatureElement,nMax>,
+LWF::ArrayElement<LWF::VectorElement<3>,nPose>,
+LWF::ArrayElement<LWF::QuaternionElement,nPose>,
 StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
  public:
   typedef LWF::State<
@@ -117,6 +120,8 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
       LWF::ArrayElement<LWF::VectorElement<3>,nCam>,
       LWF::ArrayElement<LWF::QuaternionElement,nCam>,
       LWF::ArrayElement<RobocentricFeatureElement,nMax>,
+      LWF::ArrayElement<LWF::VectorElement<3>,nPose>,
+      LWF::ArrayElement<LWF::QuaternionElement,nPose>,
       StateAuxiliary<nMax,nLevels,patchSize,nCam>> Base;  /**<State definition.*/
   using Base::D_;
   using Base::E_;
@@ -124,6 +129,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int nLevels_ = nLevels;
   static constexpr unsigned int patchSize_ = patchSize;
   static constexpr unsigned int nCam_ = nCam;   /**<Total number of cameras.*/
+  static constexpr unsigned int nPose_ = nPose; /**<Total number of addtional pose states.*/
   static constexpr unsigned int _pos = 0;       /**<Idx. Position Vector WrWM: Pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.*/
   static constexpr unsigned int _vel = _pos+1;  /**<Idx. Velocity Vector MvM: Absolute velocity of the of the IMU-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _acb = _vel+1;  /**<Idx. Additive bias on accelerometer.*/
@@ -132,7 +138,9 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
   static constexpr unsigned int _fea = _vea+1;  /**<Idx. Robocentric feature parametrization.*/
-  static constexpr unsigned int _aux = _fea+1;  /**<Idx. Auxiliary state.*/
+  static constexpr unsigned int _pop = _fea+1;  /**<Idx. Additonial pose in state, linear part.*/
+  static constexpr unsigned int _poa = _pop+1;  /**<Idx. Additonial pose in state, rotational part.*/
+  static constexpr unsigned int _aux = _poa+1;  /**<Idx. Auxiliary state.*/
 
   /** \brief Constructor
    */
@@ -146,6 +154,8 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
     this->template getName<_fea>() = "fea";
+    this->template getName<_pop>() = "pop";
+    this->template getName<_poa>() = "poa";
     this->template getName<_aux>() = "auxiliary";
   }
 
@@ -247,9 +257,11 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return a reference to the feature coordinates of feature i.
    */
   inline FeatureCoordinates& CfP(const int i = 0) {
+    assert(i<nMax_);
     return this->template get<_fea>(i).coordinates_;
   }
   inline const FeatureCoordinates& CfP(const int i = 0) const{
+    assert(i<nMax_);
     return this->template get<_fea>(i).coordinates_;
   }
   //@}
@@ -261,6 +273,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return a reference to the quaternion qCM (IMU Coordinates->%Camera Coordinates).
    */
   inline QPD& qCM(const int camID = 0){
+    assert(camID<nCam_);
     if(this->template get<_aux>().doVECalibration_){
           return this->template get<_vea>(camID);
         } else {
@@ -268,6 +281,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
         }
   }
   inline const QPD& qCM(const int camID = 0) const{
+    assert(camID<nCam_);
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vea>(camID);
     } else {
@@ -283,6 +297,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return a reference to the position vector MrMC (IMU->%Camera, expressed in IMU).
    */
   inline V3D& MrMC(const int camID = 0){
+    assert(camID<nCam_);
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vep>(camID);
     } else {
@@ -290,6 +305,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
     }
   }
   inline const V3D& MrMC(const int camID = 0) const{
+    assert(camID<nCam_);
     if(this->template get<_aux>().doVECalibration_){
       return this->template get<_vep>(camID);
     } else {
@@ -305,6 +321,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return the position vector WrWC (World->%Camera, expressed in World).
    */
   inline V3D WrWC(const int camID = 0) const{
+    assert(camID<nCam_);
     return this->template get<_pos>()+this->template get<_att>().rotate(MrMC(camID));
   }
 
@@ -317,6 +334,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return he quaternion qCW (World Coordinates->%Camera Coordinates).
    */
   inline QPD qCW(const int camID = 0) const{
+    assert(camID<nCam_);
     return qCM(camID)*this->template get<_att>().inverted();
   }
   //@}
@@ -331,10 +349,44 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
    *  @return a reference to distance parameter of the feature.
    */
   inline FeatureDistance& dep(const int i){
+    assert(i<nMax_);
     return this->template get<_fea>(i).distance_;
   }
   inline const FeatureDistance& dep(const int i) const{
+    assert(i<nMax_);
     return this->template get<_fea>(i).distance_;
+  }
+  //@}
+
+  //@{
+  /** \brief Get/Set the rotational part of the pose with index i.
+   *
+   *  @param i - Pose index
+   *  @return  a reference to the rotational part of the pose with index i.
+   */
+  inline QPD& poseRot(const int i){
+    assert(i<nPose_);
+    return this->template get<_poa>(i);
+  }
+  inline const QPD& poseRot(const int i) const{
+    assert(i<nPose_);
+    return this->template get<_poa>(i);
+  }
+  //@}
+
+  //@{
+  /** \brief Get/Set the linear part of the pose with index i.
+   *
+   *  @param i - Pose index
+   *  @return a reference to the linear part of the pose with index i.
+   */
+  inline V3D& poseLin(const int i = 0){
+    assert(i<nPose_);
+    return this->template get<_pop>(i);
+  }
+  inline const V3D& poseLin(const int i = 0) const{
+    assert(i<nPose_);
+    return this->template get<_pop>(i);
   }
   //@}
 
@@ -437,11 +489,12 @@ LWF::ArrayElement<LWF::VectorElement<3>,STATE::nMax_>>{
  *  @tparam nLevels   - Total number of pyramid levels considered.
  *  @tparam patchSize - Edge length of the patches (in pixel). Must be a multiple of 2!
  *  @tparam nCam      - Used total number of cameras.
+ *  @tparam nPose     - Additional 6D pose in state.
  */
-template<unsigned int nMax, int nLevels, int patchSize,int nCam>
-class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0>{
+template<unsigned int nMax, int nLevels, int patchSize,int nCam,int nPose>
+class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPose>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam,nPose>>,0>{
  public:
-  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam>>,0> Base;
+  typedef LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPose>,PredictionMeas,PredictionNoise<State<nMax,nLevels,patchSize,nCam,nPose>>,0> Base;
   typedef typename Base::mtState mtState;  /**<Local Filter %State Type. \see LWF::FilterState*/
   using Base::state_;  /**<Filter State. \see LWF::FilterState*/
   using Base::cov_;  /**<Filter State Covariance Matrix. \see LWF::FilterState*/

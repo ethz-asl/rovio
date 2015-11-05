@@ -36,7 +36,8 @@ static constexpr unsigned int nMax_ = 25;    // Maximal number of considered fea
 static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
 static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
 static constexpr int nCam_ = 1;              // Used total number of cameras.
-typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
+static constexpr int nPose_ = 0;             // Additional pose states.
+typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_,nPose_>> mtFilter;
 
 int main(int argc, char** argv){
   ros::init(argc, argv, "rovio");

@@ -34,8 +34,6 @@
 #include "lightweight_filtering/State.hpp"
 #include "rovio/FilterStates.hpp"
 
-namespace rot = kindr::rotations::eigen_impl;
-
 namespace rovio {
 
 /** \brief Class, defining the innovation.
