@@ -180,6 +180,9 @@ PoseUpdate
     }
     MahalanobisTh0 12.6511204
 	doVisualization false;						Should the measured poses be vizualized
+	enablePosition true;
+	enableAttitude true;
+	timeOffset 0.0;
     qVM_x 0
     qVM_y 0
     qVM_z 0

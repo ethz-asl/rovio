@@ -293,7 +293,7 @@ class RovioNode{
     if(isInitialized_){
       poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
       poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
-      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec());
+      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+std::get<1>(mpFilter_->mUpdates_).timeOffset_);
     }
   }
 
