@@ -86,6 +86,20 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       doubleRegister_.registerScalar("PredictionNoise.vea",prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+1,mtNoise::template getId<mtNoise::_vea>(camID)+1));
       doubleRegister_.registerScalar("PredictionNoise.vea",prenoiP_(mtNoise::template getId<mtNoise::_vea>(camID)+2,mtNoise::template getId<mtNoise::_vea>(camID)+2));
     }
+    for(int i=0;i<mtState::nPose_;i++){
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+0,mtNoise::template getId<mtNoise::_pop>(i)+0));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+1,mtNoise::template getId<mtNoise::_pop>(i)+1));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+2,mtNoise::template getId<mtNoise::_pop>(i)+2));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+0,mtNoise::template getId<mtNoise::_poa>(i)+0));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+1,mtNoise::template getId<mtNoise::_poa>(i)+1));
+      doubleRegister_.removeScalarByVar(prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+2,mtNoise::template getId<mtNoise::_poa>(i)+2));
+      doubleRegister_.registerScalar("PredictionNoise.pop",prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+0,mtNoise::template getId<mtNoise::_pop>(i)+0));
+      doubleRegister_.registerScalar("PredictionNoise.pop",prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+1,mtNoise::template getId<mtNoise::_pop>(i)+1));
+      doubleRegister_.registerScalar("PredictionNoise.pop",prenoiP_(mtNoise::template getId<mtNoise::_pop>(i)+2,mtNoise::template getId<mtNoise::_pop>(i)+2));
+      doubleRegister_.registerScalar("PredictionNoise.poa",prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+0,mtNoise::template getId<mtNoise::_poa>(i)+0));
+      doubleRegister_.registerScalar("PredictionNoise.poa",prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+1,mtNoise::template getId<mtNoise::_poa>(i)+1));
+      doubleRegister_.registerScalar("PredictionNoise.poa",prenoiP_(mtNoise::template getId<mtNoise::_poa>(i)+2,mtNoise::template getId<mtNoise::_poa>(i)+2));
+    }
     disablePreAndPostProcessingWarning_ = true;
   };
 
@@ -139,6 +153,11 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       output.MrMC(i) = state.MrMC(i)+noise.template get<mtNoise::_vep>(i)*sqrt(dt);
       dQ = dQ.exponentialMap(noise.template get<mtNoise::_vea>(i)*sqrt(dt));
       output.qCM(i) = dQ*state.qCM(i);
+    }
+    for(unsigned int i=0;i<mtState::nPose_;i++){
+      output.poseLin(i) = state.poseLin(i)+noise.template get<mtNoise::_pop>(i)*sqrt(dt);
+      dQ = dQ.exponentialMap(noise.template get<mtNoise::_poa>(i)*sqrt(dt));
+      output.poseRot(i) = dQ*state.poseRot(i);
     }
     output.aux().wMeasCov_ = prenoiP_.template block<3,3>(mtNoise::template getId<mtNoise::_att>(),mtNoise::template getId<mtNoise::_att>())/dt;
     output.fix();
@@ -229,6 +248,10 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
       F.template block<3,3>(mtState::template getId<mtState::_vep>(i),mtState::template getId<mtState::_vep>(i)) = M3D::Identity();
       F.template block<3,3>(mtState::template getId<mtState::_vea>(i),mtState::template getId<mtState::_vea>(i)) = M3D::Identity();
     }
+    for(unsigned int i=0;i<mtState::nPose_;i++){
+      F.template block<3,3>(mtState::template getId<mtState::_pop>(i),mtState::template getId<mtState::_pop>(i)) = M3D::Identity();
+      F.template block<3,3>(mtState::template getId<mtState::_poa>(i),mtState::template getId<mtState::_poa>(i)) = M3D::Identity();
+    }
   }
   void jacNoise(MXD& G, const mtState& state, double dt) const{
     const V3D imuRor = meas_.template get<mtMeas::_gyr>()-state.gyb();
@@ -243,6 +266,10 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
     for(unsigned int i=0;i<mtState::nCam_;i++){
       G.template block<3,3>(mtState::template getId<mtState::_vep>(i),mtNoise::template getId<mtNoise::_vep>(i)) = M3D::Identity()*sqrt(dt);
       G.template block<3,3>(mtState::template getId<mtState::_vea>(i),mtNoise::template getId<mtNoise::_vea>(i)) = M3D::Identity()*sqrt(dt);
+    }
+    for(unsigned int i=0;i<mtState::nPose_;i++){
+      G.template block<3,3>(mtState::template getId<mtState::_pop>(i),mtNoise::template getId<mtNoise::_pop>(i)) = M3D::Identity()*sqrt(dt);
+      G.template block<3,3>(mtState::template getId<mtState::_poa>(i),mtNoise::template getId<mtNoise::_poa>(i)) = M3D::Identity()*sqrt(dt);
     }
     LWF::NormalVectorElement nOut;
     for(unsigned int i=0;i<mtState::nMax_;i++){

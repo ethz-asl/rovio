@@ -203,10 +203,13 @@ class RovioNode{
       featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
     }
     rovio::PixelOutputCT pixelOutputCT;
-    pixelOutputCT.testTransformJac(featureOutput,1e-3,0.5); // Reduces accuracy due to float and strong camera distortion
+    pixelOutputCT.testTransformJac(featureOutput,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
 
     // Zero Velocity Updates
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
+
+    // Pose Update
+    std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
 
     delete mpTestFilterState;
   }

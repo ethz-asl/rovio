@@ -68,6 +68,8 @@ Init
         att_1 0.1;			Y-Covariance of initial attitude [rad^2]
         att_2 0.1;			Z-Covariance of initial attitude [rad^2]
         vea 0.1;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
+        pop 1;				Covariance of initial pose between inertial frames, linear part [m^2]
+        poa 1;				Covariance of initial pose between inertial frames, rotational part [rad^2]
     }
 }
 ImgUpdate
@@ -156,6 +158,8 @@ Prediction
         vea 1e-8;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
         dep 0.000001;							Covariance parameter of distance prediction [m^2/s]
         nor 0.0001;								Covariance parameter of bearing vector prediction [rad^2/s]
+        pop 1e-4;								Covariance parameter of pose between inertial frames, linear part [m^2/s]
+        poa 1e-4;								Covariance parameter of pose between inertial frames, rotational part [rad^2/s]
     }
     MotionDetection
     {
@@ -200,4 +204,11 @@ PoseUpdate
     MrMV_x 0
     MrMV_y 0
     MrMV_z 0
+    qWI_x 0
+    qWI_y 0
+    qWI_z 0
+    qWI_w 1
+    IrIW_x 0
+    IrIW_y 0
+    IrIW_z 0
 }

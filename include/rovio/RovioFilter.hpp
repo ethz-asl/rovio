@@ -45,9 +45,9 @@ namespace rovio {
  *  @tparam FILTERSTATE - \ref rovio::FilterState
  */
 template<typename FILTERSTATE>
-class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,-1>>{
+class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,0>>{
  public:
-  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,-1>> Base;
+  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,0>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
@@ -107,6 +107,29 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.MrMC(camID));
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.qCM(camID));
     }
+    for(int i=0;i<mtState::nPose_;i++){
+      doubleRegister_.removeScalarByVar(init_.state_.poseLin(i)(0));
+      doubleRegister_.removeScalarByVar(init_.state_.poseLin(i)(1));
+      doubleRegister_.removeScalarByVar(init_.state_.poseLin(i)(2));
+      doubleRegister_.removeScalarByVar(init_.state_.poseRot(i).toImplementation().w());
+      doubleRegister_.removeScalarByVar(init_.state_.poseRot(i).toImplementation().x());
+      doubleRegister_.removeScalarByVar(init_.state_.poseRot(i).toImplementation().y());
+      doubleRegister_.removeScalarByVar(init_.state_.poseRot(i).toImplementation().z());
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_pop>(i)+0,mtState::template getId<mtState::_pop>(i)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_pop>(i)+1,mtState::template getId<mtState::_pop>(i)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_pop>(i)+2,mtState::template getId<mtState::_pop>(i)+2));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_poa>(i)+0,mtState::template getId<mtState::_poa>(i)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_poa>(i)+1,mtState::template getId<mtState::_poa>(i)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_poa>(i)+2,mtState::template getId<mtState::_poa>(i)+2));
+    }
+    doubleRegister_.registerScalar("Init.Covariance.pop",init_.cov_(mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+0,mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+0));
+    doubleRegister_.registerScalar("Init.Covariance.pop",init_.cov_(mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+1,mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+1));
+    doubleRegister_.registerScalar("Init.Covariance.pop",init_.cov_(mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+2,mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).poseIndex_)+2));
+    doubleRegister_.registerScalar("Init.Covariance.poa",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+0,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+0));
+    doubleRegister_.registerScalar("Init.Covariance.poa",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+1,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+1));
+    doubleRegister_.registerScalar("Init.Covariance.poa",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+2,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).poseIndex_)+2));
+    std::get<1>(mUpdates_).doubleRegister_.registerVector("IrIW",init_.state_.poseLin(std::get<1>(mUpdates_).poseIndex_));
+    std::get<1>(mUpdates_).doubleRegister_.registerQuaternion("qWI",init_.state_.poseRot(std::get<1>(mUpdates_).poseIndex_));
     int ind;
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       ind = mtState::template getId<mtState::_fea>(i);
