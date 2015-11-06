@@ -71,9 +71,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   RovioFilter(){
     std::get<0>(mUpdates_).setCamera(&multiCamera_);
     init_.setCamera(&multiCamera_);
+    depthTypeInt_ = 1;
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",depthTypeInt_);
-    for(int camID=0;camID<FILTERSTATE::mtState::nCam_;camID++){
+    for(int camID=0;camID<mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.aux().MrMC_[camID]);
@@ -85,6 +86,18 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.qCM(camID).toImplementation().z());
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+0,mtState::template getId<mtState::_vep>(camID)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+1,mtState::template getId<mtState::_vep>(camID)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vep>(camID)+2,mtState::template getId<mtState::_vep>(camID)+2));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+0,mtState::template getId<mtState::_vea>(camID)+0));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+1,mtState::template getId<mtState::_vea>(camID)+1));
+      doubleRegister_.removeScalarByVar(init_.cov_(mtState::template getId<mtState::_vea>(camID)+2,mtState::template getId<mtState::_vea>(camID)+2));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+0,mtState::template getId<mtState::_vep>(camID)+0));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+1,mtState::template getId<mtState::_vep>(camID)+1));
+      doubleRegister_.registerScalar("Init.Covariance.vep",init_.cov_(mtState::template getId<mtState::_vep>(camID)+2,mtState::template getId<mtState::_vep>(camID)+2));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+0,mtState::template getId<mtState::_vea>(camID)+0));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+1,mtState::template getId<mtState::_vea>(camID)+1));
+      doubleRegister_.registerScalar("Init.Covariance.vea",init_.cov_(mtState::template getId<mtState::_vea>(camID)+2,mtState::template getId<mtState::_vea>(camID)+2));
       doubleRegister_.registerVector("Camera" + std::to_string(camID) + ".MrMC",init_.state_.MrMC(camID));
       doubleRegister_.registerQuaternion("Camera" + std::to_string(camID) + ".qCM",init_.state_.qCM(camID));
     }
@@ -100,6 +113,10 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().x());
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().y());
       doubleRegister_.removeScalarByVar(init_.state_.CfP(i).nor_.q_.toImplementation().z());
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalQualityRange",init_.fsm_.features_[i].mpStatistics_->localQualityRange_);
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statLocalVisibilityRange",init_.fsm_.features_[i].mpStatistics_->localVisibilityRange_);
+      std::get<0>(mUpdates_).intRegister_.registerScalar("statMinGlobalQualityRange",init_.fsm_.features_[i].mpStatistics_->minGlobalQualityRange_);
+      std::get<0>(mUpdates_).boolRegister_.registerScalar("doPatchWarping",init_.state_.CfP(i).trackWarping_);
     }
     std::get<0>(mUpdates_).doubleRegister_.removeScalarByVar(std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
     std::get<0>(mUpdates_).doubleRegister_.registerScalar("MahalanobisTh",std::get<0>(mUpdates_).outlierDetection_.getMahalTh(0));
@@ -113,7 +130,6 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     doubleRegister_.registerQuaternion("Groundtruth.qJI",init_.groundtruth_qJI_);
     doubleRegister_.registerVector("Groundtruth.BrBC",init_.groundtruth_BrBC_);
     doubleRegister_.registerQuaternion("Groundtruth.qCB",init_.groundtruth_qCB_);
-    std::get<0>(mUpdates_).boolRegister_.registerScalar("doPatchWarping",init_.state_.aux().doPatchWarping_);
     Eigen::Vector3d groundtruth_IrIJ_;
     Eigen::Vector3d groundtruth_BrBC_;
     reset(0.0);
@@ -134,7 +150,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
 
   /** \brief Destructor
    */
-  ~RovioFilter(){};
+  virtual ~RovioFilter(){};
 //  void resetToImuPose(V3D WrWM, QPD qMW, double t = 0.0){
 //    init_.state_.initWithImuPose(WrWM,qMW);
 //    reset(t);
@@ -161,17 +177,6 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
     init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM);
   }
-//  void resetToKeyframe(double t = 0.0) {
-//    std::cout << "Reseting to keyframe" << std::endl;
-//    double imuMeasTime = 0.0;
-//    if(predictionTimeline_.getNextTime(t,imuMeasTime)){  // Find close accelerometer measurement
-//      resetWithAccelerometer(predictionTimeline_.measMap_[imuMeasTime].template get<mtPrediction::mtMeas::_acc>(),t); // Initialize with accelerometer
-//    } else {
-//      reset(t);
-//    }
-//    safe_.state_.cloneCurrentToKeyframe(safe_.cov_,t);
-//    front_ = safe_;
-//  }
 };
 
 }

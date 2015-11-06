@@ -39,7 +39,7 @@ class AttitudeOutput: public LWF::State<LWF::QuaternionElement>{
   static constexpr unsigned int _att = 0;
   AttitudeOutput(){
   }
-  ~AttitudeOutput(){};
+  virtual ~AttitudeOutput(){};
 };
 
 class YprOutput: public LWF::State<LWF::VectorElement<3>>{
@@ -47,7 +47,7 @@ class YprOutput: public LWF::State<LWF::VectorElement<3>>{
   static constexpr unsigned int _ypr = 0;
   YprOutput(){
   }
-  ~YprOutput(){};
+  virtual ~YprOutput(){};
 
 
 };
@@ -58,7 +58,7 @@ class AttitudeToYprCT:public LWF::CoordinateTransform<AttitudeOutput,YprOutput>{
   typedef typename Base::mtInput mtInput;
   typedef typename Base::mtOutput mtOutput;
   AttitudeToYprCT(){};
-  ~AttitudeToYprCT(){};
+  virtual ~AttitudeToYprCT(){};
   void evalTransform(mtOutput& output, const mtInput& input) const{
     output.template get<mtOutput::_ypr>() = rot::EulerAnglesYprPD(input.template get<mtInput::_att>()).vector();
   }

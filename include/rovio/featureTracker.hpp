@@ -84,9 +84,7 @@ class FeatureTrackerNode{
 
   /** \brief Destructor.
    */
-  ~FeatureTrackerNode(){
-    cv::destroyWindow("Tracker");
-  }
+  virtual ~FeatureTrackerNode(){}
 
   /** \brief Empty, yet.
    */
@@ -138,7 +136,7 @@ class FeatureTrackerNode{
         dc = 0.75*(fsm_.features_[i].mpCoordinates_->get_c() - fsm_.features_[i].log_previous_.get_c());
         fsm_.features_[i].log_previous_ = *(fsm_.features_[i].mpCoordinates_);
         fsm_.features_[i].mpCoordinates_->set_c(fsm_.features_[i].mpCoordinates_->get_c() + dc);
-        if(!fsm_.features_[i].mpMultilevelPatch_->isMultilevelPatchInFrame(pyr_,*(fsm_.features_[i].mpCoordinates_),nLevels_-1,nullptr,false)){
+        if(!fsm_.features_[i].mpMultilevelPatch_->isMultilevelPatchInFrame(pyr_,*(fsm_.features_[i].mpCoordinates_),nLevels_-1,false)){
           fsm_.features_[i].mpCoordinates_->set_c(fsm_.features_[i].log_previous_.get_c());
         }
         fsm_.features_[i].mpStatistics_->increaseStatistics(current_time);
@@ -154,7 +152,7 @@ class FeatureTrackerNode{
     for(unsigned int i=0;i<nMax_;i++){
       if(fsm_.isValid_[i]){
         fsm_.features_[i].log_prediction_ = *(fsm_.features_[i].mpCoordinates_);
-        if(alignment_.align2DComposed(alignedCoordinates,pyr_,*fsm_.features_[i].mpMultilevelPatch_,*fsm_.features_[i].mpCoordinates_,nullptr,l2,l1,l1)){
+        if(alignment_.align2DComposed(alignedCoordinates,pyr_,*fsm_.features_[i].mpMultilevelPatch_,*fsm_.features_[i].mpCoordinates_,l2,l1,l1)){
           fsm_.features_[i].mpStatistics_->status_[0] = TRACKED;
           fsm_.features_[i].mpCoordinates_->set_c(alignedCoordinates.get_c());
           fsm_.features_[i].log_previous_ = *(fsm_.features_[i].mpCoordinates_);
@@ -183,13 +181,13 @@ class FeatureTrackerNode{
     for(unsigned int i=0;i<numPatchesPlot;i++){
       if(fsm_.isValid_[i+10]){
         fsm_.features_[i+10].mpMultilevelPatch_->drawMultilevelPatch(draw_patches_,cv::Point2i(2,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
-        if(mp.isMultilevelPatchInFrame(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,nullptr,false)){
-          mp.extractMultilevelPatchFromImage(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,nullptr,false);
+        if(mp.isMultilevelPatchInFrame(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,false)){
+          mp.extractMultilevelPatchFromImage(pyr_,fsm_.features_[i+10].log_prediction_,nLevels_-1,false);
           mp.drawMultilevelPatch(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+6,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
         }
         if(fsm_.features_[i+10].mpStatistics_->status_[0] == TRACKED
-            && mp.isMultilevelPatchInFrame(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,nullptr,false)){
-          mp.extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,nullptr,false);
+            && mp.isMultilevelPatchInFrame(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,false)){
+          mp.extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i+10].mpCoordinates_,nLevels_-1,false);
           mp.drawMultilevelPatch(draw_patches_,cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+10,2+i*(patchSize_*pow(2,nLevels_-1)+4)),1,false);
           cv::rectangle(draw_patches_,cv::Point2i(0,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(patchSize_*pow(2,nLevels_-1)+3,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
           cv::rectangle(draw_patches_,cv::Point2i(patchSize_*pow(2,nLevels_-1)+4,i*(patchSize_*pow(2,nLevels_-1)+4)),cv::Point2i(2*patchSize_*pow(2,nLevels_-1)+7,(i+1)*(patchSize_*pow(2,nLevels_-1)+4)-1),cv::Scalar(255),2,8,0);
@@ -222,8 +220,8 @@ class FeatureTrackerNode{
     for(unsigned int i=0;i<nMax_;i++){
       if(fsm_.isValid_[i]){
         if(fsm_.features_[i].mpStatistics_->status_[0] == TRACKED
-            && fsm_.features_[i].mpMultilevelPatch_->isMultilevelPatchInFrame(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,nullptr,true)){
-          fsm_.features_[i].mpMultilevelPatch_->extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,nullptr,true);
+            && fsm_.features_[i].mpMultilevelPatch_->isMultilevelPatchInFrame(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,true)){
+          fsm_.features_[i].mpMultilevelPatch_->extractMultilevelPatchFromImage(pyr_,*fsm_.features_[i].mpCoordinates_,nLevels_-1,true);
         }
       }
     }

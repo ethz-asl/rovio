@@ -42,7 +42,7 @@ class StandardOutput: public LWF::State<LWF::TH_multiple_elements<LWF::VectorEle
   static constexpr unsigned int _att = _ror+1;    /**<Idx. Quaternion qCW: World coordinates to Camera coordinates.*/
   StandardOutput(){
   }
-  ~StandardOutput(){};
+  virtual ~StandardOutput(){};
 
   //@{
   /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
@@ -107,7 +107,7 @@ class CameraOutputCT:public LWF::CoordinateTransform<STATE,StandardOutput>{
   CameraOutputCT(){
     camID_ = 0;
   };
-  ~CameraOutputCT(){};
+  virtual ~CameraOutputCT(){};
   void evalTransform(mtOutput& output, const mtInput& input) const{
     // WrWC = WrWM + qWM*(MrMC)
     // CwWC = qCM*MwWM

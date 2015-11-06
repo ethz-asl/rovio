@@ -62,12 +62,13 @@ void halfSample(const cv::Mat& imgIn,cv::Mat& imgOut){
 /** \brief Image pyramid with selectable number of levels.
  *
  *   @tparam n_levels - Number of pyramid levels.
+ *   @todo: complete rule of three
  */
 template<int n_levels>
 class ImagePyramid{
  public:
   ImagePyramid(){};
-  ~ImagePyramid(){};
+  virtual ~ImagePyramid(){};
   cv::Mat imgs_[n_levels]; /**<Array, containing the pyramid images.*/
   cv::Point2f centers_[n_levels]; /**<Array, containing the image center coordinates (in pixel), defined in an
                                       image centered coordinate system of the image at level 0.*/
@@ -105,8 +106,9 @@ class ImagePyramid{
 
   /** \brief Transforms pixel coordinates between two pyramid levels.
    *
-   * @param mpCoorIn   - Input coordinates
-   * @param mpCoorOut  - Output coordinates
+   * @Note Invalidates camera and bearing vector, since the camera model is not valid for arbitrary image levels.
+   * @param cIn        - Input coordinates
+   * @param cOut       - Output coordinates
    * @param l1         - Input pyramid level.
    * @param l2         - Output pyramid level.
    * @return the corresponding pixel coordinates on pyramid level l2.
@@ -114,8 +116,13 @@ class ImagePyramid{
   void levelTranformCoordinates(const FeatureCoordinates& cIn,FeatureCoordinates& cOut,const int l1, const int l2) const{
     assert(l1<n_levels && l2<n_levels && l1>=0 && l2>=0);
     cOut.set_c((centers_[l1]-centers_[l2])*pow(0.5,l2)+cIn.get_c()*pow(0.5,l2-l1));
-    cOut.camID_ = cIn.camID_;
-    cOut.mpCamera_ = cIn.mpCamera_;
+    if(cIn.mpCamera_ != nullptr){
+      if(cIn.com_warp_c()){
+        cOut.set_warp_c(cIn.get_warp_c());
+      }
+    }
+    cOut.camID_ = -1;
+    cOut.mpCamera_ = nullptr;
   }
 
   /** \brief Extract FastCorner coordinates

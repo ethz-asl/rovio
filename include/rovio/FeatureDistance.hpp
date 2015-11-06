@@ -50,159 +50,65 @@ class FeatureDistance{
    *
    *  @param type - enum \ref Type.
    */
-  FeatureDistance(const Type& type = REGULAR){
-    setType(type);
-    p_ = 1.0;
-  }
+  FeatureDistance(const Type& type = REGULAR);
+
+  /** \brief Destructor
+   */
+  virtual ~FeatureDistance();
 
   /** \brief Set the \ref Type type_ using the enum \ref Type.
    *
    *  @param type - Enum \ref Type.
    */
-  void setType(const Type& type){
-    type_ = type;
-  }
+  void setType(const Type& type);
 
   /** \brief Get the set \ref Type.
    *
    *  @return the set \ref Type.
    */
-  Type getType() {
-    return type_;
-  }
+  Type getType();
 
   /** \brief Set the \ref Type type_ using the integer value of the enum \ref Type.
    *
    *  @param type - Integer value of the enum \ref Type.
    */
-  void setType(const int& type){
-    switch(type){
-      case 0:
-        type_ = REGULAR;
-        break;
-      case 1:
-        type_ = INVERSE;
-        break;
-      case 2:
-        type_ = LOG;
-        break;
-      case 3:
-        type_ = HYPERBOLIC;
-        break;
-      default:
-        std::cout << "Invalid type for distance parameterization: " << type << std::endl;
-        type_ = REGULAR;
-        break;
-    }
-  }
+  void setType(const int& type);
 
   /** \brief Returns the distance based on the set \ref Type type_.
    *
    *  @return Distance value.
    */
-  void setParameter(const double& d){
-    switch(type_){
-      case REGULAR:
-        setParameterRegular(d);
-        break;
-      case INVERSE:
-        setParameterInverse(d);
-        break;
-      case LOG:
-        setParameterLog(d);
-        break;
-      case HYPERBOLIC:
-        setParameterHyperbolic(d);
-        break;
-      default:
-        setParameterRegular(d);
-        break;
-    }
-  }
+  void setParameter(const double& d);
 
   /** \brief Returns the distance based on the set \ref Type type_.
    *
    *  @return Distance value.
    */
-  double getDistance() const{
-    switch(type_){
-      case REGULAR:
-        return getDistanceRegular();
-      case INVERSE:
-        return getDistanceInverse();
-      case LOG:
-        return getDistanceLog();
-      case HYPERBOLIC:
-        return getDistanceHyperbolic();
-      default:
-        return getDistanceRegular();
-    }
-  }
+  double getDistance() const;
 
   /** \brief Returns the derivative of the distance w.r.t. the parameter.
    *
    *  @return d derived w.r.t. p
    */
-  double getDistanceDerivative() const{
-    switch(type_){
-      case REGULAR:
-        return getDistanceDerivativeRegular();
-      case INVERSE:
-        return getDistanceDerivativeInverse();
-      case LOG:
-        return getDistanceDerivativeLog();
-      case HYPERBOLIC:
-        return getDistanceDerivativeHyperbolic();
-      default:
-        return getDistanceDerivativeRegular();
-    }
-  }
+  double getDistanceDerivative() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance.
    *
    *  @return p derived w.r.t. d
    */
-  double getParameterDerivative() const{
-    switch(type_){
-      case REGULAR:
-        return getParameterDerivativeRegular();
-      case INVERSE:
-        return getParameterDerivativeInverse();
-      case LOG:
-        return getParameterDerivativeLog();
-      case HYPERBOLIC:
-        return getParameterDerivativeHyperbolic();
-      default:
-        return getParameterDerivativeRegular();
-    }
-  }
+  double getParameterDerivative() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance w.r.t. the parameter.
    *
    *  @return p derived w.r.t. d and then derived w.r.t. p
    */
-  double getParameterDerivativeCombined() const{
-    switch(type_){
-      case REGULAR:
-        return getParameterDerivativeCombinedRegular();
-      case INVERSE:
-        return getParameterDerivativeCombinedInverse();
-      case LOG:
-        return getParameterDerivativeCombinedLog();
-      case HYPERBOLIC:
-        return getParameterDerivativeCombinedHyperbolic();
-      default:
-        return getParameterDerivativeCombinedRegular();
-    }
-  }
+  double getParameterDerivativeCombined() const;
 
   /** \brief Converts from an other feature distance parametrization
    *
    *  @param other "other" feature distance, the type is beeing considered during conversion
    */
-  void getParameterDerivativeCombined(FeatureDistance other){
-    setParameter(other.getDistance());
-  }
+  void getParameterDerivativeCombined(FeatureDistance other);
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -210,41 +116,31 @@ class FeatureDistance{
    *
    *  @param Distance value.
    */
-  void setParameterRegular(const double& d){
-    p_ = d;
-  }
+  void setParameterRegular(const double& d);
 
   /** \brief Returns the distance based for a regular parametrization.
    *
    *  @return Distance value.
    */
-  double getDistanceRegular() const{
-    return p_;
-  }
+  double getDistanceRegular() const;
 
   /** \brief Returns the derivative of the distance w.r.t. the parameter based for a regular parametrization.
    *
    *  @return d derived w.r.t. p
    */
-  double getDistanceDerivativeRegular() const{
-    return 1.0;
-  }
+  double getDistanceDerivativeRegular() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance based for a regular parametrization.
    *
    *  @return p derived w.r.t. d
    */
-  double getParameterDerivativeRegular() const{
-    return 1.0;
-  }
+  double getParameterDerivativeRegular() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance w.r.t. the parameter based for a regular parametrization.
    *
    *  @return p derived w.r.t. d and then derived w.r.t. p
    */
-  double getParameterDerivativeCombinedRegular() const{
-    return 0.0;
-  }
+  double getParameterDerivativeCombinedRegular() const;
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -253,60 +149,37 @@ class FeatureDistance{
    *  @param p - Input
    *  @return Garanteed non-zero output
    */
-  double makeNonZero(const double& p) const{
-    if(p < 1e-6){
-      if(p >= 0){
-        return 1e-6;
-      } else if (p > -1e-6){
-        return -1e-6;
-      }
-    }
-    return p;
-  }
+  double makeNonZero(const double& p) const;
 
   /** \brief Set the distance parameter for a desired distance for a inverse parametrization.
    *
    *  @param Distance value.
    */
-  void setParameterInverse(const double& d){
-    p_ = 1/makeNonZero(d);
-  }
+  void setParameterInverse(const double& d);
 
   /** \brief Returns the distance based for a Inverse parametrization.
    *
    *  @return Distance value.
    */
-  double getDistanceInverse() const{
-    const double p_temp = makeNonZero(p_);
-    return 1/p_temp;
-  }
+  double getDistanceInverse() const;
 
   /** \brief Returns the derivative of the distance w.r.t. the parameter based for a Inverse parametrization.
    *
    *  @return d derived w.r.t. p
    */
-  double getDistanceDerivativeInverse() const{
-    const double p_temp = makeNonZero(p_);
-    return -1.0/(p_temp*p_temp);
-  }
+  double getDistanceDerivativeInverse() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance based for a Inverse parametrization.
    *
    *  @return p derived w.r.t. d
    */
-  double getParameterDerivativeInverse() const{
-    const double p_temp = makeNonZero(p_);
-    return -p_temp*p_temp;
-  }
+  double getParameterDerivativeInverse() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance w.r.t. the parameter based for a Inverse parametrization.
    *
    *  @return p derived w.r.t. d and then derived w.r.t. p
    */
-  double getParameterDerivativeCombinedInverse() const{
-    const double p_temp = makeNonZero(p_);
-    return -2*p_temp;
-  }
+  double getParameterDerivativeCombinedInverse() const;
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -314,41 +187,31 @@ class FeatureDistance{
    *
    *  @param Distance value.
    */
-  void setParameterLog(const double& d){
-    p_ = std::log(d);
-  }
+  void setParameterLog(const double& d);
 
   /** \brief Returns the distance based for a Log parametrization.
    *
    *  @return Distance value.
    */
-  double getDistanceLog() const{
-    return std::exp(p_);
-  }
+  double getDistanceLog() const;
 
   /** \brief Returns the derivative of the distance w.r.t. the parameter based for a Log parametrization.
    *
    *  @return d derived w.r.t. p
    */
-  double getDistanceDerivativeLog() const{
-    return std::exp(p_);
-  }
+  double getDistanceDerivativeLog() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance based for a Log parametrization.
    *
    *  @return p derived w.r.t. d
    */
-  double getParameterDerivativeLog() const{
-    return std::exp(-p_);
-  }
+  double getParameterDerivativeLog() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance w.r.t. the parameter based for a Log parametrization.
    *
    *  @return p derived w.r.t. d and then derived w.r.t. p
    */
-  double getParameterDerivativeCombinedLog() const{
-    return -std::exp(-p_);
-  }
+  double getParameterDerivativeCombinedLog() const;
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -356,41 +219,31 @@ class FeatureDistance{
    *
    *  @param Distance value.
    */
-  void setParameterHyperbolic(const double& d){
-    p_ = std::asinh(d);
-  }
+  void setParameterHyperbolic(const double& d);
 
   /** \brief Returns the distance based for a Hyperbolic parametrization.
    *
    *  @return Distance value.
    */
-  double getDistanceHyperbolic() const{
-    return std::sinh(p_);
-  }
+  double getDistanceHyperbolic() const;
 
   /** \brief Returns the derivative of the distance w.r.t. the parameter based for a Hyperbolic parametrization.
    *
    *  @return d derived w.r.t. p
    */
-  double getDistanceDerivativeHyperbolic() const{
-    return std::cosh(p_);
-  }
+  double getDistanceDerivativeHyperbolic() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance based for a Hyperbolic parametrization.
    *
    *  @return p derived w.r.t. d
    */
-  double getParameterDerivativeHyperbolic() const{
-    return 1/std::sqrt(std::pow(std::sinh(p_),2)+1); // p = asinh(d)
-  }
+  double getParameterDerivativeHyperbolic() const;
 
   /** \brief Returns the derivative of the parameter w.r.t. the distance w.r.t. the parameter based for a Hyperbolic parametrization.
    *
    *  @return p derived w.r.t. d and then derived w.r.t. p
    */
-  double getParameterDerivativeCombinedHyperbolic() const{
-    return -std::sinh(p_)/std::pow(std::pow(std::sinh(p_),2)+1,1.5)*std::cosh(p_);
-  }
+  double getParameterDerivativeCombinedHyperbolic() const;
 };
 
 }

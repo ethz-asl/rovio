@@ -30,6 +30,7 @@
 #define ROVIO_ROVIONODE_HPP_
 
 #include <queue>
+#include <memory>
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -72,12 +73,12 @@ class RovioNode{
   ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
 
   typedef FILTER mtFilter;
-  mtFilter* mpFilter_;
+  std::shared_ptr<mtFilter> mpFilter_;
   typedef typename mtFilter::mtFilterState mtFilterState;
   typedef typename mtFilterState::mtState mtState;
-  typedef typename decltype(mpFilter_->mPrediction_)::mtMeas mtPredictionMeas;
+  typedef typename mtFilter::mtPrediction::mtMeas mtPredictionMeas;
   mtPredictionMeas predictionMeas_;
-  typedef typename std::tuple_element<0,decltype(mpFilter_->mUpdates_)>::type::mtMeas mtImgMeas;
+  typedef typename std::tuple_element<0,typename mtFilter::mtUpdates>::type::mtMeas mtImgMeas;
   mtImgMeas imgUpdateMeas_;
   bool isInitialized_;
   geometry_msgs::PoseStamped poseMsg_;
@@ -109,7 +110,7 @@ class RovioNode{
 
   /** \brief Constructor
    */
-  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, FILTER* mpFilter)
+  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
       : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
@@ -143,7 +144,7 @@ class RovioNode{
 
   /** \brief Destructor
    */
-  ~RovioNode(){}
+  virtual ~RovioNode(){}
 
   /** \brief Tests the functionality of the rovio node.
    *
@@ -159,14 +160,12 @@ class RovioNode{
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
-    BearingCorners bearingCorners;
-    bearingCorners[0].setZero();
-    bearingCorners[1].setZero();
-
     for(int i=0;i<mtState::nMax_;i++){
       testState.CfP(i).camID_ = 0;
+      testState.CfP(i).nor_.setRandom(s);
+      testState.CfP(i).valid_nor_ = true;
+      testState.CfP(i).trackWarping_ = false;
       testState.aux().bearingMeas_[i].setRandom(s);
-      testState.aux().warping_[i].set_bearingCorners(bearingCorners);
     }
     testState.CfP(0).camID_ = mtState::nCam_-1;
     mpTestFilterState->fsm_.setAllCameraPointers();
@@ -201,7 +200,7 @@ class RovioNode{
     FeatureOutput featureOutput;
     transformFeatureOutputCT.transformState(testState,featureOutput);
     if(!featureOutput.c().isInFront()){
-      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)));
+      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
     }
     rovio::PixelOutputCT pixelOutputCT;
     pixelOutputCT.testTransformJac(featureOutput,1e-3,0.5); // Reduces accuracy due to float and strong camera distortion
@@ -327,12 +326,12 @@ class RovioNode{
         for(int i=0;i<mtState::nCam_;i++){
           if(!mpFilter_->safe_.img_[i].empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
             cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
-            cv::waitKey(5);
+            cv::waitKey(3);
           }
         }
         if(!mpFilter_->safe_.patchDrawing_.empty() && std::get<0>(mpFilter_->mUpdates_).visualizePatches_){
           cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
-          cv::waitKey(5);
+          cv::waitKey(3);
         }
 
         // Obtain the save filter state.

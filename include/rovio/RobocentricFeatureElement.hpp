@@ -39,34 +39,39 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
  public:
   typedef LWF::ElementBase<RobocentricFeatureElement,RobocentricFeatureElement,3> Base;
   using typename Base::mtDifVec;
-  using typename Base::mtCovMat;
   using typename Base::mtGet;
   using Base::name_;
   mutable LWF::NormalVectorElement::mtDifVec norDifTemp_;
-  mutable LWF::NormalVectorElement::mtCovMat norCovMatTemp_;
+  mutable MXD norCovMatTemp_;
   mutable LWF::NormalVectorElement norTemp_;
   FeatureCoordinates coordinates_;
   FeatureDistance distance_;
-  RobocentricFeatureElement():distance_(FeatureDistance::REGULAR){}
-  RobocentricFeatureElement(const Camera* mpCameras, const FeatureDistance::Type depthType):coordinates_(mpCameras),distance_(depthType){}
-  RobocentricFeatureElement(const RobocentricFeatureElement& other):distance_(other.distance_.type_){
+  RobocentricFeatureElement():distance_(FeatureDistance::REGULAR), norCovMatTemp_(3,3){}
+  RobocentricFeatureElement(const Camera* mpCameras, const FeatureDistance::Type depthType):coordinates_(mpCameras),distance_(depthType), norCovMatTemp_(3,3){}
+  RobocentricFeatureElement(const RobocentricFeatureElement& other):distance_(other.distance_.type_), norCovMatTemp_(3,3){
     coordinates_ = other.coordinates_;
     distance_ = other.distance_;
   }
+
+  /** \brief Destructor
+   */
+  virtual ~RobocentricFeatureElement(){};
+
   void boxPlus(const mtDifVec& vecIn, RobocentricFeatureElement& stateOut) const{
+    if(&stateOut != this){
+      stateOut.coordinates_ = coordinates_;
+      stateOut.distance_ = distance_;
+    }
     coordinates_.get_nor().boxPlus(vecIn.template block<2,1>(0,0),norTemp_);
-    stateOut.coordinates_.set_nor(norTemp_);
-    stateOut.coordinates_.mpCamera_ = coordinates_.mpCamera_;
-    stateOut.coordinates_.camID_ = coordinates_.camID_;
+    stateOut.coordinates_.set_nor(norTemp_,false);
     stateOut.distance_.p_ = distance_.p_ + vecIn(2);
-    stateOut.distance_.type_ = distance_.type_;
   }
   void boxMinus(const RobocentricFeatureElement& stateIn, mtDifVec& vecOut) const{
     coordinates_.get_nor().boxMinus(stateIn.coordinates_.get_nor(),norDifTemp_);
     vecOut.template block<2,1>(0,0) = norDifTemp_;
     vecOut(2) = distance_.p_-stateIn.distance_.p_;
   }
-  void boxMinusJac(const RobocentricFeatureElement& stateIn, mtCovMat& matOut) const{
+  void boxMinusJac(const RobocentricFeatureElement& stateIn, MXD& matOut) const{
     matOut.setIdentity();
     coordinates_.get_nor().boxMinusJac(stateIn.coordinates_.get_nor(),norCovMatTemp_);
     matOut.template block<2,2>(0,0) = norCovMatTemp_;
@@ -77,6 +82,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   void setIdentity(){
     norTemp_.setIdentity();
     coordinates_.set_nor(norTemp_);
+    coordinates_.set_warp_identity();
     distance_.p_ = 1.0;
   }
   void setRandom(unsigned int& s){
@@ -90,7 +96,7 @@ class RobocentricFeatureElement: public LWF::ElementBase<RobocentricFeatureEleme
   void fix(){
     norTemp_ = coordinates_.get_nor();
     norTemp_.fix();
-    coordinates_.set_nor(norTemp_);
+    coordinates_.set_nor(norTemp_,false);
   }
   mtGet& get(unsigned int i = 0){
     assert(i==0);

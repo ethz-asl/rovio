@@ -51,6 +51,7 @@ namespace rovio {
       file_ = file;
       line_ = line;
     }
+    virtual ~ExceptionBase(){};
     virtual const char * what () const throw ()
     {
       return (file_ + ":" + std::to_string(line_) + ": " + function_ + "()" + " " + message_).c_str();
