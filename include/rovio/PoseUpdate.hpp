@@ -105,7 +105,19 @@ class PoseOutlierDetection: public LWF::OutlierDetection<LWF::ODEntry<PoseInnova
   virtual ~PoseOutlierDetection(){};
 };
 
-template<typename FILTERSTATE, int poseIndex>
+/** \brief Class for adding poseUpdates to the filter.
+ *
+ * Coordinate frames overview:
+ * I: Inertial frame of measured pose
+ * V: Body frame of measured pose
+ * W: Inertial frame of ROVIO
+ * M: IMU-coordinate frame
+ *
+ *  @tparam FILTERSTATE         - FilterState
+ *  @tparam inertialPoseIndex   - Index where the estimated relative pose between inertial frames is stored. Set -1 if this should not be estimated.
+ *  @tparam bodyPoseIndex       - Index where the estimated relative pose between body frames is stored. Set -1 if this should not be estimated.
+ */
+template<typename FILTERSTATE, int inertialPoseIndex, int bodyPoseIndex>
 class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,PoseUpdateNoise,PoseOutlierDetection,false>{
  public:
   typedef LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,PoseUpdateNoise,PoseOutlierDetection,false> Base;
@@ -120,16 +132,31 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   typedef typename Base::mtMeas mtMeas;
   typedef typename Base::mtNoise mtNoise;
   typedef typename Base::mtOutlierDetection mtOutlierDetection;
-  static constexpr int poseIndex_ = poseIndex;
+  static constexpr int inertialPoseIndex_ = inertialPoseIndex;
+  static constexpr int bodyPoseIndex_ = bodyPoseIndex;
+  QPD qVM_;
+  V3D MrMV_;
+  QPD qWI_;
+  V3D IrIW_;
+  double timeOffset_;
+  bool enablePosition_;
+  bool enableAttitude_;
+  bool noFeedbackToRovio_;
   PoseUpdate(){
-    static_assert(mtState::nPose_>poseIndex_,"PoseUpdate requires enabling of addional poses in filter state");
+    static_assert(mtState::nPose_>inertialPoseIndex_,"Please add enough poses to the filter state (templated).");
+    static_assert(mtState::nPose_>bodyPoseIndex_,"Please add enough poses to the filter state (templated).");
     qVM_.setIdentity();
     MrMV_.setZero();
+    qWI_.setIdentity();
+    IrIW_.setZero();
     timeOffset_ = 0.0;
     enablePosition_ = true;
     enableAttitude_ = true;
+    noFeedbackToRovio_ = true;
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
+    doubleRegister_.registerVector("IrIW",IrIW_);
+    doubleRegister_.registerQuaternion("qWI",qWI_);
     intRegister_.removeScalarByStr("maxNumIteration");
     doubleRegister_.removeScalarByStr("alpha");
     doubleRegister_.removeScalarByStr("beta");
@@ -138,69 +165,102 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     doubleRegister_.registerScalar("timeOffset",timeOffset_);
     boolRegister_.registerScalar("enablePosition",enablePosition_);
     boolRegister_.registerScalar("enableAttitude",enableAttitude_);
+    boolRegister_.registerScalar("noFeedbackToRovio",noFeedbackToRovio_);
   }
   virtual ~PoseUpdate(){}
-  QPD qVM_;
-  V3D MrMV_;
-  double timeOffset_;
-  bool enablePosition_;
-  bool enableAttitude_;
-
+  const V3D& get_IrIW(const mtState& state) const{
+    if(inertialPoseIndex_ >= 0){
+      return state.poseLin(inertialPoseIndex_);
+    } else {
+      return IrIW_;
+    }
+  }
+  const QPD& get_qWI(const mtState& state) const{
+    if(inertialPoseIndex_ >= 0){
+      return state.poseRot(inertialPoseIndex_);
+    } else {
+      return qWI_;
+    }
+  }
+  const V3D& get_MrMV(const mtState& state) const{
+    if(bodyPoseIndex_ >= 0){
+      return state.poseLin(bodyPoseIndex_);
+    } else {
+      return MrMV_;
+    }
+  }
+  const QPD& get_qVM(const mtState& state) const{
+    if(bodyPoseIndex_ >= 0){
+      return state.poseRot(bodyPoseIndex_);
+    } else {
+      return qVM_;
+    }
+  }
   void evalInnovation(mtInnovation& y, const mtState& state, const mtNoise& noise) const{
-    // JrJV = JrJW + qWJ^T*(WrWM + qWM*MrMV)
-    // qVJ = qVM*qWM^T*qWJ
-    if(poseIndex_ >= 0){
-      if(enablePosition_){
-        y.pos() = state.poseLin(poseIndex_) + state.poseRot(poseIndex_).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(MrMV_))) - meas_.pos() + noise.pos();
-      } else {
-        y.pos() = noise.pos();
-      }
-      if(enableAttitude_){
-        QPD attNoise = attNoise.exponentialMap(noise.att());
-        y.att() = attNoise*qVM_*state.qWM().inverted()*state.poseRot(poseIndex_)*meas_.att().inverted();
-      } else {
-        QPD attNoise = attNoise.exponentialMap(noise.att());
-        y.att() = attNoise;
-      }
+    // IrIV = IrIW + qWI^T*(WrWM + qWM*MrMV)
+    // qVI = qVM*qWM^T*qWI
+    if(enablePosition_){
+      y.pos() = get_IrIW(state) + get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))) - meas_.pos() + noise.pos();
+    } else {
+      y.pos() = noise.pos();
+    }
+    if(enableAttitude_){
+      QPD attNoise = attNoise.exponentialMap(noise.att());
+      y.att() = attNoise*get_qVM(state)*state.qWM().inverted()*get_qWI(state)*meas_.att().inverted();
+    } else {
+      QPD attNoise = attNoise.exponentialMap(noise.att());
+      y.att() = attNoise;
     }
   }
   void jacState(MXD& F, const mtState& state) const{
-    if(poseIndex_ >= 0){
-      F.setZero();
-      if(enablePosition_){
+    F.setZero();
+    if(enablePosition_){
+      if(!noFeedbackToRovio_){
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pos>()) =
-            MPD(state.poseRot(poseIndex_).inverted()).matrix();
-        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(poseIndex_)) =
-                  M3D::Identity();
+            MPD(get_qWI(state).inverted()).matrix();
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_att>()) =
-            MPD(state.poseRot(poseIndex_).inverted()).matrix()*gSM(state.qWM().rotate(MrMV_));
-        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
-            -gSM(state.poseRot(poseIndex_).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(MrMV_))))*MPD(state.poseRot(poseIndex_).inverted()).matrix();
+            MPD(get_qWI(state).inverted()).matrix()*gSM(state.qWM().rotate(get_MrMV(state)));
       }
-      if(enableAttitude_){
+      if(inertialPoseIndex_ >= 0){
+        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(inertialPoseIndex_)) =
+            M3D::Identity();
+        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(inertialPoseIndex_)) =
+            -gSM(get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))))*MPD(get_qWI(state).inverted()).matrix();
+      }
+      if(bodyPoseIndex_ >= 0){
+        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(bodyPoseIndex_)) =
+            MPD(get_qWI(state).inverted()*state.qWM()).matrix();
+      }
+    }
+    if(enableAttitude_){
+      if(!noFeedbackToRovio_){
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_att>()) =
-            -MPD(qVM_*state.qWM().inverted()).matrix();
-        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(poseIndex_)) =
-            MPD(qVM_*state.qWM().inverted()).matrix();
+            -MPD(get_qVM(state)*state.qWM().inverted()).matrix();
+      }
+      if(inertialPoseIndex_ >= 0){
+        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(inertialPoseIndex_)) =
+            MPD(get_qVM(state)*state.qWM().inverted()).matrix();
+      }
+      if(bodyPoseIndex_ >= 0){
+        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(bodyPoseIndex_)) =
+            M3D::Identity();
       }
     }
   }
   void jacNoise(MXD& G, const mtState& state) const{
-    if(poseIndex_ >= 0){
-      G.setZero();
-      G.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity();
-      G.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtNoise::template getId<mtNoise::_att>()) = M3D::Identity();
-    }
+    G.setZero();
+    G.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtNoise::template getId<mtNoise::_pos>()) = M3D::Identity();
+    G.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtNoise::template getId<mtNoise::_att>()) = M3D::Identity();
   }
   void preProcess(mtFilterState& filterstate, const mtMeas& meas, bool& isFinished){
     isFinished = false;
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     isFinished = true;
-    // JrJM = JrJV - qWJ^T*qWM*MrMV
-    filterstate.state_.aux().poseMeasLin_ = meas.pos() - (filterstate.state_.poseRot(poseIndex_).inverted()*filterstate.state_.qWM()).rotate(MrMV_);
-    // qMJ = qVM^T*qVJ;
-    filterstate.state_.aux().poseMeasRot_ = qVM_.inverted()*meas.att();
+    // IrIM = IrIV - qWI^T*qWM*MrMV
+    filterstate.state_.aux().poseMeasLin_ = meas.pos() - (get_qWI(filterstate.state_).inverted()*filterstate.state_.qWM()).rotate(get_MrMV(filterstate.state_));
+    // qMI = qVM^T*qVI;
+    filterstate.state_.aux().poseMeasRot_ = get_qVM(filterstate.state_).inverted()*meas.att();
   }
 };
 

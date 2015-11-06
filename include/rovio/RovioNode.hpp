@@ -337,6 +337,20 @@ class RovioNode{
         cameraOutputCF_.transformState(state,output_);
         cameraOutputCF_.transformCovMat(state,cov,outputCov_);
 
+        // Cout verbose for pose measurements
+        if(std::get<0>(mpFilter_->mUpdates_).verbose_){
+          if(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_ >=0){
+            std::cout << "Transformation between inertial frames, IrIW, qWI: " << std::endl;
+            std::cout << "  " << state.poseLin(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_).transpose() << std::endl;
+            std::cout << "  " << state.poseRot(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_) << std::endl;
+          }
+          if(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_ >=0){
+            std::cout << "Transformation between body frames, MrMV, qVM: " << std::endl;
+            std::cout << "  " << state.poseLin(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_).transpose() << std::endl;
+            std::cout << "  " << state.poseRot(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_) << std::endl;
+          }
+        }
+
         // Get the position and orientation.
         Eigen::Vector3d WrWC = output_.WrWC();
         rot::RotationQuaternionPD qCW = output_.qCW();

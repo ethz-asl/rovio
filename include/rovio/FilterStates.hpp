@@ -93,8 +93,8 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
-  rot::RotationQuaternionPD poseMeasRot_; /**<Groundtruth attitude measurement. qMJ.*/
-  Eigen::Vector3d poseMeasLin_; /**<Groundtruth position measurement. JrJM*/
+  rot::RotationQuaternionPD poseMeasRot_; /**<Groundtruth attitude measurement. qMI.*/
+  Eigen::Vector3d poseMeasLin_; /**<Groundtruth position measurement. IrIM*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,8 +142,8 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   static constexpr unsigned int _vep = _att+1;  /**<Idx. Position Vector MrMC: Pointing from the IMU-Frame to the Camera-Frame, expressed in IMU-Coordinates.*/
   static constexpr unsigned int _vea = _vep+1;  /**<Idx. Quaternion qCM: IMU-Coordinates to Camera-Coordinates.*/
   static constexpr unsigned int _fea = _vea+1;  /**<Idx. Robocentric feature parametrization.*/
-  static constexpr unsigned int _pop = _fea+1;  /**<Idx. Additonial pose in state, linear part. JrJW.*/
-  static constexpr unsigned int _poa = _pop+1;  /**<Idx. Additonial pose in state, rotational part. qWJ.*/
+  static constexpr unsigned int _pop = _fea+1;  /**<Idx. Additonial pose in state, linear part. IrIW.*/
+  static constexpr unsigned int _poa = _pop+1;  /**<Idx. Additonial pose in state, rotational part. qWI.*/
   static constexpr unsigned int _aux = _poa+1;  /**<Idx. Auxiliary state.*/
 
   /** \brief Constructor
@@ -405,7 +405,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   inline V3D WrWC_ext(const int i, const int camID = 0) const{
     assert(i<nPose_);
     assert(camID<nCam_);
-    // WrWC = qWJ*(JrJM-JrJW)+qWM*MrMC
+    // WrWC = qWI*(IrIM-IrIW)+qWM*MrMC
     return poseRot(i).rotate(V3D(this->aux().poseMeasLin_-poseLin(i)))+this->template get<_att>().rotate(MrMC(camID));
   }
 
@@ -422,7 +422,7 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   inline QPD qCW_ext(const int i, const int camID = 0) const{
     assert(i<nPose_);
     assert(camID<nCam_);
-    // qCW = qCM*qMJ*qWJ^T;
+    // qCW = qCM*qMI*qWI^T;
     return qCM(camID)*this->aux().poseMeasRot_*poseRot(i).inverted();
   }
   //@}

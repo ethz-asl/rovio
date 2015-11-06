@@ -68,8 +68,6 @@ Init
         att_1 0.1;			Y-Covariance of initial attitude [rad^2]
         att_2 0.1;			Z-Covariance of initial attitude [rad^2]
         vea 0.1;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
-        pop 1;				Covariance of initial pose between inertial frames, linear part [m^2]
-        poa 1;				Covariance of initial pose between inertial frames, rotational part [rad^2]
     }
 }
 ImgUpdate
@@ -158,8 +156,6 @@ Prediction
         vea 1e-8;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
         dep 0.000001;							Covariance parameter of distance prediction [m^2/s]
         nor 0.0001;								Covariance parameter of bearing vector prediction [rad^2/s]
-        pop 1e-4;								Covariance parameter of pose between inertial frames, linear part [m^2/s]
-        poa 1e-4;								Covariance parameter of pose between inertial frames, rotational part [rad^2/s]
     }
     MotionDetection
     {
@@ -171,30 +167,39 @@ PoseUpdate
 {
     UpdateNoise
     {
-        pos_0 0.0001
-        pos_1 0.0001
-        pos_2 0.0001
-        att_0 0.0001
-        att_1 0.0001
-        att_2 0.0001
+        pos_0 0.01;							X-Covariance of linear pose measurement update [m^2]
+        pos_1 0.01;							Y-Covariance of linear pose measurement update [m^2]
+        pos_2 0.01;							Z-Covariance of linear pose measurement update [m^2]
+        att_0 0.01;							X-Covariance of rotational pose measurement update [rad^2]
+        att_1 0.01;							Y-Covariance of rotational pose measurement update [rad^2]
+        att_2 0.01;							Z-Covariance of rotational pose measurement update [rad^2]
     }
-    MahalanobisTh0 12.6511204
+	init_cov_IrIW 1;							Covariance of initial pose between inertial frames, linear part [m^2]
+	init_cov_qWI 1;								Covariance of initial pose between inertial frames, rotational part [rad^2]
+	init_cov_MrMV 1;							Covariance of initial pose between inertial frames, linear part [m^2]
+	init_cov_qVM 1;								Covariance of initial pose between inertial frames, rotational part [rad^2]
+    pre_cov_IrIW 1e-4;							Covariance parameter of pose between inertial frames, linear part [m^2/s]
+    pre_cov_qWI 1e-4;							Covariance parameter of pose between inertial frames, rotational part [rad^2/s]
+    pre_cov_MrMV 1e-4;							Covariance parameter of pose between inertial frames, linear part [m^2/s]
+    pre_cov_qVM 1e-4;							Covariance parameter of pose between inertial frames, rotational part [rad^2/s]
+    MahalanobisTh0 12.6511204;					Mahalonobis distance treshold of pose measurement
 	doVisualization false;						Should the measured poses be vizualized
-	enablePosition true;
-	enableAttitude true;
-	timeOffset 0.0;
-    qVM_x 0
-    qVM_y 0
-    qVM_z 0
-    qVM_w 1
-    MrMV_x 0
-    MrMV_y 0
-    MrMV_z 0
-    qWI_x 0
-    qWI_y 0
-    qWI_z 0
-    qWI_w 1
-    IrIW_x 0
-    IrIW_y 0
-    IrIW_z 0
+	enablePosition true;						Should the linear part be used during the update
+	enableAttitude true;						Should the rotation part be used during the update (e.g. set to fals eif feeding GPS-measurement)
+	noFeedbackToRovio true;						By default the pose update is only used for aligning coordinate frame. Set to false if ROVIO should benefit frome the posed measurements.
+	timeOffset 0.0;								Time offset added to the pose measurement timestamps
+    qVM_x 0;									X-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
+    qVM_y 0;									Y-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
+    qVM_z 0;									Z-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
+    qVM_w 1;									W-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
+    MrMV_x 0;									X-entry of vector representing IMU to reference body coordinate frame of pose measurement
+    MrMV_y 0;									Y-entry of vector representing IMU to reference body coordinate frame of pose measurement
+    MrMV_z 0;									Z-entry of vector representing IMU to reference body coordinate frame of pose measurement
+    qWI_x 0;									X-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (JPL)
+    qWI_y 0;									Y-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (JPL)
+    qWI_z 0;									Z-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (JPL)
+    qWI_w 1;									W-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (JPL)
+    IrIW_x 0;									X-entry of vector representing World to reference inertial coordinate frame of pose measurement
+    IrIW_y 0;									Y-entry of vector representing World to reference inertial coordinate frame of pose measurement
+    IrIW_z 0;									Z-entry of vector representing World to reference inertial coordinate frame of pose measurement
 }
