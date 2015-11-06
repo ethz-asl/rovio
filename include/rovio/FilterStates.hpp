@@ -398,15 +398,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   /** \brief Get the position vector pointing from the World-Frame to the Camera-Frame, expressed in World-Coordinates (World->%Camera, expressed in World).
    *
    *  @note - This is compute based on the external pose measurement
-   *  @param i - Pose index
-   *  @param camID - %Camera ID
    *  @return the position vector WrWC (World->%Camera, expressed in World).
    */
-  inline V3D WrWC_ext(const int i, const int camID = 0) const{
-    assert(i<nPose_);
-    assert(camID<nCam_);
-    // WrWC = qWI*(IrIM-IrIW)+qWM*MrMC
-    return poseRot(i).rotate(V3D(this->aux().poseMeasLin_-poseLin(i)))+this->template get<_att>().rotate(MrMC(camID));
+  inline V3D WrWC_ext() const{
+    return this->aux().poseMeasLin_;
   }
 
   //@}
@@ -415,15 +410,10 @@ StateAuxiliary<nMax,nLevels,patchSize,nCam>>{
   /** \brief Get the quaternion qCW, expressing the World-Frame in Camera-Coordinates (World Coordinates->%Camera Coordinates).
    *
    *  @note - This is compute based on the external pose measurement
-   *  @param i - Pose index
-   *  @param camID - %Camera ID
    *  @return he quaternion qCW (World Coordinates->%Camera Coordinates).
    */
-  inline QPD qCW_ext(const int i, const int camID = 0) const{
-    assert(i<nPose_);
-    assert(camID<nCam_);
-    // qCW = qCM*qMI*qWI^T;
-    return qCM(camID)*this->aux().poseMeasRot_*poseRot(i).inverted();
+  inline QPD qCW_ext() const{
+    return this->aux().poseMeasRot_;
   }
   //@}
 

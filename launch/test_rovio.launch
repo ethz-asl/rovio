@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?> 
 <launch>
   <node pkg="rovio" type="test_rovio" name="rovio1" output="screen">
-  <remap from="vrpn_client/pose" to="/vicon/auk/auk"/>
+  <remap from="vrpn_client/pose" to="/vicon/firefly_sbx/firefly_sbx"/>
   </node>
   <!--<node pkg="rqt_plot" type="rqt_plot" name="plot_acc_bias" output="screen" args="/rovio/output/acc_bias/x:y:z"/>
   <node pkg="rqt_plot" type="rqt_plot" name="plot_gyr_bias" output="screen" args="/rovio/output/gyr_bias/x:y:z"/>

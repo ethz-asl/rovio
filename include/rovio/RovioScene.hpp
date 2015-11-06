@@ -118,8 +118,8 @@ class RovioScene{
     const MXD& cov = filterState.cov_;
 
     if(filterState.plotPoseMeas_){
-      mpGroundtruth_->q_BW_ = filterState.state_.qCW_ext(0,0);
-      mpGroundtruth_->W_r_WB_ = filterState.state_.WrWC_ext(0,0).template cast<float>();
+      mpGroundtruth_->q_BW_ = filterState.state_.qCW_ext();
+      mpGroundtruth_->W_r_WB_ = filterState.state_.WrWC_ext().template cast<float>();
       mpGroundtruth_->draw_ = true;
     } else {
       mpGroundtruth_->draw_ = false;

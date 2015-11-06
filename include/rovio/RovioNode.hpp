@@ -169,10 +169,12 @@ class RovioNode{
     mpTestFilterState->fsm_.setAllCameraPointers();
 
     // Prediction
+    std::cout << "Testing Prediction" << std::endl;
     mpFilter_->mPrediction_.testPredictionJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
     if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
+      std::cout << "Testing Update" << std::endl;
       for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
         testState.aux().activeFeature_ = i;
         testState.aux().activeCameraCounter_ = 0;
@@ -185,8 +187,11 @@ class RovioNode{
     }
 
     // CF
+    std::cout << "Testing cameraOutputCF" << std::endl;
     cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    std::cout << "Testing attitudeToYprCF" << std::endl;
     attitudeToYprCF_.testTransformJac(1e-8,1e-6);
+    std::cout << "Testing transformFeatureOutputCT" << std::endl;
     rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT(&mpFilter_->multiCamera_);
     transformFeatureOutputCT.setFeatureID(0);
     if(mtState::nCam_>1){
@@ -201,12 +206,15 @@ class RovioNode{
       featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
     }
     rovio::PixelOutputCT pixelOutputCT;
+    std::cout << "Testing pixelOutputCT" << std::endl;
     pixelOutputCT.testTransformJac(featureOutput,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
 
     // Zero Velocity Updates
+    std::cout << "Testing zero velocity update" << std::endl;
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
 
     // Pose Update
+    std::cout << "Testing pose update" << std::endl;
     std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
 
     delete mpTestFilterState;
