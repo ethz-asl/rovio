@@ -284,8 +284,6 @@ class FeatureCoordinates{
    *  @param qC2C1   - Quaternion, expressing the orientation of C1 in the C2.
    *  @param d       - Triangulated depth value along the bearing vector C1fP.
    *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
-   *
-   *  @todo compare with d_v1 = (v1^T (1 - v2 v2^T) rC1C2)/(v1^T (1 - v2 v2^T) v1)
    */
   bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d);
 

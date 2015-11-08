@@ -102,7 +102,7 @@ ImgUpdate
     removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
     minAbsoluteSTScore 5.0;										Minimum absolute ST-score for extracting new feature patch
-    fastDetectionThreshold 10;									ST-score treshold while adding new feature
+    fastDetectionThreshold 10;									Fast corner detector treshold while adding new feature
     alignConvergencePixelRange 1;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;										How many sigma of the uncertainty should be covered in the adaptive alignement
     alignMaxUniSample 3;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
@@ -112,7 +112,8 @@ ImgUpdate
     bearingVectorMahalTh 9.21;									Threshold for the aligned patch to be accepted as inlier
     removeNegativeFeatureAfterUpdate true;						Should feature with negative distance get removed
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
-    useCrossCameraMeasurements true;							Should cross measurements between frame be used. Might be turned of in calibration phase.	
+    useCrossCameraMeasurements true;							Should cross measurements between frame be used. Might be turned of in calibration phase.
+    doStereoInitialization true;								Should a stereo match be used for feature initialization.
     MotionDetection
     {
     	isEnabled 1;											Is the motion detection enabled

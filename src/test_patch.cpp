@@ -230,7 +230,6 @@ TEST_F(PatchTesting, computeGradientParameters) {
       ASSERT_EQ(*it_dy,float(dy_));
     }
   }
-  ASSERT_EQ(p_.s_,0.0);
   ASSERT_EQ(p_.H_(0,0),dx_*dx_*patchSize_*patchSize_);
   ASSERT_EQ(p_.H_(0,1),dx_*dy_*patchSize_*patchSize_);
   ASSERT_EQ(p_.H_(0,2),dx_*patchSize_*patchSize_);
@@ -245,7 +244,8 @@ TEST_F(PatchTesting, computeGradientParameters) {
   c_.set_warp_identity();
   p_.extractPatchFromImage(img2_,c_,true);
   p_.computeGradientParameters();
-  double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
+  double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)))
+              + 0.5 * (patchSize_ + patchSize_ + sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
   s = s*(255*0.5)*(255*0.5)/(patchSize_*patchSize_);
   ASSERT_EQ(p_.s_,s);
 }

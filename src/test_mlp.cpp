@@ -267,7 +267,8 @@ TEST_F(MLPTesting, computeMultilevelShiTomasiScore) {
   c_.set_warp_identity();
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
   mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,true);
-  double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
+  double s = 0.5 * (patchSize_ + patchSize_ - sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)))
+      + 0.5 * (patchSize_ + patchSize_ + sqrtf((patchSize_ + patchSize_) * (patchSize_ + patchSize_) - 4 * (patchSize_ * patchSize_ - 1 * 1)));
   s = s*(255*0.5)*(255*0.5)/(patchSize_*patchSize_);
   int count = 0;
   double scale = 0;
