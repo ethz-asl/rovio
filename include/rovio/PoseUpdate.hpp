@@ -142,6 +142,8 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   bool enablePosition_;
   bool enableAttitude_;
   bool noFeedbackToRovio_;
+  bool doInertialAlignmentAtStart_;
+  bool didAlignment_;
   PoseUpdate(){
     static_assert(mtState::nPose_>inertialPoseIndex_,"Please add enough poses to the filter state (templated).");
     static_assert(mtState::nPose_>bodyPoseIndex_,"Please add enough poses to the filter state (templated).");
@@ -153,6 +155,8 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     enablePosition_ = true;
     enableAttitude_ = true;
     noFeedbackToRovio_ = true;
+    doInertialAlignmentAtStart_ = true;
+    didAlignment_ = false;
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
     doubleRegister_.registerVector("IrIW",IrIW_);
@@ -166,6 +170,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     boolRegister_.registerScalar("enablePosition",enablePosition_);
     boolRegister_.registerScalar("enableAttitude",enableAttitude_);
     boolRegister_.registerScalar("noFeedbackToRovio",noFeedbackToRovio_);
+    boolRegister_.registerScalar("doInertialAlignmentAtStart",doInertialAlignmentAtStart_);
   }
   virtual ~PoseUpdate(){}
   const V3D& get_IrIW(const mtState& state) const{
@@ -253,14 +258,29 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     G.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtNoise::template getId<mtNoise::_att>()) = M3D::Identity();
   }
   void preProcess(mtFilterState& filterstate, const mtMeas& meas, bool& isFinished){
+    mtState& state = filterstate.state_;
     isFinished = false;
+    if(!didAlignment_ && doInertialAlignmentAtStart_){
+      // qWI = qWM*qVM^T*qVI;
+      qWI_ = state.qWM()*get_qVM(state).inverted()*meas.att();
+      if(inertialPoseIndex_ >= 0){
+        state.poseRot(inertialPoseIndex_) = qWI_;
+      }
+      // IrIW = IrIV - qWI^T*(WrWM + qWM*MrMV);
+      IrIW_ = meas.pos() - qWI_.inverseRotate(V3D(state.WrWM() + state.qWM().rotate(get_MrMV(state))));
+      if(inertialPoseIndex_ >= 0){
+        state.poseLin(inertialPoseIndex_) = IrIW_;
+      }
+      didAlignment_ = true;
+    }
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
+    mtState& state = filterstate.state_;
     isFinished = true;
-    // IrIM = IrIV - qWI^T*qWM*MrMV
-    filterstate.state_.aux().poseMeasLin_ = meas.pos() - (get_qWI(filterstate.state_).inverted()*filterstate.state_.qWM()).rotate(get_MrMV(filterstate.state_));
-    // qMI = qVM^T*qVI;
-    filterstate.state_.aux().poseMeasRot_ = get_qVM(filterstate.state_).inverted()*meas.att();
+    // WrWC = qWI*(IrIV - qWI^T*qWM*MrMV -IrIW) +qWM*MrMC
+    state.aux().poseMeasLin_ = get_qWI(state).rotate(V3D(meas.pos()-(get_qWI(state).inverted()*state.qWM()).rotate(get_MrMV(state))-get_IrIW(state)))+state.template get<mtState::_att>().rotate(state.MrMC(0));
+    // qCW = qCM*qVM^T*qVI*qWI^T;
+    state.aux().poseMeasRot_ = state.qCM(0)*get_qVM(state).inverted()*meas.att()*get_qWI(state).inverted();
   }
 };
 

@@ -187,6 +187,7 @@ PoseUpdate
 	enablePosition true;						Should the linear part be used during the update
 	enableAttitude true;						Should the rotation part be used during the update (e.g. set to fals eif feeding GPS-measurement)
 	noFeedbackToRovio true;						By default the pose update is only used for aligning coordinate frame. Set to false if ROVIO should benefit frome the posed measurements.
+	doInertialAlignmentAtStart true;			Should the transformation between I and W be explicitly computed and set with the first pose measurement.
 	timeOffset 0.0;								Time offset added to the pose measurement timestamps
     qVM_x 0;									X-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
     qVM_y 0;									Y-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (JPL)
