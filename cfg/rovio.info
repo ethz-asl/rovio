@@ -102,11 +102,13 @@ ImgUpdate
     removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
     minAbsoluteSTScore 5.0;										Minimum absolute ST-score for extracting new feature patch
+    minTimeBetweenPatchUpdate 1.0;								Minimum time between new multilevel patch extrection [s]
     fastDetectionThreshold 10;									Fast corner detector treshold while adding new feature
     alignConvergencePixelRange 1;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;										How many sigma of the uncertainty should be covered in the adaptive alignement
     alignMaxUniSample 3;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
-    matchingPixelThreshold 4.0;									Below this treshold no pre-alignment is carried out [pixels]
+    matchingPixelThreshold 0.0;									Below this treshold no pre-alignment is carried out [pixels]
+    minNoAlignment 5;											Minimal number of alignment every feature must make through.
     specialLinearizationThreshold 0.0025;						Below this treshold no special linearization point gets computed (1 pixel ~ 0.0025) [rad]
     patchRejectionTh 10;										If the average itensity error is larger than this the feauture is rejected [intensity]
     bearingVectorMahalTh 9.21;									Threshold for the aligned patch to be accepted as inlier

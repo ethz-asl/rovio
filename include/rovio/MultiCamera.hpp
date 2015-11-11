@@ -102,6 +102,12 @@ class MultiCamera{
       vecOut.camID_ = i;
       vecOut.mpCamera_ = &cameras_[i];
       vecOut.trackWarping_ = vecIn.trackWarping_;
+      vecOut.pixelCov_.setZero();
+      vecOut.eigenVector1_.setZero();
+      vecOut.eigenVector2_.setZero();
+      vecOut.sigma1_ = 0.0;
+      vecOut.sigma2_ = 0.0;
+      vecOut.sigmaAngle_ = 0.0;
       if(vecIn.trackWarping_){ // Invalidate warping
         vecOut.valid_warp_c_ = false;
         vecOut.valid_warp_nor_ = false;
