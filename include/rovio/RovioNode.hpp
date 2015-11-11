@@ -125,10 +125,10 @@ class RovioNode{
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
 
-    map_frame_ = "world";
-    world_frame_ = "odom";
-    camera_frame_ = "camera";
-    imu_frame_ = "imu";
+    map_frame_ = "/map";
+    world_frame_ = "/world";
+    camera_frame_ = "/camera";
+    imu_frame_ = "/imu";
     nh_private_.param("world_frame", world_frame_, world_frame_);
     nh_private_.param("camera_frame", camera_frame_, camera_frame_);
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
@@ -364,19 +364,22 @@ class RovioNode{
         // Get the position and orientation.
         Eigen::Vector3d WrWC = output_.WrWC();
         rot::RotationQuaternionPD qCW = output_.qCW();
-        Eigen::Vector3d IrIW = state.poseLin(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
-        rot::RotationQuaternionPD qWI = state.poseRot(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
-        // rot::RotationQuaternionPD qIW = qWI; // to invert or not to invert? --> no need for inversion, test bags 1-4
 
 
-        // Send World (Pose Sensor) to Odom Transformation
-        tf::StampedTransform tf_transform_odom;
-        tf_transform_odom.frame_id_ = map_frame_;
-        tf_transform_odom.child_frame_id_ = world_frame_;
-        tf_transform_odom.stamp_ = ros::Time(mpFilter_->safe_.t_);
-        tf_transform_odom.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
-        tf_transform_odom.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),qWI.w()));
-        tb_.sendTransform(tf_transform_odom);
+
+        // Send Map (Pose Sensor) to World (ROVIO) Transformation
+        if(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_ >=0){
+          Eigen::Vector3d IrIW = state.poseLin(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
+          rot::RotationQuaternionPD qWI = state.poseRot(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
+
+          tf::StampedTransform tf_transform_odom;
+          tf_transform_odom.frame_id_ = map_frame_;
+          tf_transform_odom.child_frame_id_ = world_frame_;
+          tf_transform_odom.stamp_ = ros::Time(mpFilter_->safe_.t_);
+          tf_transform_odom.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
+          tf_transform_odom.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),qWI.w()));
+          tb_.sendTransform(tf_transform_odom);
+        }
 
 
         // Send camera pose message.
