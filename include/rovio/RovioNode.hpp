@@ -229,6 +229,7 @@ class RovioNode{
     predictionMeas_.template get<mtPredictionMeas::_gyr>() = Eigen::Vector3d(imu_msg->angular_velocity.x,imu_msg->angular_velocity.y,imu_msg->angular_velocity.z);
     if(isInitialized_){
       mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
+      updateAndPublish();
     } else {
       mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
       std::cout << std::setprecision(12);
@@ -281,16 +282,7 @@ class RovioNode{
 
       if(imgUpdateMeas_.template get<mtImgMeas::_aux>().areAllValid()){
         mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,msgTime);
-        double lastImuTime;
-        if(mpFilter_->predictionTimeline_.getLastTime(lastImuTime)){
-          auto rit = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rbegin();
-          while(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend() && rit->first > lastImuTime){
-            ++rit;
-          }
-          if(rit != std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.rend()){
-            updateAndPublish(rit->first);
-          }
-        }
+        updateAndPublish();
       }
     }
   }
@@ -304,14 +296,13 @@ class RovioNode{
       poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
       poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+std::get<1>(mpFilter_->mUpdates_).timeOffset_);
+      updateAndPublish();
     }
   }
 
   /** \brief Executes the update step of the filter and publishes the updated data.
-   *
-   *   @param updateTime   - Update Time.
    */
-  void updateAndPublish(const double& updateTime){
+  void updateAndPublish(){
     if(isInitialized_){
       // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
@@ -319,7 +310,7 @@ class RovioNode{
       static double timing_T = 0;
       static int timing_C = 0;
       const double oldSafeTime = mpFilter_->safe_.t_;
-      mpFilter_->updateSafe(&updateTime);
+      mpFilter_->updateSafe();
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
