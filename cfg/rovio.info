@@ -1,5 +1,5 @@
 ; You can partially override parameter set in this file by creating your own subset of parameter in a separate info-file and include it with:
-; #include "/home/michael/workspace/rovio/cfg/rovio_custom.info"
+; #include "/home/user/workspace/rovio/cfg/rovio_custom.info"
 Common
 {
 	doVECalibration true;		Should the camera-IMU extrinsics be calibrated online
@@ -8,25 +8,25 @@ Common
 }
 Camera0
 {
-	CalibrationFile /home/user/calibrations/cam0.yaml;						Camera-Calibration file for intrinsics
-	qCM_x  0.0;																X-entry of IMU to Camera quaterion (JPL)
-	qCM_y  0.0;																Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.0;																Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  1.0;																W-entry of IMU to Camera quaterion (JPL)
-	MrMC_x 0;																X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_y 0;																Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_z 0;																Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	CalibrationFile ;												Camera-Calibration file for intrinsics
+	qCM_x  -0.00832709949084;										X-entry of IMU to Camera quaterion (JPL)
+	qCM_y  0.00620149479559;										Y-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.701058841361;											Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w  0.713027840849;											W-entry of IMU to Camera quaterion (JPL)
+	MrMC_x -0.011004900471;											X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y -0.0569319964508;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z 0.0113601006563;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Camera1
 {
-	CalibrationFile /home/user/calibrations/cam1.yaml;						Camera-Calibration file for intrinsics
-	qCM_x  0.0;																X-entry of IMU to Camera quaterion (JPL)
-	qCM_y  0.0;																Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.0;																Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  1.0;																W-entry of IMU to Camera quaterion (JPL)
-	MrMC_x 0;																X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_y 0;																Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_z 0;																Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	CalibrationFile ;												Camera-Calibration file for intrinsics
+	qCM_x  -0.00322690532625;										X-entry of IMU to Camera quaterion (JPL)
+	qCM_y  0.0108061278686;											Y-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.701771385411;											Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w  0.712312948991;											W-entry of IMU to Camera quaterion (JPL)
+	MrMC_x -0.00935932265733;										X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y 0.0509200856267;											Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z 0.011414241067;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Init
 {
