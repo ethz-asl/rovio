@@ -590,7 +590,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
                   mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],alignedCoordinates_,startLevel_,false);
                   avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
                 }
-                if(avgError > patchRejectionTh_){
+                if(patchRejectionTh_ >= 0 && avgError > patchRejectionTh_){
                   f.mpStatistics_->status_[activeCamID] = FAILED_ALIGNEMENT;
                   if(visualizePatches_) cv::circle(filterState.patchDrawing_,cv::Point2i((1+2*activeCamID)*filterState.drawPS_+9,ID*filterState.drawPS_+3),3,cv::Scalar(105,0,150),-1,8,0);
                   if(verbose_) std::cout << "    \033[31mREJECTED (error too large)\033[0m" << std::endl;
@@ -722,7 +722,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],featureOutput_.c(),startLevel_,false);
             avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
           }
-          if(avgError <= patchRejectionTh_){
+          if(patchRejectionTh_ < 0 || avgError <= patchRejectionTh_){
             f.mpStatistics_->status_[activeCamID] = TRACKED;
             if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,150+(activeCamID == camID)*105,0));
           } else {
