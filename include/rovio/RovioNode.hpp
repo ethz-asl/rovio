@@ -216,8 +216,10 @@ class RovioNode{
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
 
     // Pose Update
-    std::cout << "Testing pose update" << std::endl;
-    std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
+    if(!std::get<1>(mpFilter_->mUpdates_).noFeedbackToRovio_){
+      std::cout << "Testing pose update" << std::endl;
+      std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
+    }
 
     delete mpTestFilterState;
   }
@@ -275,6 +277,11 @@ class RovioNode{
     if(isInitialized_ && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
+        for(int i=0;i<mtState::nCam_;i++){
+          if(imgUpdateMeas_.template get<mtImgMeas::_aux>().isValidPyr_[i]){
+            std::cout << "    \033[31mFailed Synchronization of Camera Frames, t = " << msgTime << "\033[0m" << std::endl;
+          }
+        }
         imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
       }
       imgUpdateMeas_.template get<mtImgMeas::_aux>().pyr_[camID].computeFromImage(cv_img,true);
@@ -282,6 +289,7 @@ class RovioNode{
 
       if(imgUpdateMeas_.template get<mtImgMeas::_aux>().areAllValid()){
         mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,msgTime);
+        imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
         updateAndPublish();
       }
     }

@@ -507,7 +507,6 @@ LWF::ArrayElement<LWF::VectorElement<3>,STATE::nPose_>>{
     this->template getName<_vep>() = "vep";
     this->template getName<_vea>() = "vea";
     this->template getName<_fea>() = "fea";
-    this->template getName<_fea>() = "fea";
     this->template getName<_pop>() = "pop";
     this->template getName<_poa>() = "poa";
   }
