@@ -96,25 +96,33 @@ int main(int argc, char** argv){
   rovioNode.makeTest();
 
   rosbag::Bag bag;
-  bag.open("/home/michael/datasets/euroc/01_easy/dataset.bag", rosbag::bagmode::Read);
+  std::string rosbag_filename = "dataset.bag";
+  nh_private.param("rosbag_filename", rosbag_filename, rosbag_filename);
+  bag.open(rosbag_filename, rosbag::bagmode::Read);
 
   std::vector<std::string> topics;
-  topics.push_back(std::string("/imu0"));
-  topics.push_back(std::string("/cam0/image_raw"));
-  topics.push_back(std::string("/cam1/image_raw"));
+  std::string imu_topic_name = "/imu0";
+  nh_private.param("imu_topic_name", imu_topic_name, imu_topic_name);
+  std::string cam0_topic_name = "/cam0/image_raw";
+  nh_private.param("cam0_topic_name", cam0_topic_name, cam0_topic_name);
+  std::string cam1_topic_name = "/cam1/image_raw";
+  nh_private.param("cam1_topic_name", cam1_topic_name, cam1_topic_name);
+  topics.push_back(std::string(imu_topic_name));
+  topics.push_back(std::string(cam0_topic_name));
+  topics.push_back(std::string(cam1_topic_name));
 
   rosbag::View view(bag, rosbag::TopicQuery(topics));
 
   foreach(rosbag::MessageInstance const msg, view){
-    if(msg.getTopic() == "/imu0"){
+    if(msg.getTopic() == imu_topic_name){
       sensor_msgs::Imu::ConstPtr imuMsg = msg.instantiate<sensor_msgs::Imu>();
       if (imuMsg != NULL) rovioNode.imuCallback(imuMsg);
     }
-    if(msg.getTopic() == "/cam0/image_raw"){
+    if(msg.getTopic() == cam0_topic_name){
       sensor_msgs::ImageConstPtr imgMsg = msg.instantiate<sensor_msgs::Image>();
       if (imgMsg != NULL) rovioNode.imgCallback0(imgMsg);
     }
-    if(msg.getTopic() == "/cam1/image_raw"){
+    if(msg.getTopic() == cam1_topic_name){
       sensor_msgs::ImageConstPtr imgMsg = msg.instantiate<sensor_msgs::Image>();
       if (imgMsg != NULL) rovioNode.imgCallback1(imgMsg);
     }
