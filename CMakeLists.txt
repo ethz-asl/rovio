@@ -58,6 +58,7 @@ find_package(catkin REQUIRED COMPONENTS
 	sensor_msgs
 	std_msgs
 	tf
+	rosbag
 )
 
 add_message_files(
@@ -86,6 +87,7 @@ catkin_package(
 	sensor_msgs
 	std_msgs
 	tf
+	rosbag
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
@@ -100,6 +102,9 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(rovio_node src/rovio_node.cpp)
 target_link_libraries(rovio_node ${PROJECT_NAME})
+
+add_executable(rovio_rosbag_loader src/rovio_rosbag_loader.cpp)
+target_link_libraries(rovio_rosbag_loader ${PROJECT_NAME})
 
 add_executable(feature_tracker_node src/feature_tracker_node.cpp)
 target_link_libraries(feature_tracker_node ${PROJECT_NAME})

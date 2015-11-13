@@ -26,4 +26,5 @@
   <depend>std_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>tf</depend>
+  <depend>rosbag</depend>
 </package>
