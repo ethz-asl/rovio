@@ -1,6 +1,6 @@
 # README #
 
-This repository contains the ROVIO (Robust Visual Inertial Odometry) framework. The code is open-source, but please remember that it is strongly coupled to on-going research and thus some parts are not fully mature yet. Furthermore, the code will also be subject to changes in the future which could include greater re-factoring of some parts.
+This repository contains the ROVIO (Robust Visual Inertial Odometry) framework. The code is open-source. Please remember that it is strongly coupled to on-going research and thus some parts are not fully mature yet. Furthermore, the code will also be subject to changes in the future which could include greater re-factoring of some parts.
 
 Video: https://youtu.be/ZMAISVy-6ao
 
@@ -24,6 +24,9 @@ Additional dependencies: opengl, glut, glew (sudo apt-get install freeglut3-dev,
 catkin build rovio --cmake-args -DCMAKE_BUILD_TYPE=Release -DMAKE_SCENE=ON
 ```
 
+### Euroc Datasets ###
+The rovio_node.launch file loads parameters such that ROVIO runs properly on the Euroc datasets. The datasets are availavle under:
+http://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets
 
 ### Further notes ###
 * Camera matrix and distortion parameters should be provided by a yaml file or loaded through rosparam

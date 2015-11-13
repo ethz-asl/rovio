@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.6)
 project(rovio)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -march=native")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DROVIO_NMAXFEATURE=25")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DROVIO_NCAM=1")
 
 add_subdirectory(lightweight_filtering)
 
@@ -89,16 +91,12 @@ catkin_package(
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
 
 if(MAKE_SCENE)
-	add_library(${PROJECT_NAME} src/test_rovio.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp src/Scene.cpp)
+	add_library(${PROJECT_NAME} src/rovio_node.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp src/Scene.cpp)
 else()
-	add_library(${PROJECT_NAME} src/test_rovio.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
+	add_library(${PROJECT_NAME} src/rovio_node.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
 endif()
-	
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-add_executable(test_rovio src/test_rovio.cpp)
-target_link_libraries(test_rovio ${PROJECT_NAME})
 
 add_executable(rovio_node src/rovio_node.cpp)
 target_link_libraries(rovio_node ${PROJECT_NAME})

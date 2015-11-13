@@ -27,30 +27,66 @@
 */
 
 #include <ros/package.h>
-
+#include <memory>
 #include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
+#ifdef MAKE_SCENE
+#include "rovio/RovioScene.hpp"
+#endif
 
-// TODO(helenol): expose these as ROS params as well?
-static constexpr unsigned int nMax_ = 25;    // Maximal number of considered features in the filter state.
-static constexpr int nLevels_ = 4;           // Total number of pyramid levels considered.
-static constexpr int patchSize_ = 8;         // Edge length of the patches (in pixel). Must be a multiple of 2!
-static constexpr int nCam_ = 1;              // Used total number of cameras.
-typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_>> mtFilter;
+#ifdef MAKE_SCENE
+static rovio::RovioScene<mtFilter> mRovioScene;
+
+void idleFunc(){
+  ros::spinOnce();
+  mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
+}
+#endif
+
+#ifdef ROVIO_NMAXFEATURE
+static constexpr int nMax_ = ROVIO_NMAXFEATURE;
+#else
+static constexpr int nMax_ = 25; // Maximal number of considered features in the filter state.
+#endif
+
+#ifdef ROVIO_NLEVELS
+static constexpr int nLevels_ = ROVIO_NLEVELS;
+#else
+static constexpr int nLevels_ = 4; // // Total number of pyramid levels considered.
+#endif
+
+#ifdef ROVIO_PATCHSIZE
+static constexpr int patchSize_ = ROVIO_PATCHSIZE;
+#else
+static constexpr int patchSize_ = 8; // Edge length of the patches (in pixel). Must be a multiple of 2!
+#endif
+
+#ifdef ROVIO_NCAM
+static constexpr int nCam_ = ROVIO_NCAM;
+#else
+static constexpr int nCam_ = 1; // Used total number of cameras.
+#endif
+
+#ifdef ROVIO_NPOSE
+static constexpr int nPose_ = ROVIO_NPOSE;
+#else
+static constexpr int nPose_ = 0; // Additional pose states.
+#endif
+
+typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_,nPose_>> mtFilter;
 
 int main(int argc, char** argv){
   ros::init(argc, argv, "rovio");
   ros::NodeHandle nh;
   ros::NodeHandle nh_private("~");
 
-  std::string filter_config = ros::package::getPath("rovio") +
-      "/cfg/rovio.info";
+  std::string rootdir = ros::package::getPath("rovio"); // Leaks memory
+  std::string filter_config = rootdir + "/cfg/rovio.info";
 
   nh_private.param("filter_config", filter_config, filter_config);
 
   // Filter
   std::shared_ptr<mtFilter> mpFilter(new mtFilter);
-
   mpFilter->readFromInfo(filter_config);
 
   // Force the camera calibration paths to the ones from ROS parameters.
@@ -67,6 +103,16 @@ int main(int argc, char** argv){
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
 
+#ifdef MAKE_SCENE
+  // Scene
+  std::string mVSFileName = rootdir + "/shaders/shader.vs";
+  std::string mFSFileName = rootdir + "/shaders/shader.fs";
+  mRovioScene.initScene(argc,argv,mVSFileName,mFSFileName,mpFilter);
+  mRovioScene.setIdleFunction(idleFunc);
+  mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.isInitialized_=false;});
+  glutMainLoop();
+#else
   ros::spin();
+#endif
   return 0;
 }

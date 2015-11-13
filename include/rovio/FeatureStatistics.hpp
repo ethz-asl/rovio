@@ -56,6 +56,7 @@ class FeatureStatistics{
   int localVisibilityRange_; /**Range for local visibility evaluation.*/
   double localVisibility_; /**Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.*/
   int minGlobalQualityRange_; /**Minimum of frames for maximal quality.*/
+  double lastPatchUpdate_;   /**<Time of last patch update.*/
 
   /** \brief Get the local visibility quality of the MultilevelPatchFeature.
    *

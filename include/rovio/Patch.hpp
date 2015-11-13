@@ -95,7 +95,7 @@ class Patch {
 
       e0_ = 0.5 * (dXX + dYY - sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
       e1_ = 0.5 * (dXX + dYY + sqrtf((dXX + dYY) * (dXX + dYY) - 4 * (dXX * dYY - dXY * dXY)));
-      s_ = e0_;
+      s_ = e0_+e1_;
       validGradientParameters_ = true;
     }
   }

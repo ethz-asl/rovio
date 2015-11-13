@@ -216,14 +216,14 @@ namespace rovio{
   }
 
   bool FeatureCoordinates::getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
-    Eigen::Matrix<double,3,2> B;
-    B <<  qC2C1.rotate(get_nor().getVec()), other.get_nor().getVec();
-    const Eigen::Matrix2d BtB = B.transpose() * B;
-    if(BtB.determinant() < 0.000001){ // Projection rays almost parallel.
+    const V3D C2v1 = qC2C1.rotate(get_nor().getVec());
+    const V3D C2v2 = other.get_nor().getVec();
+    const double a = 1.0-pow(C2v1.dot(C2v2),2.0);
+    if(a < 1e-6){
       return false;
     }
-    const Eigen::Vector2d dv = - BtB.inverse() * B.transpose() * C2rC2C1;
-    d.setParameter(fabs(dv[0]));
+    const double distance = - C2v1.dot((M3D::Identity()-C2v2*C2v2.transpose())*C2rC2C1) / a;
+    d.setParameter(fabs(distance));
     return true;
   }
 

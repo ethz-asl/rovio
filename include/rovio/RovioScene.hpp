@@ -117,10 +117,9 @@ class RovioScene{
     const mtState& state = filterState.state_;
     const MXD& cov = filterState.cov_;
 
-    if(filterState.plotGroundtruth_){
-      mpGroundtruth_->q_BW_ = filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_;
-      mpGroundtruth_->W_r_WB_ = (filterState.groundtruth_IrIJ_ + filterState.groundtruth_qJI_.inverseRotate(filterState.groundtruth_JrJC_)
-                                - (filterState.groundtruth_qCB_.inverted()*filterState.groundtruth_qCJ_*filterState.groundtruth_qJI_).inverseRotate(filterState.groundtruth_BrBC_)).template cast<float>();
+    if(filterState.plotPoseMeas_){
+      mpGroundtruth_->q_BW_ = filterState.state_.qCW_ext();
+      mpGroundtruth_->W_r_WB_ = filterState.state_.WrWC_ext().template cast<float>();
       mpGroundtruth_->draw_ = true;
     } else {
       mpGroundtruth_->draw_ = false;
