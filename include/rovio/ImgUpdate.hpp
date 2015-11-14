@@ -708,60 +708,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[ID];
       const int camID = f.mpCoordinates_->camID_;
       const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
-      if(activeCamID == camID){
-        featureOutput_.c() = filterState.state_.CfP(ID);
-      } else {
-        transformFeatureOutputCT_.setFeatureID(ID);
-        transformFeatureOutputCT_.setOutputCameraID(activeCamID);
-        transformFeatureOutputCT_.transformState(filterState.state_,featureOutput_);
-      }
-      if(!outlierDetection.isOutlier(0)){
-        if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],featureOutput_.c(),startLevel_,false)){
-          float avgError = 0.0;
-          if(patchRejectionTh_ >= 0){
-            mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],featureOutput_.c(),startLevel_,false);
-            avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
-          }
-          if(patchRejectionTh_ < 0 || avgError <= patchRejectionTh_){
-            f.mpStatistics_->status_[activeCamID] = TRACKED;
-            if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,150+(activeCamID == camID)*105,0));
-          } else {
-            f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
-            if(doFrameVisualisation_){
-              mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
-              featureOutput_.c().drawText(filterState.img_[activeCamID],"PE: " + std::to_string(avgError),cv::Scalar(0,0,150+(activeCamID == camID)*105));
-            }
-            if(verbose_) std::cout << "    \033[31mToo large pixel error after update: " << avgError << "\033[0m" << std::endl;
-          }
-        } else {
-          f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
-          if(doFrameVisualisation_){
-            mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
-            featureOutput_.c().drawText(filterState.img_[activeCamID],"NIF",cv::Scalar(0,0,150+(activeCamID == camID)*105));
-          }
-          if(verbose_) std::cout << "    \033[31mNot in frame after update!\033[0m" << std::endl;
-        }
-      } else {
-        f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
-        if(doFrameVisualisation_){
-          mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
-          featureOutput_.c().drawText(filterState.img_[activeCamID],"MD: " + std::to_string(outlierDetection.getMahalDistance(0)),cv::Scalar(0,0,150+(activeCamID == camID)*105));
-        }
-        if(verbose_) std::cout << "    \033[31mRecognized as outlier by filter: " << outlierDetection.getMahalDistance(0) << "\033[0m" << std::endl;
-      }
-
-      // Visualize patch tracking
-      if(visualizePatches_){
-        if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false)){
-          mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false);
-          mlpTemp1_.drawMultilevelPatch(filterState.patchDrawing_,cv::Point2i(filterState.drawPB_+(2+2*activeCamID)*filterState.drawPS_,filterState.drawPB_+ID*filterState.drawPS_),1,false);
-        }
-        if(f.mpStatistics_->status_[activeCamID] == TRACKED){
-          cv::rectangle(filterState.patchDrawing_,cv::Point2i((2+2*activeCamID)*filterState.drawPS_,ID*filterState.drawPS_),cv::Point2i((3+2*activeCamID)*filterState.drawPS_-1,(ID+1)*filterState.drawPS_-1),cv::Scalar(0,255,0),1,8,0);
-        } else {
-          cv::rectangle(filterState.patchDrawing_,cv::Point2i((2+2*activeCamID)*filterState.drawPS_,ID*filterState.drawPS_),cv::Point2i((3+2*activeCamID)*filterState.drawPS_-1,(ID+1)*filterState.drawPS_-1),cv::Scalar(0,0,255),1,8,0);
-        }
-      }
 
       // Remove negative feature
       if(removeNegativeFeatureAfterUpdate_){
@@ -775,6 +721,65 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           }
         }
       }
+
+      if(filterState.fsm_.isValid_[ID]){
+        // Update statue and visualization
+        if(activeCamID == camID){
+          featureOutput_.c() = filterState.state_.CfP(ID);
+        } else {
+          transformFeatureOutputCT_.setFeatureID(ID);
+          transformFeatureOutputCT_.setOutputCameraID(activeCamID);
+          transformFeatureOutputCT_.transformState(filterState.state_,featureOutput_);
+        }
+        if(!outlierDetection.isOutlier(0)){
+          if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[camID],featureOutput_.c(),startLevel_,false)){
+            float avgError = 0.0;
+            if(patchRejectionTh_ >= 0){
+              mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[camID],featureOutput_.c(),startLevel_,false);
+              avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
+            }
+            if(patchRejectionTh_ < 0 || avgError <= patchRejectionTh_){
+              f.mpStatistics_->status_[activeCamID] = TRACKED;
+              if(doFrameVisualisation_) mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,150+(activeCamID == camID)*105,0));
+            } else {
+              f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
+              if(doFrameVisualisation_){
+                mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
+                featureOutput_.c().drawText(filterState.img_[activeCamID],"PE: " + std::to_string(avgError),cv::Scalar(0,0,150+(activeCamID == camID)*105));
+              }
+              if(verbose_) std::cout << "    \033[31mToo large pixel error after update: " << avgError << "\033[0m" << std::endl;
+            }
+          } else {
+            f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
+            if(doFrameVisualisation_){
+              mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
+              featureOutput_.c().drawText(filterState.img_[activeCamID],"NIF",cv::Scalar(0,0,150+(activeCamID == camID)*105));
+            }
+            if(verbose_) std::cout << "    \033[31mNot in frame after update!\033[0m" << std::endl;
+          }
+        } else {
+          f.mpStatistics_->status_[activeCamID] = FAILED_TRACKING;
+          if(doFrameVisualisation_){
+            mlpTemp1_.drawMultilevelPatchBorder(filterState.img_[activeCamID],featureOutput_.c(),1.0,cv::Scalar(0,0,150+(activeCamID == camID)*105));
+            featureOutput_.c().drawText(filterState.img_[activeCamID],"MD: " + std::to_string(outlierDetection.getMahalDistance(0)),cv::Scalar(0,0,150+(activeCamID == camID)*105));
+          }
+          if(verbose_) std::cout << "    \033[31mRecognized as outlier by filter: " << outlierDetection.getMahalDistance(0) << "\033[0m" << std::endl;
+        }
+
+        // Visualize patch tracking
+        if(visualizePatches_){
+          if(mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false)){
+            mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[activeCamID],featureOutput_.c(),mtState::nLevels_-1,false);
+            mlpTemp1_.drawMultilevelPatch(filterState.patchDrawing_,cv::Point2i(filterState.drawPB_+(2+2*activeCamID)*filterState.drawPS_,filterState.drawPB_+ID*filterState.drawPS_),1,false);
+          }
+          if(f.mpStatistics_->status_[activeCamID] == TRACKED){
+            cv::rectangle(filterState.patchDrawing_,cv::Point2i((2+2*activeCamID)*filterState.drawPS_,ID*filterState.drawPS_),cv::Point2i((3+2*activeCamID)*filterState.drawPS_-1,(ID+1)*filterState.drawPS_-1),cv::Scalar(0,255,0),1,8,0);
+          } else {
+            cv::rectangle(filterState.patchDrawing_,cv::Point2i((2+2*activeCamID)*filterState.drawPS_,ID*filterState.drawPS_),cv::Point2i((3+2*activeCamID)*filterState.drawPS_-1,(ID+1)*filterState.drawPS_-1),cv::Scalar(0,0,255),1,8,0);
+          }
+        }
+      }
+
       if(!doPreAlignment_ && f.mpStatistics_->status_[activeCamID] == FAILED_TRACKING){
         if(verbose_) std::cout << "    \033[33mDo second attempt with pre-alignment!\033[0m" << std::endl;
       } else {

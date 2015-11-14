@@ -219,10 +219,10 @@ namespace rovio{
     const V3D C2v1 = qC2C1.rotate(get_nor().getVec());
     const V3D C2v2 = other.get_nor().getVec();
     const double a = 1.0-pow(C2v1.dot(C2v2),2.0);
-    if(a < 1e-6){
+    if(a < 1e-3){
       return false;
     }
-    const double distance = - C2v1.dot((M3D::Identity()-C2v2*C2v2.transpose())*C2rC2C1) / a;
+    const double distance = C2v1.dot((M3D::Identity()-C2v2*C2v2.transpose())*C2rC2C1) / a;
     d.setParameter(fabs(distance));
     return true;
   }
