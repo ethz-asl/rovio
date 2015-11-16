@@ -34,15 +34,6 @@
 #include "rovio/RovioScene.hpp"
 #endif
 
-#ifdef MAKE_SCENE
-static rovio::RovioScene<mtFilter> mRovioScene;
-
-void idleFunc(){
-  ros::spinOnce();
-  mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
-}
-#endif
-
 #ifdef ROVIO_NMAXFEATURE
 static constexpr int nMax_ = ROVIO_NMAXFEATURE;
 #else
@@ -74,6 +65,15 @@ static constexpr int nPose_ = 0; // Additional pose states.
 #endif
 
 typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_,nPose_>> mtFilter;
+
+#ifdef MAKE_SCENE
+static rovio::RovioScene<mtFilter> mRovioScene;
+
+void idleFunc(){
+  ros::spinOnce();
+  mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
+}
+#endif
 
 int main(int argc, char** argv){
   ros::init(argc, argv, "rovio");
