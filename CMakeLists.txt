@@ -34,7 +34,7 @@ endif()
 
 find_package(PkgConfig)
 
-find_package(yaml_cpp_catkin)
+find_package(yaml_cpp_catkin QUIET)
 if(${yaml_cpp_catkin_FOUND})
   message(STATUS "Found yaml_cpp_catkin, using instead of system library.")
   set(YamlCpp_LIBRARIES ${yaml_cpp_catkin_LIBRARIES})
@@ -59,17 +59,6 @@ find_package(catkin REQUIRED COMPONENTS
 	std_msgs
 	tf
 	rosbag
-)
-
-add_message_files(
-  FILES
-  RovioOutput.msg
-)
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   nav_msgs geometry_msgs   sensor_msgs   std_msgs
 )
 
 catkin_package(
@@ -98,7 +87,7 @@ else()
 	add_library(${PROJECT_NAME} src/rovio_node.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
 endif()
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
-add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(rovio_node src/rovio_node.cpp)
 target_link_libraries(rovio_node ${PROJECT_NAME})
