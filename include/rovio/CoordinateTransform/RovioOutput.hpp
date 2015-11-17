@@ -147,6 +147,36 @@ class CameraOutputCT:public LWF::CoordinateTransform<STATE,StandardOutput>{
   }
 };
 
+template<typename STATE>
+class ImuOutputCT:public LWF::CoordinateTransform<STATE,StandardOutput>{
+ public:
+  typedef LWF::CoordinateTransform<STATE,StandardOutput> Base;
+  typedef typename Base::mtInput mtInput;
+  typedef typename Base::mtOutput mtOutput;
+  ImuOutputCT(){};
+  virtual ~ImuOutputCT(){};
+  void evalTransform(mtOutput& output, const mtInput& input) const{
+    // WrWM = WrWM
+    // MwWM = MwWM
+    // MvM  = MvM
+    // qMW  = qWM^T
+    output.WrWB() = input.WrWM();
+    output.BwWB() = input.aux().MwWMmeas_-input.gyb();
+    output.BvB()  = -input.MvM(); // minus is required!
+    output.qBW()  = input.qWM().inverted();
+  }
+  void jacTransform(MXD& J, const mtInput& input) const{
+    J.setZero();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_pos>(),mtInput::template getId<mtInput::_pos>()) = M3D::Identity();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtInput::template getId<mtInput::_att>()) = -MPD(input.qWM().inverted()).matrix();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_vel>(),mtInput::template getId<mtInput::_vel>()) = -M3D::Identity();
+    J.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtInput::template getId<mtInput::_gyb>()) = -M3D::Identity();
+  }
+  void postProcess(MXD& cov,const mtInput& input){
+    cov.template block<3,3>(mtOutput::template getId<mtOutput::_ror>(),mtOutput::template getId<mtOutput::_ror>()) += input.aux().wMeasCov_;
+  }
+};
+
 }
 
 
