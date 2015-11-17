@@ -47,7 +47,7 @@
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 
-#include "rovio/CoordinateTransform/CameraOutput.hpp"
+#include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/YprOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
@@ -412,8 +412,8 @@ class RovioNode{
         }
 
         // Get the position and orientation.
-        Eigen::Vector3d WrWC = output_.WrWC();
-        rot::RotationQuaternionPD qCW = output_.qCW();
+        Eigen::Vector3d WrWC = output_.WrWB();
+        rot::RotationQuaternionPD qCW = output_.qBW();
 
 
 
@@ -478,13 +478,13 @@ class RovioNode{
         // Odometry
         odometryMsg_.header.seq = poseMsgSeq_;
         odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        odometryMsg_.pose.pose.position.x = output_.WrWC()(0);
-        odometryMsg_.pose.pose.position.y = output_.WrWC()(1);
-        odometryMsg_.pose.pose.position.z = output_.WrWC()(2);
-        odometryMsg_.pose.pose.orientation.w = output_.qCW().w();
-        odometryMsg_.pose.pose.orientation.x = output_.qCW().x();
-        odometryMsg_.pose.pose.orientation.y = output_.qCW().y();
-        odometryMsg_.pose.pose.orientation.z = output_.qCW().z();
+        odometryMsg_.pose.pose.position.x = output_.WrWB()(0);
+        odometryMsg_.pose.pose.position.y = output_.WrWB()(1);
+        odometryMsg_.pose.pose.position.z = output_.WrWB()(2);
+        odometryMsg_.pose.pose.orientation.w = output_.qBW().w();
+        odometryMsg_.pose.pose.orientation.x = output_.qBW().x();
+        odometryMsg_.pose.pose.orientation.y = output_.qBW().y();
+        odometryMsg_.pose.pose.orientation.z = output_.qBW().z();
         for(unsigned int i=0;i<6;i++){
           unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
           if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
@@ -494,12 +494,12 @@ class RovioNode{
             odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
           }
         }
-        odometryMsg_.twist.twist.linear.x = output_.CvC()(0);
-        odometryMsg_.twist.twist.linear.y = output_.CvC()(1);
-        odometryMsg_.twist.twist.linear.z = output_.CvC()(2);
-        odometryMsg_.twist.twist.angular.x = output_.CwWC()(0);
-        odometryMsg_.twist.twist.angular.y = output_.CwWC()(1);
-        odometryMsg_.twist.twist.angular.z = output_.CwWC()(2);
+        odometryMsg_.twist.twist.linear.x = output_.BvB()(0);
+        odometryMsg_.twist.twist.linear.y = output_.BvB()(1);
+        odometryMsg_.twist.twist.linear.z = output_.BvB()(2);
+        odometryMsg_.twist.twist.angular.x = output_.BwWB()(0);
+        odometryMsg_.twist.twist.angular.y = output_.BwWB()(1);
+        odometryMsg_.twist.twist.angular.z = output_.BwWB()(2);
         for(unsigned int i=0;i<6;i++){
           unsigned int ind1 = mtOutput::template getId<mtOutput::_vel>()+i;
           if(i>=3) ind1 = mtOutput::template getId<mtOutput::_ror>()+i-3;
@@ -510,7 +510,7 @@ class RovioNode{
           }
         }
 
-        attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.qCW();
+        attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.qBW();
         attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
         attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
         attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
