@@ -58,18 +58,7 @@ namespace rovio {
 template<typename FILTER>
 class RovioNode{
  public:
-  ros::NodeHandle nh_;
-  ros::NodeHandle nh_private_;
-  ros::Subscriber subImu_;
-  ros::Subscriber subImg0_;
-  ros::Subscriber subImg1_;
-  ros::Subscriber subGroundtruth_;
-  ros::Publisher pubOdometry_;
-  ros::Publisher pubTransform_;
-  tf::TransformBroadcaster tb_;
-  ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
-  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
-
+  // Filter Stuff
   typedef FILTER mtFilter;
   std::shared_ptr<mtFilter> mpFilter_;
   typedef typename mtFilter::mtFilterState mtFilterState;
@@ -85,18 +74,36 @@ class RovioNode{
   mtPoseMeas poseUpdateMeas_;
   mtPoseUpdate* mpPoseUpdate_;
   bool isInitialized_;
+
+  // Nodes, Subscriber, Publishers
+  ros::NodeHandle nh_;
+  ros::NodeHandle nh_private_;
+  ros::Subscriber subImu_;
+  ros::Subscriber subImg0_;
+  ros::Subscriber subImg1_;
+  ros::Subscriber subGroundtruth_;
+  ros::Publisher pubOdometry_;
+  ros::Publisher pubTransform_;
+  tf::TransformBroadcaster tb_;
+  ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
+  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
+  ros::Publisher pubExtrinsics_[mtState::nMax_];
+
+  // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
+  geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nMax_];
+  sensor_msgs::PointCloud2 pclMsg_;
   int msgSeq_;
+
+  // Rovio outputs and coordinate transformations
   typedef StandardOutput mtOutput;
   mtOutput cameraOutput_;
   MXD cameraOutputCov_;
   mtOutput imuOutput_;
   MXD imuOutputCov_;
-  CameraOutputCT<mtState> cameraOutputCF_;
-  ImuOutputCT<mtState> imuOutputCF_;
-  sensor_msgs::PointCloud2 pclMsg_;
-
+  CameraOutputCT<mtState> cameraOutputCT_;
+  ImuOutputCT<mtState> imuOutputCT_;
   rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
   rovio::FeatureOutput featureOutput_;
   MXD featureOutputCov_;
@@ -134,6 +141,9 @@ class RovioNode{
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinscis" + std::to_string(camID), 1 );
+    }
 
     // Handle coordinate frame naming
     map_frame_ = "/map";
@@ -151,6 +161,9 @@ class RovioNode{
     odometryMsg_.header.frame_id = world_frame_;
     odometryMsg_.child_frame_id = imu_frame_;
     msgSeq_ = 1;
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      extrinsicsMsg_[camID].header.frame_id = imu_frame_;
+    }
 
     // PointCloud2 message.
     pclMsg_.header.frame_id = camera_frame_;
@@ -227,9 +240,9 @@ class RovioNode{
 
     // Testing CameraOutputCF and CameraOutputCF
     std::cout << "Testing cameraOutputCF" << std::endl;
-    cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    cameraOutputCT_.testTransformJac(testState,1e-8,1e-6);
     std::cout << "Testing imuOutputCF" << std::endl;
-    imuOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    imuOutputCT_.testTransformJac(testState,1e-8,1e-6);
     std::cout << "Testing attitudeToYprCF" << std::endl;
     rovio::AttitudeToYprCT attitudeToYprCF;
     attitudeToYprCF.testTransformJac(1e-8,1e-6);
@@ -391,8 +404,8 @@ class RovioNode{
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
         MXD& cov = mpFilter_->safe_.cov_;
-        imuOutputCF_.transformState(state,imuOutput_);
-        imuOutputCF_.transformCovMat(state,cov,imuOutputCov_);
+        imuOutputCT_.transformState(state,imuOutput_);
+        imuOutputCT_.transformCovMat(state,cov,imuOutputCov_);
 
         // Cout verbose for pose measurements
         if(mpImgUpdate_->verbose_){
@@ -488,6 +501,29 @@ class RovioNode{
         transformMsg_.transform.rotation.z = imuOutput_.qBW().z();
         transformMsg_.transform.rotation.w = imuOutput_.qBW().w();
         pubTransform_.publish(transformMsg_);
+
+        // Publish Extrinsics
+        for(int camID=0;camID<mtState::nCam_;camID++){
+          extrinsicsMsg_[camID].header.seq = msgSeq_;
+          extrinsicsMsg_[camID].header.stamp = ros::Time(mpFilter_->safe_.t_);
+          extrinsicsMsg_[camID].pose.pose.position.x = state.MrMC(camID)(0);
+          extrinsicsMsg_[camID].pose.pose.position.y = state.MrMC(camID)(1);
+          extrinsicsMsg_[camID].pose.pose.position.z = state.MrMC(camID)(2);
+          extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).w();
+          extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).x();
+          extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).y();
+          extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).z();
+          for(unsigned int i=0;i<6;i++){
+            unsigned int ind1 = mtState::template getId<mtState::_vep>(camID)+i;
+            if(i>=3) ind1 = mtState::template getId<mtState::_vea>(camID)+i-3;
+            for(unsigned int j=0;j<6;j++){
+              unsigned int ind2 = mtState::template getId<mtState::_vep>(camID)+j;
+              if(j>=3) ind2 = mtState::template getId<mtState::_vea>(camID)+j-3;
+              extrinsicsMsg_[camID].pose.covariance[j+6*i] = cov(ind1,ind2);
+            }
+          }
+          pubExtrinsics_[camID].publish(extrinsicsMsg_[camID]);
+        }
 
         // PointCloud2 message.
         pclMsg_.header.seq = msgSeq_;
