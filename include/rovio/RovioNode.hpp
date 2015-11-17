@@ -88,12 +88,14 @@ class RovioNode{
   ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
   ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
   ros::Publisher pubExtrinsics_[mtState::nMax_];
+  ros::Publisher pubImuBias_;
 
   // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
   geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nMax_];
   sensor_msgs::PointCloud2 pclMsg_;
+  sensor_msgs::Imu imuBiasMsg_;
   int msgSeq_;
 
   // Rovio outputs and coordinate transformations
@@ -142,8 +144,9 @@ class RovioNode{
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
     for(int camID=0;camID<mtState::nCam_;camID++){
-      pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinscis" + std::to_string(camID), 1 );
+      pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
     }
+    pubImuBias_ = nh_.advertise<sensor_msgs::Imu>("rovio/imu_biases", 1 );
 
     // Handle coordinate frame naming
     map_frame_ = "/map";
@@ -163,6 +166,14 @@ class RovioNode{
     msgSeq_ = 1;
     for(int camID=0;camID<mtState::nCam_;camID++){
       extrinsicsMsg_[camID].header.frame_id = imu_frame_;
+    }
+    imuBiasMsg_.header.frame_id = world_frame_;
+    imuBiasMsg_.orientation.x = 0;
+    imuBiasMsg_.orientation.y = 0;
+    imuBiasMsg_.orientation.z = 0;
+    imuBiasMsg_.orientation.w = 1;
+    for(int i=0;i<9;i++){
+      imuBiasMsg_.orientation_covariance[i] = 0.0;
     }
 
     // PointCloud2 message.
@@ -524,6 +535,27 @@ class RovioNode{
           }
           pubExtrinsics_[camID].publish(extrinsicsMsg_[camID]);
         }
+
+        // Publish IMU biases
+        imuBiasMsg_.header.seq = msgSeq_;
+        imuBiasMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+        imuBiasMsg_.angular_velocity.x = state.gyb()(0);
+        imuBiasMsg_.angular_velocity.y = state.gyb()(1);
+        imuBiasMsg_.angular_velocity.z = state.gyb()(2);
+        imuBiasMsg_.linear_acceleration.x = state.acb()(0);
+        imuBiasMsg_.linear_acceleration.y = state.acb()(1);
+        imuBiasMsg_.linear_acceleration.z = state.acb()(2);
+        for(int i=0;i<3;i++){
+          for(int j=0;j<3;j++){
+            imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_gyb>()+i,mtState::template getId<mtState::_gyb>()+j);
+          }
+        }
+        for(int i=0;i<3;i++){
+          for(int j=0;j<3;j++){
+            imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
+          }
+        }
+        pubImuBias_.publish(imuBiasMsg_);
 
         // PointCloud2 message.
         pclMsg_.header.seq = msgSeq_;
