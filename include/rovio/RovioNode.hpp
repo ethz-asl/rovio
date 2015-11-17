@@ -33,6 +33,8 @@
 #include <memory>
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
@@ -48,6 +50,7 @@
 #include "rovio/CoordinateTransform/CameraOutput.hpp"
 #include "rovio/CoordinateTransform/YprOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
+#include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
 
 namespace rovio {
 
@@ -93,6 +96,10 @@ class RovioNode{
   CameraOutputCT<mtState> cameraOutputCF_;
   MXD outputCov_;
 
+
+  geometry_msgs::PoseWithCovarianceStamped poseWithCovarianceStamped_;
+  sensor_msgs::PointCloud2 pclMsg_;
+
   typedef AttitudeOutput mtAttitudeOutput;
   mtAttitudeOutput attitudeOutput_;
   typedef YprOutput mtYprOutput;
@@ -100,6 +107,12 @@ class RovioNode{
   AttitudeToYprCT attitudeToYprCF_;
   MXD attitudeOutputCov_;
   MXD yprOutputCov_;
+  rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
+  rovio::FeatureOutput featureOutput_;
+  MXD featureOutputCov_;
+  rovio::FeatureOutputReadableCT featureOutputReadableCT_;
+  rovio::FeatureOutputReadable featureOutputReadable_;
+  MXD featureOutputReadableCov_;
 
   // ROS names for output tf frames.
   std::string map_frame_;
@@ -110,7 +123,10 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_),
+        outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)),
+        yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
+        featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
@@ -140,6 +156,33 @@ class RovioNode{
     odometryMsg_.child_frame_id = camera_frame_;
     poseMsgSeq_ = 1;
     isInitialized_ = false;
+
+
+    // PointCloud2 message.
+    pclMsg_.header.frame_id = camera_frame_;
+    pclMsg_.height = 1;               // Unordered point cloud.
+    pclMsg_.width  = mtState::nMax_;  // Number of features/points.
+    const int nFields = 18;
+    std::string name[nFields] = {"x","y","z","rgb","b_x","b_y","b_z","d","c_00","c_01","c_02","c_03","c_11","c_12","c_13","c_22","c_23","c_33"};
+    int size[nFields] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
+    int datatype[nFields] = {sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::UINT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+    pclMsg_.fields.resize(nFields);
+    int byteCounter = 0;
+    for(int i=0;i<nFields;i++){
+      pclMsg_.fields[0].name     = name[i];
+      pclMsg_.fields[0].offset   = byteCounter;
+      pclMsg_.fields[0].count    = 1;
+      pclMsg_.fields[0].datatype = datatype[i];
+      byteCounter += size[i];
+    }
+    pclMsg_.point_step = byteCounter;
+    pclMsg_.row_step = pclMsg_.point_step * pclMsg_.width;
+    pclMsg_.data.resize(pclMsg_.row_step * pclMsg_.height);
+    pclMsg_.is_dense = false;
   }
 
   /** \brief Destructor
@@ -188,34 +231,42 @@ class RovioNode{
       }
     }
 
-    // CF
+    // Testing CameraOutputCF and CameraOutputCF
     std::cout << "Testing cameraOutputCF" << std::endl;
     cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
     std::cout << "Testing attitudeToYprCF" << std::endl;
     attitudeToYprCF_.testTransformJac(1e-8,1e-6);
-    std::cout << "Testing transformFeatureOutputCT" << std::endl;
-    rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT(&mpFilter_->multiCamera_);
-    transformFeatureOutputCT.setFeatureID(0);
-    if(mtState::nCam_>1){
-      transformFeatureOutputCT.setOutputCameraID(1);
-      transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
-    }
-    transformFeatureOutputCT.setOutputCameraID(0);
-    transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
-    FeatureOutput featureOutput;
-    transformFeatureOutputCT.transformState(testState,featureOutput);
-    if(!featureOutput.c().isInFront()){
-      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
-    }
-    rovio::PixelOutputCT pixelOutputCT;
-    std::cout << "Testing pixelOutputCT" << std::endl;
-    pixelOutputCT.testTransformJac(featureOutput,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
 
-    // Zero Velocity Updates
+    // Testing TransformFeatureOutputCT
+    std::cout << "Testing transformFeatureOutputCT" << std::endl;
+    transformFeatureOutputCT_.setFeatureID(0);
+    if(mtState::nCam_>1){
+      transformFeatureOutputCT_.setOutputCameraID(1);
+      transformFeatureOutputCT_.testTransformJac(testState,1e-8,1e-5);
+    }
+    transformFeatureOutputCT_.setOutputCameraID(0);
+    transformFeatureOutputCT_.testTransformJac(testState,1e-8,1e-5);
+
+    // Getting featureOutput for next tests
+    transformFeatureOutputCT_.transformState(testState,featureOutput_);
+    if(!featureOutput_.c().isInFront()){
+      featureOutput_.c().set_nor(featureOutput_.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
+    }
+
+    // Testing FeatureOutputReadableCT
+    std::cout << "Testing FeatureOutputReadableCT" << std::endl;
+    featureOutputReadableCT_.testTransformJac(featureOutput_,1e-8,1e-5);
+
+    // Testing pixelOutputCT
+    rovio::PixelOutputCT pixelOutputCT;
+    std::cout << "Testing pixelOutputCT (can sometimes exhibit large absolut errors due to the float precision)" << std::endl;
+    pixelOutputCT.testTransformJac(featureOutput_,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
+
+    // Testing ZeroVelocityUpdate_
     std::cout << "Testing zero velocity update" << std::endl;
     std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
 
-    // Pose Update
+    // Testing PoseUpdate
     if(!std::get<1>(mpFilter_->mUpdates_).noFeedbackToRovio_){
       std::cout << "Testing pose update" << std::endl;
       std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
@@ -529,39 +580,8 @@ class RovioNode{
         ////////////////////////////////////////////////////////////
 
         // PointCloud2 message.
-        sensor_msgs::PointCloud2 pcl_msg;
-        pcl_msg.header.seq = poseMsgSeq_;
-        pcl_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        pcl_msg.header.frame_id = camera_frame_;
-        pcl_msg.height = 1;               // Unordered point cloud.
-        pcl_msg.width  = mtState::nMax_;  // Number of features/points.
-        pcl_msg.fields.resize(4);
-
-        pcl_msg.fields[0].name     = "x";
-        pcl_msg.fields[0].offset   = 0;
-        pcl_msg.fields[0].count    = 1;
-        pcl_msg.fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-
-        pcl_msg.fields[1].name     = "y";
-        pcl_msg.fields[1].offset   = 4;
-        pcl_msg.fields[1].count    = 1;
-        pcl_msg.fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-
-        pcl_msg.fields[2].name     = "z";
-        pcl_msg.fields[2].offset   = 8;
-        pcl_msg.fields[2].count    = 1;
-        pcl_msg.fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-
-        pcl_msg.fields[3].name     = "rgb";
-        pcl_msg.fields[3].offset   = 12;
-        pcl_msg.fields[3].count    = 1;
-        pcl_msg.fields[3].datatype = sensor_msgs::PointField::UINT32;
-
-        pcl_msg.point_step = 16;
-        pcl_msg.row_step = pcl_msg.point_step * pcl_msg.width;
-        pcl_msg.data.resize(pcl_msg.row_step * pcl_msg.height);
-        pcl_msg.is_dense = false;
-
+        pclMsg_.header.seq = poseMsgSeq_;
+        pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
         float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
         int offset = 0;
 
@@ -586,64 +606,79 @@ class RovioNode{
         marker_msg.color.b = 0.0;
 
         FeatureDistance distance;
-        double d,d_far,d_near;
-        const double stretchFactor = 20;
-        for (unsigned int i=0;i<mtState::nMax_; i++, offset += pcl_msg.point_step) {
+        double d,d_minus,d_plus;
+        const double stretchFactor = 3;
+        for (unsigned int i=0;i<mtState::nMax_; i++, offset += pclMsg_.point_step) {
           if(filterState.fsm_.isValid_[i]){
             // Get 3D feature coordinates.
             distance = state.dep(i);
             d = distance.getDistance();
-            const double sigma = cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2);
+            const double sigma = sqrt(cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2));
             distance.p_ -= stretchFactor*sigma;
-            d_far = distance.getDistance();
-            if(distance.getType() == FeatureDistance::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
+            d_minus = distance.getDistance();
+            if(d_minus > 1000) d_minus = 1000;
             distance.p_ += 2*stretchFactor*sigma;
-            d_near = distance.getDistance();
-            const LWF::NormalVectorElement middle = filterState.state_.CfP(i).get_nor();
-            const Eigen::Vector3f pos = middle.getVec().cast<float>()*d;
-            const Eigen::Vector3f pos_far = middle.getVec().cast<float>()*d_far;
-            const Eigen::Vector3f pos_near = middle.getVec().cast<float>()*d_near;
+            d_plus = distance.getDistance();
+            if(d_plus > 1000) d_plus = 1000;
+            Eigen::Vector3d bearingVector = filterState.state_.CfP(i).get_nor().getVec();
+            const Eigen::Vector3f pos = bearingVector.cast<float>()*d;
+            const Eigen::Vector3f pos_minus = bearingVector.cast<float>()*d_minus;
+            const Eigen::Vector3f pos_plus = bearingVector.cast<float>()*d_plus;
+
+            // Get human readable output
+            transformFeatureOutputCT_.setFeatureID(i);
+            transformFeatureOutputCT_.setOutputCameraID(filterState.fsm_.features_[i].mpCoordinates_->camID_);
+            transformFeatureOutputCT_.transformState(state,featureOutput_);
+            transformFeatureOutputCT_.transformCovMat(state,cov,featureOutputCov_);
+            featureOutputReadableCT_.transformState(featureOutput_,featureOutputReadable_);
+            featureOutputReadableCT_.transformCovMat(featureOutput_,featureOutputCov_,featureOutputReadableCov_);
 
             // Add feature coordinates to pcl message.
-            memcpy(&pcl_msg.data[offset + 0],
-                &pos[0], sizeof(float));  // x
-            memcpy(&pcl_msg.data[offset + 4],
-                &pos[1], sizeof(float));  // y
-            memcpy(&pcl_msg.data[offset + 8],
-                &pos[2], sizeof(float));  // z
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[0].offset], &pos[0], sizeof(float));  // x
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[1].offset], &pos[1], sizeof(float));  // y
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[2].offset], &pos[2], sizeof(float));  // z
 
             // Add color (gray values).
             uint8_t gray = 255;
             uint32_t rgb = (gray << 16) | (gray << 8) | gray;
-            memcpy(&pcl_msg.data[offset + 12],
-                &rgb, sizeof(uint32_t));
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[3].offset], &rgb, sizeof(uint32_t));
+
+            // Add feature bearing vector and distance
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[4].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[5].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
+            memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.dis(), sizeof(float));
+
+            // Add the corresponding covariance (upper triangular)
+            int mCounter = 8;
+            for(int row=0;row<4;row++){
+              for(int col=row;col<4;col++){
+                memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &featureOutputReadableCov_(row,col), sizeof(float));
+                mCounter++;
+              }
+            }
 
             // Line markers (Uncertainty rays).
             geometry_msgs::Point point_near_msg;
             geometry_msgs::Point point_far_msg;
-            point_near_msg.x = float(pos_near[0]);
-            point_near_msg.y = float(pos_near[1]);
-            point_near_msg.z = float(pos_near[2]);
-            point_far_msg.x = float(pos_far[0]);
-            point_far_msg.y = float(pos_far[1]);
-            point_far_msg.z = float(pos_far[2]);
+            point_near_msg.x = float(pos_plus[0]);
+            point_near_msg.y = float(pos_plus[1]);
+            point_near_msg.z = float(pos_plus[2]);
+            point_far_msg.x = float(pos_minus[0]);
+            point_far_msg.y = float(pos_minus[1]);
+            point_far_msg.z = float(pos_minus[2]);
             marker_msg.points.push_back(point_near_msg);
             marker_msg.points.push_back(point_far_msg);
           }
           else {
             // If current feature is not valid copy NaN
-            memcpy(&pcl_msg.data[offset + 0], &badPoint,     // x
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 4], &badPoint,     // y
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 8], &badPoint,     // z
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 12], &badPoint,
-                sizeof(float));
+            for(int j=0;j<pclMsg_.fields.size();j++){
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[j].offset], &badPoint, sizeof(float));
+            }
           }
         }
         // Publish point cloud.
-        pubPcl_.publish(pcl_msg);
+        pubPcl_.publish(pclMsg_);
         // Publish uncertainty rays.
         pubURays_.publish(marker_msg);
       }
