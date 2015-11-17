@@ -32,7 +32,6 @@
 #include <queue>
 #include <memory>
 #include <ros/ros.h>
-#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <sensor_msgs/Imu.h>
@@ -41,15 +40,14 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
-#include <rovio/RovioOutput.h> // Ros msg
 #include "rovio/RovioFilter.hpp"
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
-#include "rovio/CoordinateTransform/YprOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
+#include "rovio/CoordinateTransform/YprOutput.hpp"
 
 namespace rovio {
 
@@ -66,8 +64,6 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
-  ros::Publisher pubPose_;
-  ros::Publisher pubRovioOutput_;
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
@@ -89,11 +85,9 @@ class RovioNode{
   mtPoseMeas poseUpdateMeas_;
   mtPoseUpdate* mpPoseUpdate_;
   bool isInitialized_;
-  geometry_msgs::PoseStamped poseMsg_;
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
-  RovioOutput rovioOutputMsg_;
-  int poseMsgSeq_;
+  int msgSeq_;
   typedef StandardOutput mtOutput;
   mtOutput cameraOutput_;
   MXD cameraOutputCov_;
@@ -101,16 +95,8 @@ class RovioNode{
   MXD imuOutputCov_;
   CameraOutputCT<mtState> cameraOutputCF_;
   ImuOutputCT<mtState> imuOutputCF_;
-
   sensor_msgs::PointCloud2 pclMsg_;
 
-  typedef AttitudeOutput mtAttitudeOutput;
-  mtAttitudeOutput attitudeOutput_;
-  typedef YprOutput mtYprOutput;
-  mtYprOutput yprOutput_;
-  AttitudeToYprCT attitudeToYprCF_;
-  MXD attitudeOutputCov_;
-  MXD yprOutputCov_;
   rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
   rovio::FeatureOutput featureOutput_;
   MXD featureOutputCov_;
@@ -128,8 +114,7 @@ class RovioNode{
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
       : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_),
-        cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)),
-        yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
+        cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
         featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
@@ -145,9 +130,7 @@ class RovioNode{
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
 
     // Advertise topics
-    pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("rovio/pose", 1);
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
-    pubRovioOutput_ = nh_.advertise<RovioOutput>("rovio/output", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
@@ -163,12 +146,11 @@ class RovioNode{
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
 
     // Initialize messages
-    poseMsg_.header.frame_id = world_frame_;
-    rovioOutputMsg_.header.frame_id = world_frame_;
-    rovioOutputMsg_.points.header.frame_id = camera_frame_;
+    transformMsg_.header.frame_id = world_frame_;
+    transformMsg_.child_frame_id = imu_frame_;
     odometryMsg_.header.frame_id = world_frame_;
     odometryMsg_.child_frame_id = imu_frame_;
-    poseMsgSeq_ = 1;
+    msgSeq_ = 1;
 
     // PointCloud2 message.
     pclMsg_.header.frame_id = camera_frame_;
@@ -249,7 +231,8 @@ class RovioNode{
     std::cout << "Testing imuOutputCF" << std::endl;
     imuOutputCF_.testTransformJac(testState,1e-8,1e-6);
     std::cout << "Testing attitudeToYprCF" << std::endl;
-    attitudeToYprCF_.testTransformJac(1e-8,1e-6);
+    rovio::AttitudeToYprCT attitudeToYprCF;
+    attitudeToYprCF.testTransformJac(1e-8,1e-6);
 
     // Testing TransformFeatureOutputCT
     std::cout << "Testing transformFeatureOutputCT" << std::endl;
@@ -408,8 +391,6 @@ class RovioNode{
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
         MXD& cov = mpFilter_->safe_.cov_;
-        cameraOutputCF_.transformState(state,cameraOutput_);
-        cameraOutputCF_.transformCovMat(state,cov,cameraOutputCov_);
         imuOutputCF_.transformState(state,imuOutput_);
         imuOutputCF_.transformCovMat(state,cov,imuOutputCov_);
 
@@ -461,7 +442,7 @@ class RovioNode{
         }
 
         // Publish Odometry
-        odometryMsg_.header.seq = poseMsgSeq_;
+        odometryMsg_.header.seq = msgSeq_;
         odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
         odometryMsg_.pose.pose.position.x = imuOutput_.WrWB()(0);
         odometryMsg_.pose.pose.position.y = imuOutput_.WrWB()(1);
@@ -496,21 +477,9 @@ class RovioNode{
         }
         pubOdometry_.publish(odometryMsg_);
 
-        // DELETE the following (including rovioOutputMsg_)
-        // Send camera pose message.
-        poseMsg_.header.seq = poseMsgSeq_;
-        poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        poseMsg_.pose.position.x = cameraOutput_.WrWB()(0);
-        poseMsg_.pose.position.y = cameraOutput_.WrWB()(1);
-        poseMsg_.pose.position.z = cameraOutput_.WrWB()(2);
-        poseMsg_.pose.orientation.w = cameraOutput_.qBW().w();
-        poseMsg_.pose.orientation.x = cameraOutput_.qBW().x();
-        poseMsg_.pose.orientation.y = cameraOutput_.qBW().y();
-        poseMsg_.pose.orientation.z = cameraOutput_.qBW().z();
-        pubPose_.publish(poseMsg_);
-
         // Send IMU pose message.
-        transformMsg_.header = poseMsg_.header;
+        transformMsg_.header.seq = msgSeq_;
+        transformMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
         transformMsg_.transform.translation.x = imuOutput_.WrWB()(0);
         transformMsg_.transform.translation.y = imuOutput_.WrWB()(1);
         transformMsg_.transform.translation.z = imuOutput_.WrWB()(2);
@@ -520,73 +489,8 @@ class RovioNode{
         transformMsg_.transform.rotation.w = imuOutput_.qBW().w();
         pubTransform_.publish(transformMsg_);
 
-        attitudeOutput_.template get<mtAttitudeOutput::_att>() = cameraOutput_.qBW();
-        attitudeOutputCov_ = cameraOutputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
-        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
-        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
-
-        rovioOutputMsg_.header.seq = poseMsgSeq_;
-        rovioOutputMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        rovioOutputMsg_.odometry = odometryMsg_;
-        rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
-        rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
-        rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
-        rovioOutputMsg_.ypr_odometry_sigma.x = yprOutputCov_(0,0);
-        rovioOutputMsg_.ypr_odometry_sigma.y = yprOutputCov_(1,1);
-        rovioOutputMsg_.ypr_odometry_sigma.z = yprOutputCov_(2,2);
-
-        // IMU biases
-        rovioOutputMsg_.acc_bias.x = state.acb()(0);
-        rovioOutputMsg_.acc_bias.y = state.acb()(1);
-        rovioOutputMsg_.acc_bias.z = state.acb()(2);
-        rovioOutputMsg_.acc_bias_sigma.x = cov(mtState::template getId<mtState::_acb>()+0,mtState::template getId<mtState::_acb>()+0);
-        rovioOutputMsg_.acc_bias_sigma.y = cov(mtState::template getId<mtState::_acb>()+1,mtState::template getId<mtState::_acb>()+1);
-        rovioOutputMsg_.acc_bias_sigma.z = cov(mtState::template getId<mtState::_acb>()+2,mtState::template getId<mtState::_acb>()+2);
-        rovioOutputMsg_.gyr_bias.x = state.gyb()(0);
-        rovioOutputMsg_.gyr_bias.y = state.gyb()(1);
-        rovioOutputMsg_.gyr_bias.z = state.gyb()(2);
-        rovioOutputMsg_.gyr_bias_sigma.x = cov(mtState::template getId<mtState::_gyb>()+0,mtState::template getId<mtState::_gyb>()+0);
-        rovioOutputMsg_.gyr_bias_sigma.y = cov(mtState::template getId<mtState::_gyb>()+1,mtState::template getId<mtState::_gyb>()+1);
-        rovioOutputMsg_.gyr_bias_sigma.z = cov(mtState::template getId<mtState::_gyb>()+2,mtState::template getId<mtState::_gyb>()+2);
-
-        // Extrinsics
-        rovioOutputMsg_.extrinsics.pose.position.x = state.MrMC(0)(0);
-        rovioOutputMsg_.extrinsics.pose.position.y = state.MrMC(0)(1);
-        rovioOutputMsg_.extrinsics.pose.position.z = state.MrMC(0)(2);
-        rovioOutputMsg_.extrinsics.pose.orientation.w = state.qCM(0).w();
-        rovioOutputMsg_.extrinsics.pose.orientation.x = state.qCM(0).x();
-        rovioOutputMsg_.extrinsics.pose.orientation.y = state.qCM(0).y();
-        rovioOutputMsg_.extrinsics.pose.orientation.z = state.qCM(0).z();
-        for(unsigned int i=0;i<6;i++){
-          unsigned int ind1 = mtState::template getId<mtState::_vep>(0)+i;
-          if(i>=3) ind1 = mtState::template getId<mtState::_vea>(0)+i-3;
-          for(unsigned int j=0;j<6;j++){
-            unsigned int ind2 = mtState::template getId<mtState::_vep>(0)+j;
-            if(j>=3) ind2 = mtState::template getId<mtState::_vea>(0)+j-3;
-            rovioOutputMsg_.extrinsics.covariance[j+6*i] = cov(ind1,ind2);
-          }
-        }
-        attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.qCM(0);
-        attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(0),mtState::template getId<mtState::_vea>(0));
-        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
-        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
-        rovioOutputMsg_.ypr_extrinsics.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
-        rovioOutputMsg_.ypr_extrinsics.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
-        rovioOutputMsg_.ypr_extrinsics.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
-        rovioOutputMsg_.ypr_extrinsics_sigma.x = yprOutputCov_(0,0);
-        rovioOutputMsg_.ypr_extrinsics_sigma.y = yprOutputCov_(1,1);
-        rovioOutputMsg_.ypr_extrinsics_sigma.z = yprOutputCov_(2,2);
-        rovioOutputMsg_.points.header.seq = poseMsgSeq_;
-        rovioOutputMsg_.points.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        rovioOutputMsg_.points.height = 1;
-        pubRovioOutput_.publish(rovioOutputMsg_);
-        poseMsgSeq_++;
-
-        // RVIZ Visualization
-        ////////////////////////////////////////////////////////////
-
         // PointCloud2 message.
-        pclMsg_.header.seq = poseMsgSeq_;
+        pclMsg_.header.seq = msgSeq_;
         pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
         float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
         int offset = 0;
