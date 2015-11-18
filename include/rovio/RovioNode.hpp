@@ -178,7 +178,7 @@ class RovioNode{
     }
 
     // PointCloud2 message.
-    pclMsg_.header.frame_id = camera_frame_;
+    pclMsg_.header.frame_id = camera_frame_ + std::to_string(0); // TODO: fix the hack, there should be one msg per camera
     pclMsg_.height = 1;               // Unordered point cloud.
     pclMsg_.width  = mtState::nMax_;  // Number of features/points.
     const int nFields = 18;
@@ -192,10 +192,10 @@ class RovioNode{
     pclMsg_.fields.resize(nFields);
     int byteCounter = 0;
     for(int i=0;i<nFields;i++){
-      pclMsg_.fields[0].name     = name[i];
-      pclMsg_.fields[0].offset   = byteCounter;
-      pclMsg_.fields[0].count    = 1;
-      pclMsg_.fields[0].datatype = datatype[i];
+      pclMsg_.fields[i].name     = name[i];
+      pclMsg_.fields[i].offset   = byteCounter;
+      pclMsg_.fields[i].count    = 1;
+      pclMsg_.fields[i].datatype = datatype[i];
       byteCounter += size[i];
     }
     pclMsg_.point_step = byteCounter;
@@ -204,7 +204,7 @@ class RovioNode{
     pclMsg_.is_dense = false;
 
     // Marker message (vizualization of uncertainty)
-    markerMsg_.header.frame_id = camera_frame_;
+    markerMsg_.header.frame_id = camera_frame_ + std::to_string(0); // TODO: fix the hack, there should be one msg per camera
     markerMsg_.id = 0;
     markerMsg_.type = visualization_msgs::Marker::LINE_LIST;
     markerMsg_.action = visualization_msgs::Marker::ADD;
