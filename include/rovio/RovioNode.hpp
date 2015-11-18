@@ -32,22 +32,22 @@
 #include <queue>
 #include <memory>
 #include <ros/ros.h>
-#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
-#include <rovio/RovioOutput.h> // Ros msg
 #include "rovio/RovioFilter.hpp"
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 
-#include "rovio/CoordinateTransform/CameraOutput.hpp"
-#include "rovio/CoordinateTransform/YprOutput.hpp"
+#include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
+#include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
+#include "rovio/CoordinateTransform/YprOutput.hpp"
 
 namespace rovio {
 
@@ -58,48 +58,61 @@ namespace rovio {
 template<typename FILTER>
 class RovioNode{
  public:
-  ros::NodeHandle nh_;
-  ros::NodeHandle nh_private_;
-  ros::Subscriber subImu_;
-  ros::Subscriber subImg0_;
-  ros::Subscriber subImg1_;
-  ros::Subscriber subGroundtruth_;
-  ros::Publisher pubPose_;
-  ros::Publisher pubRovioOutput_;
-  ros::Publisher pubOdometry_;
-  ros::Publisher pubTransform_;
-  tf::TransformBroadcaster tb_;
-  ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
-  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
-
+  // Filter Stuff
   typedef FILTER mtFilter;
   std::shared_ptr<mtFilter> mpFilter_;
   typedef typename mtFilter::mtFilterState mtFilterState;
   typedef typename mtFilterState::mtState mtState;
   typedef typename mtFilter::mtPrediction::mtMeas mtPredictionMeas;
   mtPredictionMeas predictionMeas_;
-  typedef typename std::tuple_element<0,typename mtFilter::mtUpdates>::type::mtMeas mtImgMeas;
+  typedef typename std::tuple_element<0,typename mtFilter::mtUpdates>::type mtImgUpdate;
+  typedef typename mtImgUpdate::mtMeas mtImgMeas;
   mtImgMeas imgUpdateMeas_;
-  typedef typename std::tuple_element<1,typename mtFilter::mtUpdates>::type::mtMeas mtPoseMeas;
+  mtImgUpdate* mpImgUpdate_;
+  typedef typename std::tuple_element<1,typename mtFilter::mtUpdates>::type mtPoseUpdate;
+  typedef typename mtPoseUpdate::mtMeas mtPoseMeas;
   mtPoseMeas poseUpdateMeas_;
+  mtPoseUpdate* mpPoseUpdate_;
   bool isInitialized_;
-  geometry_msgs::PoseStamped poseMsg_;
+
+  // Nodes, Subscriber, Publishers
+  ros::NodeHandle nh_;
+  ros::NodeHandle nh_private_;
+  ros::Subscriber subImu_;
+  ros::Subscriber subImg0_;
+  ros::Subscriber subImg1_;
+  ros::Subscriber subGroundtruth_;
+  ros::Publisher pubOdometry_;
+  ros::Publisher pubTransform_;
+  tf::TransformBroadcaster tb_;
+  ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
+  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
+  ros::Publisher pubExtrinsics_[mtState::nMax_];
+  ros::Publisher pubImuBias_;
+
+  // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
-  RovioOutput rovioOutputMsg_;
-  int poseMsgSeq_;
-  typedef StandardOutput mtOutput;
-  mtOutput output_;
-  CameraOutputCT<mtState> cameraOutputCF_;
-  MXD outputCov_;
+  geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nMax_];
+  sensor_msgs::PointCloud2 pclMsg_;
+  visualization_msgs::Marker markerMsg_;
+  sensor_msgs::Imu imuBiasMsg_;
+  int msgSeq_;
 
-  typedef AttitudeOutput mtAttitudeOutput;
-  mtAttitudeOutput attitudeOutput_;
-  typedef YprOutput mtYprOutput;
-  mtYprOutput yprOutput_;
-  AttitudeToYprCT attitudeToYprCF_;
-  MXD attitudeOutputCov_;
-  MXD yprOutputCov_;
+  // Rovio outputs and coordinate transformations
+  typedef StandardOutput mtOutput;
+  mtOutput cameraOutput_;
+  MXD cameraOutputCov_;
+  mtOutput imuOutput_;
+  MXD imuOutputCov_;
+  CameraOutputCT<mtState> cameraOutputCT_;
+  ImuOutputCT<mtState> imuOutputCT_;
+  rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
+  rovio::FeatureOutput featureOutput_;
+  MXD featureOutputCov_;
+  rovio::FeatureOutputReadableCT featureOutputReadableCT_;
+  rovio::FeatureOutputReadable featureOutputReadable_;
+  MXD featureOutputReadableCov_;
 
   // ROS names for output tf frames.
   std::string map_frame_;
@@ -110,36 +123,103 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), outputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), attitudeOutputCov_((int)(mtAttitudeOutput::D_),(int)(mtAttitudeOutput::D_)), yprOutputCov_((int)(mtYprOutput::D_),(int)(mtYprOutput::D_)) {
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_),
+        cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
+        featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
     #endif
+    mpImgUpdate_ = &std::get<0>(mpFilter_->mUpdates_);
+    mpPoseUpdate_ = &std::get<1>(mpFilter_->mUpdates_);
+    isInitialized_ = false;
+
+    // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
-    pubPose_ = nh_.advertise<geometry_msgs::PoseStamped>("rovio/pose", 1);
+
+    // Advertise topics
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
-    pubRovioOutput_ = nh_.advertise<RovioOutput>("rovio/output", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
+    }
+    pubImuBias_ = nh_.advertise<sensor_msgs::Imu>("rovio/imu_biases", 1 );
 
+    // Handle coordinate frame naming
     map_frame_ = "/map";
     world_frame_ = "/world";
     camera_frame_ = "/camera";
     imu_frame_ = "/imu";
+    nh_private_.param("map_frame", map_frame_, map_frame_);
     nh_private_.param("world_frame", world_frame_, world_frame_);
     nh_private_.param("camera_frame", camera_frame_, camera_frame_);
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
 
-    poseMsg_.header.frame_id = world_frame_;
-    rovioOutputMsg_.header.frame_id = world_frame_;
-    rovioOutputMsg_.points.header.frame_id = camera_frame_;
+    // Initialize messages
+    transformMsg_.header.frame_id = world_frame_;
+    transformMsg_.child_frame_id = imu_frame_;
     odometryMsg_.header.frame_id = world_frame_;
-    odometryMsg_.child_frame_id = camera_frame_;
-    poseMsgSeq_ = 1;
-    isInitialized_ = false;
+    odometryMsg_.child_frame_id = imu_frame_;
+    msgSeq_ = 1;
+    for(int camID=0;camID<mtState::nCam_;camID++){
+      extrinsicsMsg_[camID].header.frame_id = imu_frame_;
+    }
+    imuBiasMsg_.header.frame_id = world_frame_;
+    imuBiasMsg_.orientation.x = 0;
+    imuBiasMsg_.orientation.y = 0;
+    imuBiasMsg_.orientation.z = 0;
+    imuBiasMsg_.orientation.w = 1;
+    for(int i=0;i<9;i++){
+      imuBiasMsg_.orientation_covariance[i] = 0.0;
+    }
+
+    // PointCloud2 message.
+    pclMsg_.header.frame_id = camera_frame_;
+    pclMsg_.height = 1;               // Unordered point cloud.
+    pclMsg_.width  = mtState::nMax_;  // Number of features/points.
+    const int nFields = 18;
+    std::string name[nFields] = {"x","y","z","rgb","b_x","b_y","b_z","d","c_00","c_01","c_02","c_03","c_11","c_12","c_13","c_22","c_23","c_33"};
+    int size[nFields] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
+    int datatype[nFields] = {sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::UINT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+    pclMsg_.fields.resize(nFields);
+    int byteCounter = 0;
+    for(int i=0;i<nFields;i++){
+      pclMsg_.fields[0].name     = name[i];
+      pclMsg_.fields[0].offset   = byteCounter;
+      pclMsg_.fields[0].count    = 1;
+      pclMsg_.fields[0].datatype = datatype[i];
+      byteCounter += size[i];
+    }
+    pclMsg_.point_step = byteCounter;
+    pclMsg_.row_step = pclMsg_.point_step * pclMsg_.width;
+    pclMsg_.data.resize(pclMsg_.row_step * pclMsg_.height);
+    pclMsg_.is_dense = false;
+
+    // Marker message (vizualization of uncertainty)
+    markerMsg_.header.frame_id = camera_frame_;
+    markerMsg_.id = 0;
+    markerMsg_.type = visualization_msgs::Marker::LINE_LIST;
+    markerMsg_.action = visualization_msgs::Marker::ADD;
+    markerMsg_.pose.position.x = 0;
+    markerMsg_.pose.position.y = 0;
+    markerMsg_.pose.position.z = 0;
+    markerMsg_.pose.orientation.x = 0.0;
+    markerMsg_.pose.orientation.y = 0.0;
+    markerMsg_.pose.orientation.z = 0.0;
+    markerMsg_.pose.orientation.w = 1.0;
+    markerMsg_.scale.x = 0.04; // Line width.
+    markerMsg_.color.a = 1.0;
+    markerMsg_.color.r = 0.0;
+    markerMsg_.color.g = 1.0;
+    markerMsg_.color.b = 0.0;
   }
 
   /** \brief Destructor
@@ -175,50 +255,61 @@ class RovioNode{
     mpFilter_->mPrediction_.testPredictionJacs(testState,predictionMeas_,1e-8,1e-6,0.1);
 
     // Update
-    if(!std::get<0>(mpFilter_->mUpdates_).useDirectMethod_){
+    if(!mpImgUpdate_->useDirectMethod_){
       std::cout << "Testing Update" << std::endl;
       for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
         testState.aux().activeFeature_ = i;
         testState.aux().activeCameraCounter_ = 0;
         const int camID = testState.CfP(i).camID_;
         int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
+        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
         testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-        std::get<0>(mpFilter_->mUpdates_).testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
+        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
       }
     }
 
-    // CF
+    // Testing CameraOutputCF and CameraOutputCF
     std::cout << "Testing cameraOutputCF" << std::endl;
-    cameraOutputCF_.testTransformJac(testState,1e-8,1e-6);
+    cameraOutputCT_.testTransformJac(testState,1e-8,1e-6);
+    std::cout << "Testing imuOutputCF" << std::endl;
+    imuOutputCT_.testTransformJac(testState,1e-8,1e-6);
     std::cout << "Testing attitudeToYprCF" << std::endl;
-    attitudeToYprCF_.testTransformJac(1e-8,1e-6);
+    rovio::AttitudeToYprCT attitudeToYprCF;
+    attitudeToYprCF.testTransformJac(1e-8,1e-6);
+
+    // Testing TransformFeatureOutputCT
     std::cout << "Testing transformFeatureOutputCT" << std::endl;
-    rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT(&mpFilter_->multiCamera_);
-    transformFeatureOutputCT.setFeatureID(0);
+    transformFeatureOutputCT_.setFeatureID(0);
     if(mtState::nCam_>1){
-      transformFeatureOutputCT.setOutputCameraID(1);
-      transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
+      transformFeatureOutputCT_.setOutputCameraID(1);
+      transformFeatureOutputCT_.testTransformJac(testState,1e-8,1e-5);
     }
-    transformFeatureOutputCT.setOutputCameraID(0);
-    transformFeatureOutputCT.testTransformJac(testState,1e-8,1e-5);
-    FeatureOutput featureOutput;
-    transformFeatureOutputCT.transformState(testState,featureOutput);
-    if(!featureOutput.c().isInFront()){
-      featureOutput.c().set_nor(featureOutput.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
+    transformFeatureOutputCT_.setOutputCameraID(0);
+    transformFeatureOutputCT_.testTransformJac(testState,1e-8,1e-5);
+
+    // Getting featureOutput for next tests
+    transformFeatureOutputCT_.transformState(testState,featureOutput_);
+    if(!featureOutput_.c().isInFront()){
+      featureOutput_.c().set_nor(featureOutput_.c().get_nor().rotated(QPD(0.0,1.0,0.0,0.0)),false);
     }
+
+    // Testing FeatureOutputReadableCT
+    std::cout << "Testing FeatureOutputReadableCT" << std::endl;
+    featureOutputReadableCT_.testTransformJac(featureOutput_,1e-8,1e-5);
+
+    // Testing pixelOutputCT
     rovio::PixelOutputCT pixelOutputCT;
-    std::cout << "Testing pixelOutputCT" << std::endl;
-    pixelOutputCT.testTransformJac(featureOutput,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
+    std::cout << "Testing pixelOutputCT (can sometimes exhibit large absolut errors due to the float precision)" << std::endl;
+    pixelOutputCT.testTransformJac(featureOutput_,1e-4,1.0); // Reduces accuracy due to float and strong camera distortion
 
-    // Zero Velocity Updates
+    // Testing ZeroVelocityUpdate_
     std::cout << "Testing zero velocity update" << std::endl;
-    std::get<0>(mpFilter_->mUpdates_).zeroVelocityUpdate_.testJacs();
+    mpImgUpdate_->zeroVelocityUpdate_.testJacs();
 
-    // Pose Update
-    if(!std::get<1>(mpFilter_->mUpdates_).noFeedbackToRovio_){
+    // Testing PoseUpdate
+    if(!mpPoseUpdate_->noFeedbackToRovio_){
       std::cout << "Testing pose update" << std::endl;
-      std::get<1>(mpFilter_->mUpdates_).testUpdateJacs(1e-8,1e-5);
+      mpPoseUpdate_->testUpdateJacs(1e-8,1e-5);
     }
 
     delete mpTestFilterState;
@@ -303,7 +394,7 @@ class RovioNode{
     if(isInitialized_){
       poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
       poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
-      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+std::get<1>(mpFilter_->mUpdates_).timeOffset_);
+      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
       updateAndPublish();
     }
   }
@@ -329,12 +420,12 @@ class RovioNode{
       }
       if(mpFilter_->safe_.t_ > oldSafeTime){ // Publish only if something changed
         for(int i=0;i<mtState::nCam_;i++){
-          if(!mpFilter_->safe_.img_[i].empty() && std::get<0>(mpFilter_->mUpdates_).doFrameVisualisation_){
+          if(!mpFilter_->safe_.img_[i].empty() && mpImgUpdate_->doFrameVisualisation_){
             cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
             cv::waitKey(3);
           }
         }
-        if(!mpFilter_->safe_.patchDrawing_.empty() && std::get<0>(mpFilter_->mUpdates_).visualizePatches_){
+        if(!mpFilter_->safe_.patchDrawing_.empty() && mpImgUpdate_->visualizePatches_){
           cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
           cv::waitKey(3);
         }
@@ -343,309 +434,243 @@ class RovioNode{
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
         MXD& cov = mpFilter_->safe_.cov_;
-        cameraOutputCF_.transformState(state,output_);
-        cameraOutputCF_.transformCovMat(state,cov,outputCov_);
+        imuOutputCT_.transformState(state,imuOutput_);
 
         // Cout verbose for pose measurements
-        if(std::get<0>(mpFilter_->mUpdates_).verbose_){
-          if(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_ >=0){
+        if(mpImgUpdate_->verbose_){
+          if(mpPoseUpdate_->inertialPoseIndex_ >=0){
             std::cout << "Transformation between inertial frames, IrIW, qWI: " << std::endl;
-            std::cout << "  " << state.poseLin(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_).transpose() << std::endl;
-            std::cout << "  " << state.poseRot(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_) << std::endl;
+            std::cout << "  " << state.poseLin(mpPoseUpdate_->inertialPoseIndex_).transpose() << std::endl;
+            std::cout << "  " << state.poseRot(mpPoseUpdate_->inertialPoseIndex_) << std::endl;
           }
-          if(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_ >=0){
+          if(mpPoseUpdate_->bodyPoseIndex_ >=0){
             std::cout << "Transformation between body frames, MrMV, qVM: " << std::endl;
-            std::cout << "  " << state.poseLin(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_).transpose() << std::endl;
-            std::cout << "  " << state.poseRot(std::get<1>(mpFilter_->mUpdates_).bodyPoseIndex_) << std::endl;
+            std::cout << "  " << state.poseLin(mpPoseUpdate_->bodyPoseIndex_).transpose() << std::endl;
+            std::cout << "  " << state.poseRot(mpPoseUpdate_->bodyPoseIndex_) << std::endl;
           }
         }
 
-        // Get the position and orientation.
-        Eigen::Vector3d WrWC = output_.WrWC();
-        rot::RotationQuaternionPD qCW = output_.qCW();
-
-
-
-        // Send Map (Pose Sensor) to World (ROVIO) Transformation
-        if(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_ >=0){
-          Eigen::Vector3d IrIW = state.poseLin(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
-          rot::RotationQuaternionPD qWI = state.poseRot(std::get<1>(mpFilter_->mUpdates_).inertialPoseIndex_);
-
-          tf::StampedTransform tf_transform_odom;
-          tf_transform_odom.frame_id_ = map_frame_;
-          tf_transform_odom.child_frame_id_ = world_frame_;
-          tf_transform_odom.stamp_ = ros::Time(mpFilter_->safe_.t_);
-          tf_transform_odom.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
-          tf_transform_odom.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),qWI.w()));
-          tb_.sendTransform(tf_transform_odom);
+        // Send Map (Pose Sensor, I) to World (rovio-intern, W) transformation
+        if(mpPoseUpdate_->inertialPoseIndex_ >=0){
+          Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
+          rot::RotationQuaternionPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
+          tf::StampedTransform tf_transform_WI;
+          tf_transform_WI.frame_id_ = map_frame_;
+          tf_transform_WI.child_frame_id_ = world_frame_;
+          tf_transform_WI.stamp_ = ros::Time(mpFilter_->safe_.t_);
+          tf_transform_WI.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
+          tf_transform_WI.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),qWI.w()));
+          tb_.sendTransform(tf_transform_WI);
         }
-
-
-        // Send camera pose message.
-        poseMsg_.header.seq = poseMsgSeq_;
-        poseMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        poseMsg_.pose.position.x = WrWC(0);
-        poseMsg_.pose.position.y = WrWC(1);
-        poseMsg_.pose.position.z = WrWC(2);
-        poseMsg_.pose.orientation.w = qCW.w();
-        poseMsg_.pose.orientation.x = qCW.x();
-        poseMsg_.pose.orientation.y = qCW.y();
-        poseMsg_.pose.orientation.z = qCW.z();
-        pubPose_.publish(poseMsg_);
-
-        // Send camera pose.
-        tf::StampedTransform tf_transform_v;
-        tf_transform_v.frame_id_ = world_frame_;
-        tf_transform_v.child_frame_id_ = camera_frame_;
-        tf_transform_v.stamp_ = ros::Time(mpFilter_->safe_.t_);
-        tf_transform_v.setOrigin(tf::Vector3(WrWC(0),WrWC(1),WrWC(2)));
-        tf_transform_v.setRotation(tf::Quaternion(qCW.x(),qCW.y(),qCW.z(),qCW.w()));
-        tb_.sendTransform(tf_transform_v);
 
         // Send IMU pose.
-        tf::StampedTransform tf_transform;
-        tf_transform.frame_id_ = world_frame_;
-        tf_transform.child_frame_id_ = imu_frame_;
-        tf_transform.stamp_ = ros::Time(mpFilter_->safe_.t_);
-        Eigen::Vector3d WrWM = state.WrWM();
-        rot::RotationQuaternionPD qMW = state.qWM().inverted();
-        tf_transform.setOrigin(tf::Vector3(WrWM(0),WrWM(1),WrWM(2)));
-        tf_transform.setRotation(tf::Quaternion(qMW.x(),qMW.y(),qMW.z(),qMW.w()));
-        tb_.sendTransform(tf_transform);
+        tf::StampedTransform tf_transform_MW;
+        tf_transform_MW.frame_id_ = world_frame_;
+        tf_transform_MW.child_frame_id_ = imu_frame_;
+        tf_transform_MW.stamp_ = ros::Time(mpFilter_->safe_.t_);
+        tf_transform_MW.setOrigin(tf::Vector3(imuOutput_.WrWB()(0),imuOutput_.WrWB()(1),imuOutput_.WrWB()(2)));
+        tf_transform_MW.setRotation(tf::Quaternion(imuOutput_.qBW().x(),imuOutput_.qBW().y(),imuOutput_.qBW().z(),imuOutput_.qBW().w()));
+        tb_.sendTransform(tf_transform_MW);
+
+        // Send camera pose.
+        for(int camID=0;camID<mtState::nCam_;camID++){
+          tf::StampedTransform tf_transform_CM;
+          tf_transform_CM.frame_id_ = imu_frame_;
+          tf_transform_CM.child_frame_id_ = camera_frame_ + std::to_string(camID);
+          tf_transform_CM.stamp_ = ros::Time(mpFilter_->safe_.t_);
+          tf_transform_CM.setOrigin(tf::Vector3(state.MrMC(camID)(0),state.MrMC(camID)(1),state.MrMC(camID)(2)));
+          tf_transform_CM.setRotation(tf::Quaternion(state.qCM(camID).x(),state.qCM(camID).y(),state.qCM(camID).z(),state.qCM(camID).w()));
+          tb_.sendTransform(tf_transform_CM);
+        }
+
+        // Publish Odometry
+        if(pubOdometry_.getNumSubscribers() > 0){
+          // Compute covariance of output
+          imuOutputCT_.transformCovMat(state,cov,imuOutputCov_);
+
+          odometryMsg_.header.seq = msgSeq_;
+          odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          odometryMsg_.pose.pose.position.x = imuOutput_.WrWB()(0);
+          odometryMsg_.pose.pose.position.y = imuOutput_.WrWB()(1);
+          odometryMsg_.pose.pose.position.z = imuOutput_.WrWB()(2);
+          odometryMsg_.pose.pose.orientation.w = imuOutput_.qBW().w();
+          odometryMsg_.pose.pose.orientation.x = imuOutput_.qBW().x();
+          odometryMsg_.pose.pose.orientation.y = imuOutput_.qBW().y();
+          odometryMsg_.pose.pose.orientation.z = imuOutput_.qBW().z();
+          for(unsigned int i=0;i<6;i++){
+            unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
+            if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
+            for(unsigned int j=0;j<6;j++){
+              unsigned int ind2 = mtOutput::template getId<mtOutput::_pos>()+j;
+              if(j>=3) ind2 = mtOutput::template getId<mtOutput::_att>()+j-3;
+              odometryMsg_.pose.covariance[j+6*i] = imuOutputCov_(ind1,ind2);
+            }
+          }
+          odometryMsg_.twist.twist.linear.x = imuOutput_.BvB()(0);
+          odometryMsg_.twist.twist.linear.y = imuOutput_.BvB()(1);
+          odometryMsg_.twist.twist.linear.z = imuOutput_.BvB()(2);
+          odometryMsg_.twist.twist.angular.x = imuOutput_.BwWB()(0);
+          odometryMsg_.twist.twist.angular.y = imuOutput_.BwWB()(1);
+          odometryMsg_.twist.twist.angular.z = imuOutput_.BwWB()(2);
+          for(unsigned int i=0;i<6;i++){
+            unsigned int ind1 = mtOutput::template getId<mtOutput::_vel>()+i;
+            if(i>=3) ind1 = mtOutput::template getId<mtOutput::_ror>()+i-3;
+            for(unsigned int j=0;j<6;j++){
+              unsigned int ind2 = mtOutput::template getId<mtOutput::_vel>()+j;
+              if(j>=3) ind2 = mtOutput::template getId<mtOutput::_ror>()+j-3;
+              odometryMsg_.twist.covariance[j+6*i] = imuOutputCov_(ind1,ind2);
+            }
+          }
+          pubOdometry_.publish(odometryMsg_);
+        }
 
         // Send IMU pose message.
-        transformMsg_.header = poseMsg_.header;
-        transformMsg_.transform.translation.x = WrWM(0);
-        transformMsg_.transform.translation.y = WrWM(1);
-        transformMsg_.transform.translation.z = WrWM(2);
-        transformMsg_.transform.rotation.x = qMW.x();
-        transformMsg_.transform.rotation.y = qMW.y();
-        transformMsg_.transform.rotation.z = qMW.z();
-        transformMsg_.transform.rotation.w = qMW.w();
-        pubTransform_.publish(transformMsg_);
-
-        // Odometry
-        odometryMsg_.header.seq = poseMsgSeq_;
-        odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        odometryMsg_.pose.pose.position.x = output_.WrWC()(0);
-        odometryMsg_.pose.pose.position.y = output_.WrWC()(1);
-        odometryMsg_.pose.pose.position.z = output_.WrWC()(2);
-        odometryMsg_.pose.pose.orientation.w = output_.qCW().w();
-        odometryMsg_.pose.pose.orientation.x = output_.qCW().x();
-        odometryMsg_.pose.pose.orientation.y = output_.qCW().y();
-        odometryMsg_.pose.pose.orientation.z = output_.qCW().z();
-        for(unsigned int i=0;i<6;i++){
-          unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
-          if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
-          for(unsigned int j=0;j<6;j++){
-            unsigned int ind2 = mtOutput::template getId<mtOutput::_pos>()+j;
-            if(j>=3) ind2 = mtOutput::template getId<mtOutput::_att>()+j-3;
-            odometryMsg_.pose.covariance[j+6*i] = outputCov_(ind1,ind2);
-          }
+        if(pubTransform_.getNumSubscribers() > 0){
+          transformMsg_.header.seq = msgSeq_;
+          transformMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          transformMsg_.transform.translation.x = imuOutput_.WrWB()(0);
+          transformMsg_.transform.translation.y = imuOutput_.WrWB()(1);
+          transformMsg_.transform.translation.z = imuOutput_.WrWB()(2);
+          transformMsg_.transform.rotation.x = imuOutput_.qBW().x();
+          transformMsg_.transform.rotation.y = imuOutput_.qBW().y();
+          transformMsg_.transform.rotation.z = imuOutput_.qBW().z();
+          transformMsg_.transform.rotation.w = imuOutput_.qBW().w();
+          pubTransform_.publish(transformMsg_);
         }
-        odometryMsg_.twist.twist.linear.x = output_.CvC()(0);
-        odometryMsg_.twist.twist.linear.y = output_.CvC()(1);
-        odometryMsg_.twist.twist.linear.z = output_.CvC()(2);
-        odometryMsg_.twist.twist.angular.x = output_.CwWC()(0);
-        odometryMsg_.twist.twist.angular.y = output_.CwWC()(1);
-        odometryMsg_.twist.twist.angular.z = output_.CwWC()(2);
-        for(unsigned int i=0;i<6;i++){
-          unsigned int ind1 = mtOutput::template getId<mtOutput::_vel>()+i;
-          if(i>=3) ind1 = mtOutput::template getId<mtOutput::_ror>()+i-3;
-          for(unsigned int j=0;j<6;j++){
-            unsigned int ind2 = mtOutput::template getId<mtOutput::_vel>()+j;
-            if(j>=3) ind2 = mtOutput::template getId<mtOutput::_ror>()+j-3;
-            odometryMsg_.twist.covariance[j+6*i] = outputCov_(ind1,ind2);
+
+        // Publish Extrinsics
+        for(int camID=0;camID<mtState::nCam_;camID++){
+          if(pubExtrinsics_[camID].getNumSubscribers() > 0){
+            extrinsicsMsg_[camID].header.seq = msgSeq_;
+            extrinsicsMsg_[camID].header.stamp = ros::Time(mpFilter_->safe_.t_);
+            extrinsicsMsg_[camID].pose.pose.position.x = state.MrMC(camID)(0);
+            extrinsicsMsg_[camID].pose.pose.position.y = state.MrMC(camID)(1);
+            extrinsicsMsg_[camID].pose.pose.position.z = state.MrMC(camID)(2);
+            extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).w();
+            extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).x();
+            extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).y();
+            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).z();
+            for(unsigned int i=0;i<6;i++){
+              unsigned int ind1 = mtState::template getId<mtState::_vep>(camID)+i;
+              if(i>=3) ind1 = mtState::template getId<mtState::_vea>(camID)+i-3;
+              for(unsigned int j=0;j<6;j++){
+                unsigned int ind2 = mtState::template getId<mtState::_vep>(camID)+j;
+                if(j>=3) ind2 = mtState::template getId<mtState::_vea>(camID)+j-3;
+                extrinsicsMsg_[camID].pose.covariance[j+6*i] = cov(ind1,ind2);
+              }
+            }
+            pubExtrinsics_[camID].publish(extrinsicsMsg_[camID]);
           }
         }
 
-        attitudeOutput_.template get<mtAttitudeOutput::_att>() = output_.qCW();
-        attitudeOutputCov_ = outputCov_.template block<3,3>(mtOutput::template getId<mtOutput::_att>(),mtOutput::template getId<mtOutput::_att>());
-        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
-        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
-
-        rovioOutputMsg_.header.seq = poseMsgSeq_;
-        rovioOutputMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        rovioOutputMsg_.odometry = odometryMsg_;
-        rovioOutputMsg_.ypr_odometry.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
-        rovioOutputMsg_.ypr_odometry.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
-        rovioOutputMsg_.ypr_odometry.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
-        rovioOutputMsg_.ypr_odometry_sigma.x = yprOutputCov_(0,0);
-        rovioOutputMsg_.ypr_odometry_sigma.y = yprOutputCov_(1,1);
-        rovioOutputMsg_.ypr_odometry_sigma.z = yprOutputCov_(2,2);
-
-        // IMU biases
-        rovioOutputMsg_.acc_bias.x = state.acb()(0);
-        rovioOutputMsg_.acc_bias.y = state.acb()(1);
-        rovioOutputMsg_.acc_bias.z = state.acb()(2);
-        rovioOutputMsg_.acc_bias_sigma.x = cov(mtState::template getId<mtState::_acb>()+0,mtState::template getId<mtState::_acb>()+0);
-        rovioOutputMsg_.acc_bias_sigma.y = cov(mtState::template getId<mtState::_acb>()+1,mtState::template getId<mtState::_acb>()+1);
-        rovioOutputMsg_.acc_bias_sigma.z = cov(mtState::template getId<mtState::_acb>()+2,mtState::template getId<mtState::_acb>()+2);
-        rovioOutputMsg_.gyr_bias.x = state.gyb()(0);
-        rovioOutputMsg_.gyr_bias.y = state.gyb()(1);
-        rovioOutputMsg_.gyr_bias.z = state.gyb()(2);
-        rovioOutputMsg_.gyr_bias_sigma.x = cov(mtState::template getId<mtState::_gyb>()+0,mtState::template getId<mtState::_gyb>()+0);
-        rovioOutputMsg_.gyr_bias_sigma.y = cov(mtState::template getId<mtState::_gyb>()+1,mtState::template getId<mtState::_gyb>()+1);
-        rovioOutputMsg_.gyr_bias_sigma.z = cov(mtState::template getId<mtState::_gyb>()+2,mtState::template getId<mtState::_gyb>()+2);
-
-        // Extrinsics
-        rovioOutputMsg_.extrinsics.pose.position.x = state.MrMC(0)(0);
-        rovioOutputMsg_.extrinsics.pose.position.y = state.MrMC(0)(1);
-        rovioOutputMsg_.extrinsics.pose.position.z = state.MrMC(0)(2);
-        rovioOutputMsg_.extrinsics.pose.orientation.w = state.qCM(0).w();
-        rovioOutputMsg_.extrinsics.pose.orientation.x = state.qCM(0).x();
-        rovioOutputMsg_.extrinsics.pose.orientation.y = state.qCM(0).y();
-        rovioOutputMsg_.extrinsics.pose.orientation.z = state.qCM(0).z();
-        for(unsigned int i=0;i<6;i++){
-          unsigned int ind1 = mtState::template getId<mtState::_vep>(0)+i;
-          if(i>=3) ind1 = mtState::template getId<mtState::_vea>(0)+i-3;
-          for(unsigned int j=0;j<6;j++){
-            unsigned int ind2 = mtState::template getId<mtState::_vep>(0)+j;
-            if(j>=3) ind2 = mtState::template getId<mtState::_vea>(0)+j-3;
-            rovioOutputMsg_.extrinsics.covariance[j+6*i] = cov(ind1,ind2);
+        // Publish IMU biases
+        if(pubImuBias_.getNumSubscribers() > 0){
+          imuBiasMsg_.header.seq = msgSeq_;
+          imuBiasMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          imuBiasMsg_.angular_velocity.x = state.gyb()(0);
+          imuBiasMsg_.angular_velocity.y = state.gyb()(1);
+          imuBiasMsg_.angular_velocity.z = state.gyb()(2);
+          imuBiasMsg_.linear_acceleration.x = state.acb()(0);
+          imuBiasMsg_.linear_acceleration.y = state.acb()(1);
+          imuBiasMsg_.linear_acceleration.z = state.acb()(2);
+          for(int i=0;i<3;i++){
+            for(int j=0;j<3;j++){
+              imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_gyb>()+i,mtState::template getId<mtState::_gyb>()+j);
+            }
           }
+          for(int i=0;i<3;i++){
+            for(int j=0;j<3;j++){
+              imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
+            }
+          }
+          pubImuBias_.publish(imuBiasMsg_);
         }
-        attitudeOutput_.template get<mtAttitudeOutput::_att>() = state.qCM(0);
-        attitudeOutputCov_ = cov.template block<3,3>(mtState::template getId<mtState::_vea>(0),mtState::template getId<mtState::_vea>(0));
-        attitudeToYprCF_.transformState(attitudeOutput_,yprOutput_);
-        attitudeToYprCF_.transformCovMat(attitudeOutput_,attitudeOutputCov_,yprOutputCov_);
-        rovioOutputMsg_.ypr_extrinsics.x = yprOutput_.template get<mtYprOutput::_ypr>()(0);
-        rovioOutputMsg_.ypr_extrinsics.y = yprOutput_.template get<mtYprOutput::_ypr>()(1);
-        rovioOutputMsg_.ypr_extrinsics.z = yprOutput_.template get<mtYprOutput::_ypr>()(2);
-        rovioOutputMsg_.ypr_extrinsics_sigma.x = yprOutputCov_(0,0);
-        rovioOutputMsg_.ypr_extrinsics_sigma.y = yprOutputCov_(1,1);
-        rovioOutputMsg_.ypr_extrinsics_sigma.z = yprOutputCov_(2,2);
-
-        //Point cloud
-        rovioOutputMsg_.points.header.seq = poseMsgSeq_;
-        rovioOutputMsg_.points.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        rovioOutputMsg_.points.height = 1;
-
-        pubRovioOutput_.publish(rovioOutputMsg_);
-        pubOdometry_.publish(odometryMsg_);
-        poseMsgSeq_++;
-
-        // RVIZ Visualization
-        ////////////////////////////////////////////////////////////
 
         // PointCloud2 message.
-        sensor_msgs::PointCloud2 pcl_msg;
-        pcl_msg.header.seq = poseMsgSeq_;
-        pcl_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        pcl_msg.header.frame_id = camera_frame_;
-        pcl_msg.height = 1;               // Unordered point cloud.
-        pcl_msg.width  = mtState::nMax_;  // Number of features/points.
-        pcl_msg.fields.resize(4);
+        if(pubPcl_.getNumSubscribers() > 0 || pubURays_.getNumSubscribers() > 0){
+          pclMsg_.header.seq = msgSeq_;
+          pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
+          int offset = 0;
 
-        pcl_msg.fields[0].name     = "x";
-        pcl_msg.fields[0].offset   = 0;
-        pcl_msg.fields[0].count    = 1;
-        pcl_msg.fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+          FeatureDistance distance;
+          double d,d_minus,d_plus;
+          const double stretchFactor = 3;
+          for (unsigned int i=0;i<mtState::nMax_; i++, offset += pclMsg_.point_step) {
+            if(filterState.fsm_.isValid_[i]){
+              // Get 3D feature coordinates.
+              distance = state.dep(i);
+              d = distance.getDistance();
+              const double sigma = sqrt(cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2));
+              distance.p_ -= stretchFactor*sigma;
+              d_minus = distance.getDistance();
+              if(d_minus > 1000) d_minus = 1000;
+              distance.p_ += 2*stretchFactor*sigma;
+              d_plus = distance.getDistance();
+              if(d_plus > 1000) d_plus = 1000;
+              Eigen::Vector3d bearingVector = filterState.state_.CfP(i).get_nor().getVec();
+              const Eigen::Vector3f pos = bearingVector.cast<float>()*d;
+              const Eigen::Vector3f pos_minus = bearingVector.cast<float>()*d_minus;
+              const Eigen::Vector3f pos_plus = bearingVector.cast<float>()*d_plus;
 
-        pcl_msg.fields[1].name     = "y";
-        pcl_msg.fields[1].offset   = 4;
-        pcl_msg.fields[1].count    = 1;
-        pcl_msg.fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+              // Get human readable output
+              transformFeatureOutputCT_.setFeatureID(i);
+              transformFeatureOutputCT_.setOutputCameraID(filterState.fsm_.features_[i].mpCoordinates_->camID_);
+              transformFeatureOutputCT_.transformState(state,featureOutput_);
+              transformFeatureOutputCT_.transformCovMat(state,cov,featureOutputCov_);
+              featureOutputReadableCT_.transformState(featureOutput_,featureOutputReadable_);
+              featureOutputReadableCT_.transformCovMat(featureOutput_,featureOutputCov_,featureOutputReadableCov_);
 
-        pcl_msg.fields[2].name     = "z";
-        pcl_msg.fields[2].offset   = 8;
-        pcl_msg.fields[2].count    = 1;
-        pcl_msg.fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+              // Add feature coordinates to pcl message.
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[0].offset], &pos[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[1].offset], &pos[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[2].offset], &pos[2], sizeof(float));  // z
 
-        pcl_msg.fields[3].name     = "rgb";
-        pcl_msg.fields[3].offset   = 12;
-        pcl_msg.fields[3].count    = 1;
-        pcl_msg.fields[3].datatype = sensor_msgs::PointField::UINT32;
+              // Add color (gray values).
+              uint8_t gray = 255;
+              uint32_t rgb = (gray << 16) | (gray << 8) | gray;
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[3].offset], &rgb, sizeof(uint32_t));
 
-        pcl_msg.point_step = 16;
-        pcl_msg.row_step = pcl_msg.point_step * pcl_msg.width;
-        pcl_msg.data.resize(pcl_msg.row_step * pcl_msg.height);
-        pcl_msg.is_dense = false;
+              // Add feature bearing vector and distance
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[4].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[5].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.dis(), sizeof(float));
 
-        float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
-        int offset = 0;
+              // Add the corresponding covariance (upper triangular)
+              int mCounter = 8;
+              for(int row=0;row<4;row++){
+                for(int col=row;col<4;col++){
+                  memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &featureOutputReadableCov_(row,col), sizeof(float));
+                  mCounter++;
+                }
+              }
 
-        // Marker message (Uncertainty rays).
-        visualization_msgs::Marker marker_msg;
-        marker_msg.header.frame_id = camera_frame_;
-        marker_msg.header.stamp = ros::Time(mpFilter_->safe_.t_);
-        marker_msg.id = 0;
-        marker_msg.type = visualization_msgs::Marker::LINE_LIST;
-        marker_msg.action = visualization_msgs::Marker::ADD;
-        marker_msg.pose.position.x = 0;
-        marker_msg.pose.position.y = 0;
-        marker_msg.pose.position.z = 0;
-        marker_msg.pose.orientation.x = 0.0;
-        marker_msg.pose.orientation.y = 0.0;
-        marker_msg.pose.orientation.z = 0.0;
-        marker_msg.pose.orientation.w = 1.0;
-        marker_msg.scale.x = 0.04; // Line width.
-        marker_msg.color.a = 1.0;
-        marker_msg.color.r = 0.0;
-        marker_msg.color.g = 1.0;
-        marker_msg.color.b = 0.0;
-
-        FeatureDistance distance;
-        double d,d_far,d_near;
-        const double stretchFactor = 20;
-        for (unsigned int i=0;i<mtState::nMax_; i++, offset += pcl_msg.point_step) {
-          if(filterState.fsm_.isValid_[i]){
-            // Get 3D feature coordinates.
-            distance = state.dep(i);
-            d = distance.getDistance();
-            const double sigma = cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2);
-            distance.p_ -= stretchFactor*sigma;
-            d_far = distance.getDistance();
-            if(distance.getType() == FeatureDistance::INVERSE && (d_far > 1000 || d_far <= 0.0)) d_far = 1000;
-            distance.p_ += 2*stretchFactor*sigma;
-            d_near = distance.getDistance();
-            const LWF::NormalVectorElement middle = filterState.state_.CfP(i).get_nor();
-            const Eigen::Vector3f pos = middle.getVec().cast<float>()*d;
-            const Eigen::Vector3f pos_far = middle.getVec().cast<float>()*d_far;
-            const Eigen::Vector3f pos_near = middle.getVec().cast<float>()*d_near;
-
-            // Add feature coordinates to pcl message.
-            memcpy(&pcl_msg.data[offset + 0],
-                &pos[0], sizeof(float));  // x
-            memcpy(&pcl_msg.data[offset + 4],
-                &pos[1], sizeof(float));  // y
-            memcpy(&pcl_msg.data[offset + 8],
-                &pos[2], sizeof(float));  // z
-
-            // Add color (gray values).
-            uint8_t gray = 255;
-            uint32_t rgb = (gray << 16) | (gray << 8) | gray;
-            memcpy(&pcl_msg.data[offset + 12],
-                &rgb, sizeof(uint32_t));
-
-            // Line markers (Uncertainty rays).
-            geometry_msgs::Point point_near_msg;
-            geometry_msgs::Point point_far_msg;
-            point_near_msg.x = float(pos_near[0]);
-            point_near_msg.y = float(pos_near[1]);
-            point_near_msg.z = float(pos_near[2]);
-            point_far_msg.x = float(pos_far[0]);
-            point_far_msg.y = float(pos_far[1]);
-            point_far_msg.z = float(pos_far[2]);
-            marker_msg.points.push_back(point_near_msg);
-            marker_msg.points.push_back(point_far_msg);
+              // Line markers (Uncertainty rays).
+              geometry_msgs::Point point_near_msg;
+              geometry_msgs::Point point_far_msg;
+              point_near_msg.x = float(pos_plus[0]);
+              point_near_msg.y = float(pos_plus[1]);
+              point_near_msg.z = float(pos_plus[2]);
+              point_far_msg.x = float(pos_minus[0]);
+              point_far_msg.y = float(pos_minus[1]);
+              point_far_msg.z = float(pos_minus[2]);
+              markerMsg_.header.seq = msgSeq_;
+              markerMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+              markerMsg_.points.clear();
+              markerMsg_.points.push_back(point_near_msg);
+              markerMsg_.points.push_back(point_far_msg);
+            }
+            else {
+              // If current feature is not valid copy NaN
+              for(int j=0;j<pclMsg_.fields.size();j++){
+                memcpy(&pclMsg_.data[offset + pclMsg_.fields[j].offset], &badPoint, sizeof(float));
+              }
+            }
           }
-          else {
-            // If current feature is not valid copy NaN
-            memcpy(&pcl_msg.data[offset + 0], &badPoint,     // x
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 4], &badPoint,     // y
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 8], &badPoint,     // z
-                sizeof(float));
-            memcpy(&pcl_msg.data[offset + 12], &badPoint,
-                sizeof(float));
-          }
+          pubPcl_.publish(pclMsg_);
+          pubURays_.publish(markerMsg_);
         }
-        // Publish point cloud.
-        pubPcl_.publish(pcl_msg);
-        // Publish uncertainty rays.
-        pubURays_.publish(marker_msg);
       }
     }
   }
