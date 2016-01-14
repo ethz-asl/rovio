@@ -10,8 +10,8 @@ Please also have a look at the wiki: [https://github.com/ethz-asl/rovio/wiki](ht
 ## Install without opengl scene
 Dependencies:
 - ROS pkgs:
-- * clone into the `catkin` workspace: `git clone https://github.com/ros-perception/vision_opencv.git`
-- * `apt-get ros-<distro>-opencv3`
+  - clone into the `catkin` workspace: `git clone https://github.com/ros-perception/vision_opencv.git`
+  - `apt-get ros-<distro>-opencv3`
 - [kindr](https://github.com/ethz-asl/kindr)
 - lightweight_filtering (as submodule, use `git submodule update --init --recursive`)
 
