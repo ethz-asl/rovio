@@ -73,7 +73,7 @@ endif()
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
-  kindr
+  	kindr
 	roscpp
 	roslib
 	cv_bridge
@@ -88,10 +88,10 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
-  LIBRARIES ${PROJECT_NAME}
+  	LIBRARIES ${PROJECT_NAME}
 	CATKIN_DEPENDS
 	lightweight_filtering
-  kindr
+  	kindr
 	roscpp
 	roslib
 	cv_bridge
