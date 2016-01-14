@@ -29,9 +29,9 @@
 #ifndef IMAGEPYRAMID_HPP_
 #define IMAGEPYRAMID_HPP_
 
-#include <opencv2/features2d/features2d.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/features2d.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include "rovio/FeatureCoordinates.hpp"
 
 namespace rovio{
@@ -134,8 +134,8 @@ class ImagePyramid{
    */
   void detectFastCorners(std::vector<FeatureCoordinates>& candidates, int l, int detectionThreshold) const{
     std::vector<cv::KeyPoint> keypoints;
-    cv::FastFeatureDetector feature_detector_fast(detectionThreshold, true);
-    feature_detector_fast.detect(imgs_[l], keypoints);
+    cv::Ptr<cv::FastFeatureDetector> feature_detector_fast = cv::FastFeatureDetector::create(detectionThreshold, true);
+    feature_detector_fast->detect(imgs_[l], keypoints);
     FeatureCoordinates c;
     candidates.reserve(candidates.size()+keypoints.size());
     for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {

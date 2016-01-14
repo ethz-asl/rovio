@@ -30,7 +30,7 @@
 #define ROVIO_SCENE_HPP_
 
 #include "lightweight_filtering/common.hpp"
-#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/features2d.hpp>
 #include "GL/glew.h"
 #include <GL/freeglut.h>
 #include <memory>

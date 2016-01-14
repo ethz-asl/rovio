@@ -1,6 +1,6 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 2.8)
 project(rovio)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -march=native")
 set(ROVIO_NMAXFEATURE 25 CACHE STRING "Number of features for ROVIO")
 set(ROVIO_NCAM 1 CACHE STRING "Number of enabled cameras")
 set(ROVIO_NLEVELS 4 CACHE STRING "Number of image leavels for the features")
@@ -20,8 +20,25 @@ if(0)
 	find_package(OpenMP REQUIRED)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
+
+set(OpenCV_DIR "/opt/ros/${ROS_DISTRO}/share/OpenCV-3.1.0-dev")
+set(OpenCV_INCLUDE_DIRS "/opt/ros/${ROS_DISTRO}/include/opencv-3.1.0-dev")
+find_package(OpenCV REQUIRED)
+include_directories(${OPENCV_INCLUDE_DIRS})
+message(STATUS "OpenCV library status:")
+message(STATUS "    version: ${OpenCV_VERSION}")
+message(STATUS "    libraries: ${OpenCV_LIBS}")
+message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
+
 find_package(Eigen3 REQUIRED)
-include_directories(${EIGEN3_INCLUDE_DIR})
+if(NOT EIGEN3_FOUND)
+  # Fallback to cmake_modules
+  find_package(cmake_modules REQUIRED)
+  find_package(Eigen REQUIRED)
+  set(EIGEN3_INCLUDE_DIRS ${EIGEN_INCLUDE_DIRS})
+  set(EIGEN3_LIBRARIES ${EIGEN_LIBRARIES})
+endif()
+include_directories(${EIGEN3_INCLUDE_DIRS})
 
 if(MAKE_SCENE)
 	message(STATUS "Building ROVIO with openGL Scene Visualization")
@@ -71,7 +88,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
-    LIBRARIES ${PROJECT_NAME}
+  	LIBRARIES ${PROJECT_NAME}
 	CATKIN_DEPENDS
 	lightweight_filtering
   	kindr
@@ -94,7 +111,7 @@ if(MAKE_SCENE)
 else()
 	add_library(${PROJECT_NAME} src/rovio_node.cpp src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
 endif()
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY} ${OpenCV_LIBS} ${EIGEN_LIBRARIES})
 
 add_executable(rovio_node src/rovio_node.cpp)
 target_link_libraries(rovio_node ${PROJECT_NAME})
