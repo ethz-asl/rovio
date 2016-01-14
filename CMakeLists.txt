@@ -1,6 +1,6 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 2.8)
 project(rovio)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -march=native")
 set(ROVIO_NMAXFEATURE 25 CACHE STRING "Number of features for ROVIO")
 set(ROVIO_NCAM 1 CACHE STRING "Number of enabled cameras")
 set(ROVIO_NLEVELS 4 CACHE STRING "Number of image leavels for the features")
@@ -21,8 +21,14 @@ if(0)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
-find_package(OpenCV 3.1.0 REQUIRED)
+set(OpenCV_DIR "/opt/ros/jade/share/OpenCV-3.1.0-dev")
+set(OpenCV_INCLUDE_DIRS "/opt/ros/jade/include/opencv-3.1.0-dev")
+find_package(OpenCV REQUIRED)
 include_directories(${OPENCV_INCLUDE_DIRS})
+message(STATUS "OpenCV library status:")
+message(STATUS "    version: ${OpenCV_VERSION}")
+message(STATUS "    libraries: ${OpenCV_LIBS}")
+message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
 
 find_package(Eigen3 REQUIRED)
 if(NOT EIGEN3_FOUND)
@@ -67,7 +73,7 @@ endif()
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
-  	kindr
+  kindr
 	roscpp
 	roslib
 	cv_bridge
@@ -82,10 +88,10 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
-    LIBRARIES ${PROJECT_NAME}
+  LIBRARIES ${PROJECT_NAME}
 	CATKIN_DEPENDS
 	lightweight_filtering
-  	kindr
+  kindr
 	roscpp
 	roslib
 	cv_bridge
