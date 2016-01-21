@@ -51,7 +51,6 @@ class MultilevelPatch{
   mutable float e0_;  /**<Smaller eigenvalue of H_.*/
   mutable float e1_;  /**<Larger eigenvalue of H_.*/
   mutable float s_;  /**<Shi-Tomasi score of the multilevel patch feature. @todo define and store method of computation*/
-  mutable FeatureCoordinates coorTemp_; /**<Temporary feature coordinates object */
 
   /** Constructor
    */
@@ -188,10 +187,11 @@ class MultilevelPatch{
    * @param withBorder  - If true, the check is executed with the expanded patch dimensions (incorporates the general patch dimensions).
    *                      If false, the check is only executed with the general patch dimensions.
    */
-  bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false) const{
+  static bool isMultilevelPatchInFrame(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false){
     if(!c.isInFront() || !c.com_warp_c()) return false;
-    pyr.levelTranformCoordinates(c,coorTemp_,0,l);
-    return patches_[l].isPatchInFrame(pyr.imgs_[l],coorTemp_,withBorder);
+    FeatureCoordinates coorTemp;
+    pyr.levelTranformCoordinates(c,coorTemp,0,l);
+    return Patch<patchSize>::isPatchInFrame(pyr.imgs_[l],coorTemp,withBorder);
   }
 
   /** \brief Extracts a multilevel patch from a given image pyramid.
@@ -204,9 +204,10 @@ class MultilevelPatch{
    */
   void extractMultilevelPatchFromImage(const ImagePyramid<nLevels>& pyr,const FeatureCoordinates& c, const int l = nLevels-1,const bool withBorder = false){
     for(unsigned int i=0;i<=l;i++){
-      pyr.levelTranformCoordinates(c,coorTemp_,0,i);
+      FeatureCoordinates coorTemp;
+      pyr.levelTranformCoordinates(c,coorTemp,0,i);
       isValidPatch_[i] = true;
-      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp_,withBorder);
+      patches_[i].extractPatchFromImage(pyr.imgs_[i],coorTemp,withBorder);
     }
   }
 };
