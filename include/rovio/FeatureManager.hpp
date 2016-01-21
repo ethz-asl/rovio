@@ -34,6 +34,9 @@
 #include "rovio/FeatureStatistics.hpp"
 #include "rovio/MultilevelPatch.hpp"
 #include "rovio/MultiCamera.hpp"
+#include "algorithm"
+#include <tuple>
+#include <list>
 
 namespace rovio{
 
@@ -387,6 +390,102 @@ class FeatureSetManager{
 
     return newSet;
   }
+
+  static bool isFirstMPBetter(const std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>& mp1, const std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>&mp2){
+    return std::get<1>(mp1).s_ > std::get<1>(mp2).s_;
+  }
+
+  std::unordered_set<unsigned int> addBestCandidatesNew(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
+                                                       const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
+                                                       const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
+      std::unordered_set<unsigned int> newSet;
+      std::list<std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>> multilevelPatches;
+
+      const int cellSize = 10;
+      const int nCellX = (pyr.imgs_[0].cols-1)/cellSize+1;
+      const int nCellY = (pyr.imgs_[0].rows-1)/cellSize+1;
+      const int nCell = nCellX*nCellY;
+      const int nRange = penaltyDistance/cellSize;
+
+      double weight[nCell];
+      for(int x=0;x<nCellX;x++){
+        for(int y=0;y<nCellY;y++){
+          weight[x*nCellY+y] = 0.0;
+        }
+      }
+      std::unordered_set<int> multilevelPatchBuckets[nCell];
+
+      // Compute all multilevelPatches including shi-tomasi scores and add bucket ID
+      float maxScore = -1.0;
+      for(int i=0;i<candidates.size();i++){
+        if(MultilevelPatch<nLevels,patchSize>::isMultilevelPatchInFrame(pyr,candidates[i],l2,true)){
+          multilevelPatches.emplace_back();
+          std::get<1>(multilevelPatches.back()).extractMultilevelPatchFromImage(pyr,candidates[i],l2,true);
+          std::get<1>(multilevelPatches.back()).computeMultilevelShiTomasiScore(l1,l2);
+          if(std::get<1>(multilevelPatches.back()).s_ < minScore){
+            multilevelPatches.pop_back();
+          } else {
+            std::get<0>(multilevelPatches.back()) = &candidates[i];
+            const int xc = candidates[i].get_c().x/cellSize;
+            const int yc = candidates[i].get_c().y/cellSize;
+            std::get<2>(multilevelPatches.back()) = xc*nCellY+yc;
+          }
+        }
+      }
+      if(multilevelPatches.size() <= 0){ // TODO: check
+        return newSet;
+      }
+
+      // Sort the vector
+      multilevelPatches.sort(isFirstMPBetter);
+
+      // Compute weights based on current feature distribution
+      FeatureCoordinates featureCoordinates;
+      FeatureDistance featureDistance;
+      for(unsigned int i=0;i<nMax;i++){
+        if(isValid_[i]){
+          mpMultiCamera_->transformFeature(camID,*(features_[i].mpCoordinates_),*(features_[i].mpDistance_),featureCoordinates,featureDistance);
+          if(featureCoordinates.isInFront()){
+            const int xc = featureCoordinates.get_c().x/cellSize;
+            const int yc = featureCoordinates.get_c().y/cellSize;
+            for(int x=std::max(xc-nRange,0);x<std::min(xc+nRange+1,nCellX);x++){
+              for(int y=std::max(yc-nRange,0);y<std::min(yc+nRange+1,nCellY);y++){
+                weight[x*nCellY+y] += std::max(1.0-std::sqrt((x-xc)*(x-xc)+(y-yc)*(y-yc))/penaltyDistance,0.0)*zeroDistancePenalty;
+              }
+            }
+          }
+        }
+      }
+
+      // Go through list: add highest, increase bucket weighting, remove all candidates of all buckets which are above 100
+      int addedCount = 0;
+      for(typename std::list<std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>>::iterator it=multilevelPatches.begin(); it!=multilevelPatches.end() && addedCount < maxN; ++it){
+        int bucketID = std::get<2>(*it);
+        if(weight[bucketID] < 100.0){
+          const int ind = makeNewFeature(camID);
+          features_[ind].mpCoordinates_->set_c(std::get<0>(*it)->get_c());
+          features_[ind].mpCoordinates_->camID_ = camID;
+          features_[ind].mpCoordinates_->set_warp_identity();
+          features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
+          *(features_[ind].mpMultilevelPatch_) = std::get<1>(*it);
+          if(ind >= 0){
+            newSet.insert(ind);
+          }
+          addedCount++;
+
+          // Increse Bucket weights
+          const int xc = bucketID/nCellY;
+          const int yc = bucketID%nCellY;
+          for(int x=std::max(xc-nRange,0);x<std::min(xc+nRange+1,nCellX);x++){
+            for(int y=std::max(yc-nRange,0);y<std::min(yc+nRange+1,nCellY);y++){
+              weight[x*nCellY+y] += std::max(1.0-std::sqrt((x-xc)*(x-xc)+(y-yc)*(y-yc))/penaltyDistance,0.0)*zeroDistancePenalty;
+            }
+          }
+        }
+      }
+
+      return newSet;
+    }
 };
 
 }
