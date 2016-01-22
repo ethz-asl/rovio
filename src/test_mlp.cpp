@@ -293,6 +293,11 @@ TEST_F(MLPTesting, getLinearAlignEquations) {
   mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,true);
   c_.set_c(cv::Point2f(imgSize_/2+1,imgSize_/2+1));
   // NOTE: only works for patch size = 2, nLevels = 2
+  mpa_.gradientExponent_ = 0.0;
+  mpa_.huberNormThreshold_ = -1.0;
+  mpa_.useIntensityOffset_ = true;
+  mpa_.useIntensitySqew_ = false;
+  mpa_.useWeighting_ = false;
   ASSERT_EQ(mpa_.getLinearAlignEquations(pyr2_,mp_,c_,0,nLevels_-1,A,b),true);
   float meanError = (255+255*0.75)/8;
   ASSERT_EQ(b(0),255-meanError);
@@ -405,10 +410,17 @@ TEST_F(MLPTesting, align2D_old) {
 
 // Test align2D
 TEST_F(MLPTesting, align2D) {
+  // TODO: test with better patch, the current patch has a lot of local minima (e.g. for specific intensity offset and sewing)
+  mpa_.gradientExponent_ = 0.0;
+  mpa_.huberNormThreshold_ = -1.0;
+  mpa_.useIntensityOffset_ = true;
+  mpa_.useIntensitySqew_ = true;
+  mpa_.useWeighting_ = false;
   FeatureCoordinates cAligned;
   c_.set_warp_identity();
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
   mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,true);
+  mp_.patches_[0].computeGradientParameters();
   ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,0,nLevels_-1,100,1e-4),true);
   ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
   ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
@@ -417,9 +429,19 @@ TEST_F(MLPTesting, align2D) {
   ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
   ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
   ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,0,0,100,1e-4),true);
+//  std::cout << cAligned.get_c() << std::endl;
+//  std::cout << mpa_.b_ << std::endl;
+//  std::cout << mpa_.A_ << std::endl;
+//  std::cout << (mpa_.A_.transpose()*mpa_.A_).inverse()*mpa_.A_.transpose()*mpa_.b_ << std::endl;
+//  std::cout << mp_.patches_[0].patch_[0] << "\t" << mp_.patches_[0].patch_[1] << "\t" << mp_.patches_[0].patch_[2] << "\t" << mp_.patches_[0].patch_[3] << "\t" << std::endl;
+//  std::cout << mp_.patches_[0].dx_[0] << "\t" << mp_.patches_[0].dx_[1] << "\t" << mp_.patches_[0].dx_[2] << "\t" << mp_.patches_[0].dx_[3] << "\t" << std::endl;
+//  std::cout << mp_.patches_[0].dy_[0] << "\t" << mp_.patches_[0].dy_[1] << "\t" << mp_.patches_[0].dy_[2] << "\t" << mp_.patches_[0].dy_[3] << "\t" << std::endl;
+//  std::cout << mpa_.extractedPatches_[0].patch_[0] << "\t" << mpa_.extractedPatches_[0].patch_[1] << "\t" << mpa_.extractedPatches_[0].patch_[2] << "\t" << mpa_.extractedPatches_[0].patch_[3] << "\t" << std::endl;
   ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
   ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
-  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,1,1,100,1e-4),false);
+  ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,1,1,100,1e-4),true);
+  ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
+  ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
 
   Eigen::Matrix2f aff;
   aff << cos(M_PI/2.0), -sin(M_PI/2.0), sin(M_PI/2.0), cos(M_PI/2.0);
@@ -439,6 +461,11 @@ TEST_F(MLPTesting, align2D) {
   ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,0,1,100,1e-4),true);
 
   // Single step comparison
+  mpa_.gradientExponent_ = 0.0;
+  mpa_.huberNormThreshold_ = -1.0;
+  mpa_.useIntensityOffset_ = true;
+  mpa_.useIntensitySqew_ = false;
+  mpa_.useWeighting_ = false;
   cv::Point2f c1,c2;
   c_.set_c(cv::Point2f(imgSize_/2,imgSize_/2));
   mp_.extractMultilevelPatchFromImage(pyr2_,c_,nLevels_-1,true);
