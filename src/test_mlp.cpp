@@ -429,14 +429,6 @@ TEST_F(MLPTesting, align2D) {
   ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
   ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
   ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,0,0,100,1e-4),true);
-//  std::cout << cAligned.get_c() << std::endl;
-//  std::cout << mpa_.b_ << std::endl;
-//  std::cout << mpa_.A_ << std::endl;
-//  std::cout << (mpa_.A_.transpose()*mpa_.A_).inverse()*mpa_.A_.transpose()*mpa_.b_ << std::endl;
-//  std::cout << mp_.patches_[0].patch_[0] << "\t" << mp_.patches_[0].patch_[1] << "\t" << mp_.patches_[0].patch_[2] << "\t" << mp_.patches_[0].patch_[3] << "\t" << std::endl;
-//  std::cout << mp_.patches_[0].dx_[0] << "\t" << mp_.patches_[0].dx_[1] << "\t" << mp_.patches_[0].dx_[2] << "\t" << mp_.patches_[0].dx_[3] << "\t" << std::endl;
-//  std::cout << mp_.patches_[0].dy_[0] << "\t" << mp_.patches_[0].dy_[1] << "\t" << mp_.patches_[0].dy_[2] << "\t" << mp_.patches_[0].dy_[3] << "\t" << std::endl;
-//  std::cout << mpa_.extractedPatches_[0].patch_[0] << "\t" << mpa_.extractedPatches_[0].patch_[1] << "\t" << mpa_.extractedPatches_[0].patch_[2] << "\t" << mpa_.extractedPatches_[0].patch_[3] << "\t" << std::endl;
   ASSERT_NEAR(cAligned.get_c().x,imgSize_/2,1e-2);
   ASSERT_NEAR(cAligned.get_c().y,imgSize_/2,1e-2);
   ASSERT_EQ(mpa_.align2D(cAligned,pyr2_,mp_,c_,1,1,100,1e-4),true);
