@@ -267,14 +267,14 @@ class FeatureSetManager{
    * @param initTime               - Current time (time at which the MultilevelPatchFeature%s are created from the candidates list).
    * @param l1                     - Start pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
    * @param l2                     - End pyramid level for the Shi-Tomasi Score computation of MultilevelPatchFeature%s extracted from the candidates list.
-   * @param maxN                   - Maximal number of features which should be added to the mlpSet.
+   * @param maxAddedFeature                   - Maximal number of features which should be added to the mlpSet.
    * @param nDetectionBuckets      - Number of buckets.
    * @param scoreDetectionExponent - Choose it between [0 1]. 1 : Candidate features are sorted linearly into the buckets, depending on their Shi-Tomasi score.
    *                                                          0 : All candidate features are filled into the highest bucket.
    *                                 A small scoreDetectionExponent forces more candidate features into high buckets.
    * @param penaltyDistance        - If a candidate feature has a smaller distance to an existing feature in the mlpSet, it is punished (shifted in an lower bucket) dependent of its actual distance to the existing feature.
    * @param zeroDistancePenalty    - A candidate feature in a specific bucket is shifted zeroDistancePenalty-buckets back to a lower bucket if it has zero distance to an existing feature in the mlpSet.
-   * @param requireMax             - Should the adding of maxN be enforced?
+   * @param requireMax             - Should the adding of maxAddedFeature be enforced?
    * @param minScore               - Shi-Tomasi Score threshold for the best (highest Shi-Tomasi Score) MultilevelPatchFeature extracted from the candidates list.
    *                                 If the best MultilevelPatchFeature has a Shi-Tomasi Score less than or equal this threshold, the function aborts and returns an empty map.
    *
@@ -284,9 +284,9 @@ class FeatureSetManager{
   // @todo add corner motion dependency
   // @todo check inFrame, only if COVARIANCE not too large
   std::unordered_set<unsigned int> addBestCandidates(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
-                                                     const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
+                                                     const int l1, const int l2, const int maxAddedFeature, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                      const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
-    std::unordered_set<unsigned int> newSet;
+    std::unordered_set<unsigned int> newFeatureIDs;
     std::vector<MultilevelPatch<nLevels,patchSize>> multilevelPatches;
     multilevelPatches.reserve(candidates.size());
 
@@ -303,7 +303,7 @@ class FeatureSetManager{
       }
     }
     if(maxScore <= minScore){
-      return newSet;
+      return newFeatureIDs;
     }
 
     // Make buckets and fill based on score
@@ -354,7 +354,7 @@ class FeatureSetManager{
     // Incrementally add features and update candidate buckets (Check distance of candidates with respect to the newly inserted feature).
     int addedCount = 0;
     for (int bucketID = nDetectionBuckets-1;bucketID >= 0+static_cast<int>(!requireMax);bucketID--) {
-      while(!buckets[bucketID].empty() && addedCount < maxN && getValidCount() != nMax) {
+      while(!buckets[bucketID].empty() && addedCount < maxAddedFeature && getValidCount() != nMax) {
         const int nf = *(buckets[bucketID].begin());
         buckets[bucketID].erase(nf);
         const int ind = makeNewFeature(camID);
@@ -364,7 +364,7 @@ class FeatureSetManager{
         features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
         *(features_[ind].mpMultilevelPatch_) = multilevelPatches[nf];
         if(ind >= 0){
-          newSet.insert(ind);
+          newFeatureIDs.insert(ind);
         }
         addedCount++;
         for (unsigned int bucketID2 = 1;bucketID2 <= bucketID;bucketID2++) {
@@ -388,7 +388,7 @@ class FeatureSetManager{
       }
     }
 
-    return newSet;
+    return newFeatureIDs;
   }
 
   static bool isFirstMPBetter(const std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>& mp1, const std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>&mp2){
@@ -396,9 +396,9 @@ class FeatureSetManager{
   }
 
   std::unordered_set<unsigned int> addBestCandidatesNew(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
-                                                       const int l1, const int l2, const int maxN, const int nDetectionBuckets, const double scoreDetectionExponent,
+                                                       const int l1, const int l2, const int maxAddedFeature, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                        const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
-      std::unordered_set<unsigned int> newSet;
+      std::unordered_set<unsigned int> newFeatureIDs;
       std::list<std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>> multilevelPatches;
 
       const int cellSize = 10;
@@ -433,7 +433,7 @@ class FeatureSetManager{
         }
       }
       if(multilevelPatches.size() <= 0){ // TODO: check
-        return newSet;
+        return newFeatureIDs;
       }
 
       // Sort the vector
@@ -459,7 +459,7 @@ class FeatureSetManager{
 
       // Go through list: add highest, increase bucket weighting, remove all candidates of all buckets which are above 100
       int addedCount = 0;
-      for(typename std::list<std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>>::iterator it=multilevelPatches.begin(); it!=multilevelPatches.end() && addedCount < maxN; ++it){
+      for(typename std::list<std::tuple<const FeatureCoordinates*,MultilevelPatch<nLevels,patchSize>,int>>::iterator it=multilevelPatches.begin(); it!=multilevelPatches.end() && addedCount < maxAddedFeature; ++it){
         int bucketID = std::get<2>(*it);
         if(weight[bucketID] < 100.0){
           const int ind = makeNewFeature(camID);
@@ -469,7 +469,7 @@ class FeatureSetManager{
           features_[ind].mpCoordinates_->mpCamera_ = &mpMultiCamera_->cameras_[camID];
           *(features_[ind].mpMultilevelPatch_) = std::get<1>(*it);
           if(ind >= 0){
-            newSet.insert(ind);
+            newFeatureIDs.insert(ind);
           }
           addedCount++;
 
@@ -484,7 +484,7 @@ class FeatureSetManager{
         }
       }
 
-      return newSet;
+      return newFeatureIDs;
     }
 };
 
