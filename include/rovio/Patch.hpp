@@ -207,15 +207,15 @@ class Patch {
           return true;
         }
       } else {
-        for(int x = 0;x<2;x++){
-          for(int y = 0;y<2;y++){
-            const float dx = halfpatch_size*(2*x-1);
-            const float dy = halfpatch_size*(2*y-1);
+        for(int y=0; y<2*halfpatch_size; y += 2*halfpatch_size-1){
+          for(int x=0; x<2*halfpatch_size; x += 2*halfpatch_size-1){
+            const float dx = x - halfpatch_size + 0.5;
+            const float dy = y - halfpatch_size + 0.5;
             const float wdx = c.get_warp_c()(0,0)*dx + c.get_warp_c()(0,1)*dy;
             const float wdy = c.get_warp_c()(1,0)*dx + c.get_warp_c()(1,1)*dy;
-            const float c_x = c.get_c().x + wdx;
-            const float c_y = c.get_c().y + wdy;
-            if(c_x < 0 || c_y < 0 || c_x > img.cols || c_y > img.rows){
+            const float c_x = c.get_c().x+wdx - 0.5;
+            const float c_y = c.get_c().y+wdy - 0.5;
+            if(c_x < 0 || c_y < 0 || c_x > img.cols-1 || c_y > img.rows-1){
               return false;
             }
           }
