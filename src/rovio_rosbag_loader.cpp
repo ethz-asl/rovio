@@ -30,9 +30,14 @@
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
 #include <memory>
+#include <iostream>
+#include <locale>
+#include <string>
 #include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
 #include <boost/foreach.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/posix_time/posix_time_io.hpp>
 #define foreach BOOST_FOREACH
 
 #ifdef ROVIO_NMAXFEATURE
@@ -94,11 +99,52 @@ int main(int argc, char** argv){
   // Node
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
+  nh_private.param("record_odometry", rovioNode.forceOdometryPublishing_, rovioNode.forceOdometryPublishing_);
+  nh_private.param("record_transform", rovioNode.forceTransformPublishing_, rovioNode.forceTransformPublishing_);
+  nh_private.param("record_extrinsics", rovioNode.forceExtrinsicsPublishing_, rovioNode.forceExtrinsicsPublishing_);
+  nh_private.param("record_imu_bias", rovioNode.forceImuBiasPublishing_, rovioNode.forceImuBiasPublishing_);
+  nh_private.param("record_pcl", rovioNode.forcePclPublishing_, rovioNode.forcePclPublishing_);
+  nh_private.param("record_markers", rovioNode.forceMarkersPublishing_, rovioNode.forceMarkersPublishing_);
+  nh_private.param("record_patch", rovioNode.forcePatchPublishing_, rovioNode.forcePatchPublishing_);
 
-  rosbag::Bag bag;
+  std::cout << "Recording";
+  if(rovioNode.forceOdometryPublishing_) std::cout << ", odometry";
+  if(rovioNode.forceTransformPublishing_) std::cout << ", transform";
+  if(rovioNode.forceExtrinsicsPublishing_) std::cout << ", extrinsics";
+  if(rovioNode.forceImuBiasPublishing_) std::cout << ", imu biases";
+  if(rovioNode.forcePclPublishing_) std::cout << ", point cloud";
+  if(rovioNode.forceMarkersPublishing_) std::cout << ", markers";
+  if(rovioNode.forcePatchPublishing_) std::cout << ", patch data";
+  std::cout << std::endl;
+
+  rosbag::Bag bagIn;
   std::string rosbag_filename = "dataset.bag";
   nh_private.param("rosbag_filename", rosbag_filename, rosbag_filename);
-  bag.open(rosbag_filename, rosbag::bagmode::Read);
+  bagIn.open(rosbag_filename, rosbag::bagmode::Read);
+
+  rosbag::Bag bagOut;
+  std::size_t found = rosbag_filename.find_last_of("/");
+  std::string file_path = rosbag_filename.substr(0,found);
+  std::string file_name = rosbag_filename.substr(found+1);
+  if(file_path==rosbag_filename){
+    file_path = ".";
+    file_name = rosbag_filename;
+  }
+
+  std::stringstream stream;
+  boost::posix_time::time_facet* facet = new boost::posix_time::time_facet();
+  facet->format("%Y-%m-%d-%H-%M-%S");
+  stream.imbue(std::locale(std::locale::classic(), facet));
+  stream << ros::Time::now().toBoost() << "_" << nMax_ << "_" << nLevels_ << "_" << patchSize_ << "_" << nCam_  << "_" << nPose_;
+  std::string rosbag_filename_out = file_path + "/rovio/" + stream.str() + ".bag";
+  std::string info_filename_out = file_path + "/rovio/" + stream.str() + ".info";
+  std::cout << "Storing output to: " << rosbag_filename_out << std::endl;
+  bagOut.open(rosbag_filename_out, rosbag::bagmode::Write);
+
+  // Copy info
+  std::ifstream  src(filter_config, std::ios::binary);
+  std::ofstream  dst(info_filename_out,   std::ios::binary);
+  dst << src.rdbuf();
 
   std::vector<std::string> topics;
   std::string imu_topic_name = "/imu0";
@@ -107,29 +153,56 @@ int main(int argc, char** argv){
   nh_private.param("cam0_topic_name", cam0_topic_name, cam0_topic_name);
   std::string cam1_topic_name = "/cam1/image_raw";
   nh_private.param("cam1_topic_name", cam1_topic_name, cam1_topic_name);
+  std::string odometry_topic_name = rovioNode.pubOdometry_.getTopic();
+  std::string transform_topic_name = rovioNode.pubTransform_.getTopic();
+  std::string extrinsics_topic_name[mtFilter::mtState::nCam_];
+  for(int camID=0;camID<mtFilter::mtState::nCam_;camID++){
+    extrinsics_topic_name[camID] = rovioNode.pubExtrinsics_[camID].getTopic();
+  }
+  std::string imu_bias_topic_name = rovioNode.pubImuBias_.getTopic();
+  std::string pcl_topic_name = rovioNode.pubPcl_.getTopic();
+  std::string u_rays_topic_name = rovioNode.pubMarkers_.getTopic();
+  std::string patch_topic_name = rovioNode.pubPatch_.getTopic();
+
   topics.push_back(std::string(imu_topic_name));
   topics.push_back(std::string(cam0_topic_name));
   topics.push_back(std::string(cam1_topic_name));
+  rosbag::View view(bagIn, rosbag::TopicQuery(topics));
 
-  rosbag::View view(bag, rosbag::TopicQuery(topics));
-
-  foreach(rosbag::MessageInstance const msg, view){
-    if(msg.getTopic() == imu_topic_name){
-      sensor_msgs::Imu::ConstPtr imuMsg = msg.instantiate<sensor_msgs::Imu>();
+  for(rosbag::View::iterator it = view.begin();it != view.end() && ros::ok();it++){
+    if(it->getTopic() == imu_topic_name){
+      sensor_msgs::Imu::ConstPtr imuMsg = it->instantiate<sensor_msgs::Imu>();
       if (imuMsg != NULL) rovioNode.imuCallback(imuMsg);
     }
-    if(msg.getTopic() == cam0_topic_name){
-      sensor_msgs::ImageConstPtr imgMsg = msg.instantiate<sensor_msgs::Image>();
+    if(it->getTopic() == cam0_topic_name){
+      sensor_msgs::ImageConstPtr imgMsg = it->instantiate<sensor_msgs::Image>();
       if (imgMsg != NULL) rovioNode.imgCallback0(imgMsg);
     }
-    if(msg.getTopic() == cam1_topic_name){
-      sensor_msgs::ImageConstPtr imgMsg = msg.instantiate<sensor_msgs::Image>();
+    if(it->getTopic() == cam1_topic_name){
+      sensor_msgs::ImageConstPtr imgMsg = it->instantiate<sensor_msgs::Image>();
       if (imgMsg != NULL) rovioNode.imgCallback1(imgMsg);
     }
     ros::spinOnce();
+
+    if(rovioNode.gotFirstMessages_){
+      static double lastSafeTime = rovioNode.mpFilter_->safe_.t_;
+      if(rovioNode.mpFilter_->safe_.t_ > lastSafeTime){
+        if(rovioNode.forceOdometryPublishing_) bagOut.write(odometry_topic_name,ros::Time::now(),rovioNode.odometryMsg_);
+        if(rovioNode.forceTransformPublishing_) bagOut.write(transform_topic_name,ros::Time::now(),rovioNode.transformMsg_);
+        for(int camID=0;camID<mtFilter::mtState::nCam_;camID++){
+          if(rovioNode.forceExtrinsicsPublishing_) bagOut.write(extrinsics_topic_name[camID],ros::Time::now(),rovioNode.extrinsicsMsg_[camID]);
+        }
+        if(rovioNode.forceImuBiasPublishing_) bagOut.write(imu_bias_topic_name,ros::Time::now(),rovioNode.imuBiasMsg_);
+        if(rovioNode.forcePclPublishing_) bagOut.write(pcl_topic_name,ros::Time::now(),rovioNode.pclMsg_);
+        if(rovioNode.forceMarkersPublishing_) bagOut.write(u_rays_topic_name,ros::Time::now(),rovioNode.markerMsg_);
+        if(rovioNode.forcePatchPublishing_) bagOut.write(patch_topic_name,ros::Time::now(),rovioNode.patchMsg_);
+        lastSafeTime = rovioNode.mpFilter_->safe_.t_;
+      }
+    }
   }
 
-  bag.close();
+  bagOut.close();
+  bagIn.close();
 
 
   return 0;
