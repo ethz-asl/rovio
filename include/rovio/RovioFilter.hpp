@@ -168,6 +168,11 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   /** \brief Reloads the camera calibration for all cameras and resets the depth map type.
    */
   void refreshProperties(){
+    if(std::get<0>(mUpdates_).useDirectMethod_){
+      init_.mode_ = LWF::ModeIEKF;
+    } else {
+      init_.mode_ = LWF::ModeEKF;
+    }
     for(int camID = 0;camID<mtState::nCam_;camID++){
       if (!cameraCalibrationFile_[camID].empty()) {
         multiCamera_.cameras_[camID].load(cameraCalibrationFile_[camID]);

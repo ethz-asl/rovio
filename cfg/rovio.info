@@ -63,24 +63,25 @@ Init
         gyb_0 3e-4;			X-Covariance of initial gyroscope bias [rad^2/s^2]
         gyb_1 3e-4;			Y-Covariance of initial gyroscope bias [rad^2/s^2]
         gyb_2 3e-4;			Z-Covariance of initial gyroscope bias [rad^2/s^2]
-        vep 0.0001;			Covariance of initial linear camera-IMU extrinsics, same for all entries [m^2]
+        vep 0.01;			Covariance of initial linear camera-IMU extrinsics, same for all entries [m^2]
         att_0 0.1;			X-Covariance of initial attitude [rad^2]
         att_1 0.1;			Y-Covariance of initial attitude [rad^2]
         att_2 0.1;			Z-Covariance of initial attitude [rad^2]
-        vea 0.0001;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
+        vea 0.01;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
     }
 }
 ImgUpdate
 {
+	updateVecNormTermination 1e-6;
+	maxNumIteration 20;
     doPatchWarping true;										Should the patches be warped
     doFrameVisualisation true;									Should the frames be visualized
     visualizePatches false;										Should the patches be visualized
     useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
-    innovationInterpolationFactor 1.0;							How much should be used from the direct or indirect error terms. Value must be between 0 and 1.
     startLevel 2;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
     endLevel 1;													Lowest patch level which is being employed
     nDetectionBuckets 100;										Number of discretization buckets used during the candidates selection
-    MahalanobisTh 0.1;											Mahalanobis treshold for the update, 5.8858356
+    MahalanobisTh 1.21;											Mahalanobis treshold for the update, 5.8858356
     UpdateNoise
     {
         pix 2;													Covariance used for the reprojection error, 1/focal_length is roughly 1 pixel std [rad] (~1/f ~ 1/400^2 = 1/160000)
@@ -97,8 +98,8 @@ ImgUpdate
     statLocalQualityRange 10;									Number of frames for local quality evaluation
     statLocalVisibilityRange 100;								Number of frames for local visibility evaluation
     statMinGlobalQualityRange 100;								Minimum number of frames for obtaining maximal global quality
-    trackingUpperBound 0.999;										Threshold for local quality for min overall global quality
-    trackingLowerBound 0.999;										Threshold for local quality for max overall global quality
+    trackingUpperBound 0.9;										Threshold for local quality for min overall global quality
+    trackingLowerBound 0.8;										Threshold for local quality for max overall global quality
     minTrackedAndFreeFeatures 0.75;								Minimum of amount of feature which are either tracked or free
     removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
@@ -108,20 +109,17 @@ ImgUpdate
     alignConvergencePixelRange 1;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;										How many sigma of the uncertainty should be covered in the adaptive alignement
     alignMaxUniSample 1;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
-    matchingPixelThreshold 0.0;									Below this treshold no pre-alignment is carried out [pixels]
-    minNoAlignment 5;											Minimal number of alignment every feature must make through.
-    specialLinearizationThreshold 0.0;							Below this treshold no special linearization point gets computed [pixel]
-    patchRejectionTh -1;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
+    patchRejectionTh 20.0;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
     alignmentHuberNormThreshold -1;								Intensity error threshold for Huber norm (enabled if > 0)
     alignmentGaussianWeightingSigma -1;							Width of Gaussian which is used for pixel error weighting (enabled if > 0)
     alignmentGradientExponent 0.0;								Exponent used for gradient based weighting of residuals
     useIntensityOffsetForAlignment true;						Should an intensity offset between the patches be considered
     useIntensitySqewForAlignment true;							Should an intensity sqew between the patches be considered
-    bearingVectorMahalTh 1.21;									Threshold for the aligned patch to be accepted as inlier
     removeNegativeFeatureAfterUpdate true;						Should feature with negative distance get removed
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
     useCrossCameraMeasurements true;							Should cross measurements between frame be used. Might be turned of in calibration phase.
     doStereoInitialization true;								Should a stereo match be used for feature initialization.
+    noiseGainForOffCamera 4.0;									Factor added on update noise if not main camera
     MotionDetection
     {
     	isEnabled 0;											Is the motion detection enabled
@@ -158,11 +156,11 @@ Prediction
         gyb_0 3.8e-7;							X-covariance parameter of gyroscope bias prediction [rad^2/s^3]
         gyb_1 3.8e-7;							Y-covariance parameter of gyroscope bias prediction [rad^2/s^3]
         gyb_2 3.8e-7;							Z-covariance parameter of gyroscope bias prediction [rad^2/s^3]
-        vep 1e-4;								Covariance parameter of linear extrinsics prediction [m^2/s]
+        vep 1e-8;								Covariance parameter of linear extrinsics prediction [m^2/s]
         att_0 7.6e-6; 7.6e-7					X-Covariance parameter of attitude prediction [rad^2/s]
         att_1 7.6e-6;							Y-Covariance parameter of attitude prediction [rad^2/s]
         att_2 7.6e-6;							Z-Covariance parameter of attitude prediction [rad^2/s]
-        vea 1e-6;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
+        vea 1e-8;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
         dep 0.0001;							Covariance parameter of distance prediction [m^2/s]
         nor 0.00001;								Covariance parameter of bearing vector prediction [rad^2/s]
     }
