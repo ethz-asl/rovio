@@ -283,9 +283,10 @@ class FeatureCoordinates{
    *  @param C2rC2C1 - Position vector, pointing from C2 to C1, expressed in coordinates of C2.
    *  @param qC2C1   - Quaternion, expressing the orientation of C1 in the C2.
    *  @param d       - Triangulated depth value along the bearing vector C1fP.
+   *  @param minDistance - Minimal distance being considered.
    *  @return true, if triangulation successful. This means the angle between the projection rays has not been too small.
    */
-  bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d);
+  bool getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d, const double minDistance = 0);
 
   /** \brief Get the depth uncertainty tau of a triangulated depth value (this is in C1, other is in C2).
    *
