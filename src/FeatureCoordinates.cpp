@@ -197,8 +197,8 @@ namespace rovio{
     }
   }
 
-  void FeatureCoordinates::drawPoint(cv::Mat& drawImg, const cv::Scalar& color) const{
-    cv::Size size(2,2);
+  void FeatureCoordinates::drawPoint(cv::Mat& drawImg, const cv::Scalar& color, const float s) const{
+    cv::Size size(s,s);
     cv::ellipse(drawImg,get_c(),size,0,0,360,color,-1,8,0);
   }
 

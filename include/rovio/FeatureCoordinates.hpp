@@ -249,7 +249,7 @@ class FeatureCoordinates{
    *  @param drawImg - Image in which the point should be drawn.
    *  @param color   - Color of the point.
    */
-  void drawPoint(cv::Mat& drawImg, const cv::Scalar& color) const;
+  void drawPoint(cv::Mat& drawImg, const cv::Scalar& color, const float s = 2) const;
 
   /** \brief Draws an uncertainty ellipse at given feature coordinates.
    *
