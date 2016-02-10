@@ -136,8 +136,10 @@ int main(int argc, char** argv){
   facet->format("%Y-%m-%d-%H-%M-%S");
   stream.imbue(std::locale(std::locale::classic(), facet));
   stream << ros::Time::now().toBoost() << "_" << nMax_ << "_" << nLevels_ << "_" << patchSize_ << "_" << nCam_  << "_" << nPose_;
-  std::string rosbag_filename_out = file_path + "/rovio/" + stream.str() + ".bag";
-  std::string info_filename_out = file_path + "/rovio/" + stream.str() + ".info";
+  std::string filename_out = file_path + "/rovio/" + stream.str();
+  nh_private.param("filename_out", filename_out, filename_out);
+  std::string rosbag_filename_out = filename_out + ".bag";
+  std::string info_filename_out = filename_out + ".info";
   std::cout << "Storing output to: " << rosbag_filename_out << std::endl;
   bagOut.open(rosbag_filename_out, rosbag::bagmode::Write);
 
