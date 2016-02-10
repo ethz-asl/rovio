@@ -53,6 +53,7 @@ class FeatureStatistics{
   int localQualityRange_; /**Range for local quality evaluation.*/
   double localQuality_[nCam]; /**Quality value in the range [0, 1] (ratio between tracking number and visibility number).
    *         1 means very good tracking quality. How is the tracking within the local range, FAILED_ALIGNEMENT or FAILED_TRACKING is worse than not in image.*/
+  double averageLocalQuality_; /**Local Quality considering all camera frames.*/
   int localVisibilityRange_; /**Range for local visibility evaluation.*/
   double localVisibility_; /**Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.*/
   int minGlobalQualityRange_; /**Minimum of frames for maximal quality.*/
@@ -100,6 +101,7 @@ class FeatureStatistics{
     initTime_ = currentTime;
     currentTime_ = currentTime;
     localVisibility_ = 1.0;
+    averageLocalQuality_ = 1.0;
   }
 
   /** \brief Increases the MultilevelPatchFeature statistics and resets the \ref status_.
@@ -123,8 +125,10 @@ class FeatureStatistics{
       // Increase local quality
       if(status_[i] == TRACKED){
         localQuality_[i] = localQuality_[i]*(1-1.0/localQualityRange_) + 1.0/localQualityRange_;
+        averageLocalQuality_ = averageLocalQuality_*(1-1.0/localQualityRange_) + 1.0/localQualityRange_;
       } else if(status_[i] == FAILED_ALIGNEMENT || status_[i] == FAILED_TRACKING){
         localQuality_[i] = localQuality_[i]*(1-1.0/localQualityRange_);
+        averageLocalQuality_ = averageLocalQuality_*(1-1.0/localQualityRange_);
       }
 
       // Store
@@ -255,11 +259,15 @@ class FeatureStatistics{
    *         1 means that the feature was always tracked
    */
   double getAverageLocalQuality() const{
-    double q = 0;;
+    double actualAverageLocalQuality = averageLocalQuality_;
     for(int i=0;i<nCam;i++){
-      q += getLocalQuality(i);
+      if(status_[i] == TRACKED){
+        actualAverageLocalQuality = actualAverageLocalQuality*(1-1.0/localQualityRange_) + 1.0/localQualityRange_;
+      } else if(status_[i] == FAILED_ALIGNEMENT || status_[i] == FAILED_TRACKING){
+        actualAverageLocalQuality = actualAverageLocalQuality*(1-1.0/localQualityRange_);
+      }
     }
-    return q/nCam;
+    return actualAverageLocalQuality;
   }
 
   /** \brief Returns the maximum local quality
