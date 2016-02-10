@@ -640,7 +640,7 @@ class RovioNode{
           }
           for(int i=0;i<3;i++){
             for(int j=0;j<3;j++){
-              imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
+              imuBiasMsg_.linear_acceleration_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
             }
           }
           pubImuBias_.publish(imuBiasMsg_);
