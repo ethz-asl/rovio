@@ -204,14 +204,14 @@ class RovioNode{
     pclMsg_.header.frame_id = imu_frame_;
     pclMsg_.height = 1;               // Unordered point cloud.
     pclMsg_.width  = mtState::nMax_;  // Number of features/points.
-    const int nFieldsPcl = 17;
-    std::string namePcl[nFieldsPcl] = {"id","camId","rgb","status","x","y","z","b_x","b_y","b_z","d","c_00","c_01","c_02","c_11","c_12","c_22"};
-    int sizePcl[nFieldsPcl] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
-    int countPcl[nFieldsPcl] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+    const int nFieldsPcl = 18;
+    std::string namePcl[nFieldsPcl] = {"id","camId","rgb","status","x","y","z","b_x","b_y","b_z","d","c_00","c_01","c_02","c_11","c_12","c_22","c_d"};
+    int sizePcl[nFieldsPcl] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
+    int countPcl[nFieldsPcl] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
     int datatypePcl[nFieldsPcl] = {sensor_msgs::PointField::INT32,sensor_msgs::PointField::INT32,sensor_msgs::PointField::UINT32,sensor_msgs::PointField::UINT32,
         sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
         sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
-        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
     pclMsg_.fields.resize(nFieldsPcl);
     int byteCounter = 0;
     for(int i=0;i<nFieldsPcl;i++){
@@ -606,10 +606,10 @@ class RovioNode{
             extrinsicsMsg_[camID].pose.pose.position.x = state.MrMC(camID)(0);
             extrinsicsMsg_[camID].pose.pose.position.y = state.MrMC(camID)(1);
             extrinsicsMsg_[camID].pose.pose.position.z = state.MrMC(camID)(2);
-            extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).w();
-            extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).x();
-            extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).y();
-            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).z();
+            extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).x();
+            extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).y();
+            extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).z();
+            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).w();
             for(unsigned int i=0;i<6;i++){
               unsigned int ind1 = mtState::template getId<mtState::_vep>(camID)+i;
               if(i>=3) ind1 = mtState::template getId<mtState::_vea>(camID)+i-3;
@@ -709,10 +709,12 @@ class RovioNode{
               memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &MrMP[2], sizeof(float));  // z
 
               // Add feature bearing vector and distance
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[9].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[10].offset], &featureOutputReadable_.dis(), sizeof(float));
+              const Eigen::Vector3f bearing = featureOutputReadable_.bea().cast<float>();
+              const float distance = static_cast<float>(featureOutputReadable_.dis());
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &bearing[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &bearing[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[9].offset], &bearing[2], sizeof(float));  // z
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[10].offset], &distance, sizeof(float)); // d
 
               // Add the corresponding covariance (upper triangular)
               Eigen::Matrix3f cov_MrMP = landmarkOutputCov_.cast<float>();
@@ -723,6 +725,10 @@ class RovioNode{
                   mCounter++;
                 }
               }
+
+              // Add distance uncertainty
+              const float distance_cov = static_cast<float>(featureOutputReadableCov_(3,3));
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &distance_cov, sizeof(float));
 
               // Line markers (Uncertainty rays).
               geometry_msgs::Point point_near_msg;
