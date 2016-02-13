@@ -156,11 +156,11 @@ TEST_F(PatchTesting, isPatchInFrameWithWarping) {
   ASSERT_EQ(p_.isPatchInFrame(img1_,c_,true),false);
   aff << cos(M_PI/6.0), -sin(M_PI/6.0), sin(M_PI/6.0), cos(M_PI/6.0);
   c_.set_warp_c(aff);
-  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6));
+  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5+1e-6));
   ASSERT_EQ(p_.isPatchInFrame(img1_,c_),true);
-  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2-1e-6));
+  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5+1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5-1e-6));
   ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
-  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2-1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*patchSize_/2+1e-6));
+  c_.set_c(cv::Point2f((sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5-1e-6,(sin(M_PI/6.0)+cos(M_PI/6.0))*(patchSize_/2-0.5)+0.5+1e-6));
   ASSERT_EQ(p_.isPatchInFrame(img1_,c_),false);
 }
 
