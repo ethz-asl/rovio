@@ -55,7 +55,8 @@ class FeatureStatistics{
    *         1 means very good tracking quality. How is the tracking within the local range, FAILED_ALIGNEMENT or FAILED_TRACKING is worse than not in image.*/
   double averageLocalQuality_; /**Local Quality considering all camera frames.*/
   int localVisibilityRange_; /**Range for local visibility evaluation.*/
-  double localVisibility_; /**Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.*/
+  double localVisibility_[nCam]; /**Quality value in the range [0, 1], 1 means that the feature was always visible in frame i.*/
+  double jointLocalVisibility_; /**Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.*/
   int minGlobalQualityRange_; /**Minimum of frames for maximal quality.*/
   double lastPatchUpdate_;   /**<Time of last patch update.*/
 
@@ -95,12 +96,13 @@ class FeatureStatistics{
       statistics_[i].clear();
       status_[i] = UNKNOWN;
       localQuality_[i] = 1.0;
+      localVisibility_[i] = 1.0;
     }
     totCount_ = 0;
     trackedCount_ = 0;
     initTime_ = currentTime;
     currentTime_ = currentTime;
-    localVisibility_ = 1.0;
+    jointLocalVisibility_ = 1.0;
     averageLocalQuality_ = 1.0;
   }
 
@@ -114,11 +116,11 @@ class FeatureStatistics{
       trackedCount_++;
     }
 
-    // Increase local visibility
+    // Increase joint local visibility
     if(inSomeFrame()){
-      localVisibility_ = localVisibility_*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
+      jointLocalVisibility_ = jointLocalVisibility_*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
     } else {
-      localVisibility_ = localVisibility_*(1-1.0/localVisibilityRange_);
+      jointLocalVisibility_ = jointLocalVisibility_*(1-1.0/localVisibilityRange_);
     }
 
     for(int i=0;i<nCam;i++){
@@ -129,6 +131,13 @@ class FeatureStatistics{
       } else if(status_[i] == FAILED_ALIGNEMENT || status_[i] == FAILED_TRACKING){
         localQuality_[i] = localQuality_[i]*(1-1.0/localQualityRange_);
         averageLocalQuality_ = averageLocalQuality_*(1-1.0/localQualityRange_);
+      }
+
+      // Increase local visiblity
+      if(status_[i] == FAILED_ALIGNEMENT || status_[i] == FAILED_TRACKING || status_[i] == TRACKED){
+        localVisibility_[i] = localVisibility_[i]*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
+      } else {
+        localVisibility_[i] = localVisibility_[i]*(1-1.0/localVisibilityRange_);
       }
 
       // Store
@@ -253,6 +262,19 @@ class FeatureStatistics{
     return localQuality_[camID];
   }
 
+  /** \brief Gets the local visibility in a specific camera
+   *
+   * @return quality value in the range [0, 1] (ratio of inFrames).
+   *         1 means that the feature was always seen
+   */
+  double getLocalVisibility(const int camID) const{
+    if(status_[camID] == FAILED_ALIGNEMENT || status_[camID] == FAILED_TRACKING || status_[camID] == TRACKED){
+      return localVisibility_[camID]*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
+    } else {
+      return localVisibility_[camID]*(1-1.0/localVisibilityRange_);
+    }
+  }
+
   /** \brief Compute the average of the local qualities for the tracking in each camera
    *
    * @return quality value in the range [0, 1] (tracking ratio of feature for frame where the feature is predicted to be in).
@@ -286,13 +308,12 @@ class FeatureStatistics{
    *
    * @return Quality value in the range [0, 1], 1 means that the feature was always visible in some frame.
    */
-  double getLocalVisibility() const{
+  double getJointLocalVisibility() const{
     if(inSomeFrame()){
-      return localVisibility_*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
+      return jointLocalVisibility_*(1-1.0/localVisibilityRange_) + 1.0/localVisibilityRange_;
     } else {
-      return localVisibility_*(1-1.0/localVisibilityRange_);
+      return jointLocalVisibility_*(1-1.0/localVisibilityRange_);
     }
-    return localVisibility_;
   }
 
   /** \brief Is the current feature a good feature. Combines different quality criteria for deciding if it is a good feature.
@@ -307,8 +328,11 @@ class FeatureStatistics{
    * @todo consider information quality (neibours, shape)
    */
   bool isGoodFeature(const double upper = 0.8, const double lower = 0.1) const{
-    return getMaxLocalQuality()*getLocalVisibility() > upper-(upper-lower)*getGlobalQuality();
-
+    bool isGood = false;
+    for(int i=0;i<nCam;i++){
+      isGood = isGood | getLocalQuality(i)*getLocalVisibility(i) > upper-(upper-lower)*getGlobalQuality();
+    }
+    return isGood;
   }
 };
 
