@@ -215,7 +215,9 @@ class Patch {
             const float wdy = c.get_warp_c()(1,0)*dx + c.get_warp_c()(1,1)*dy;
             const float c_x = c.get_c().x+wdx - 0.5;
             const float c_y = c.get_c().y+wdy - 0.5;
-            if(c_x < 0 || c_y < 0 || c_x > img.cols-1 || c_y > img.rows-1){
+            const int u_r = floor(c_x);
+            const int v_r = floor(c_y);
+            if(u_r < 0 || v_r < 0 || u_r >= img.cols-1 || v_r >= img.rows-1){
               return false;
             }
           }
