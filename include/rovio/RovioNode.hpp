@@ -590,10 +590,10 @@ class RovioNode{
             extrinsicsMsg_[camID].pose.pose.position.x = state.MrMC(camID)(0);
             extrinsicsMsg_[camID].pose.pose.position.y = state.MrMC(camID)(1);
             extrinsicsMsg_[camID].pose.pose.position.z = state.MrMC(camID)(2);
-            extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).w();
-            extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).x();
-            extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).y();
-            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).z();
+            extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).x();
+            extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).y();
+            extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).z();
+            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).w();
             for(unsigned int i=0;i<6;i++){
               unsigned int ind1 = mtState::template getId<mtState::_vep>(camID)+i;
               if(i>=3) ind1 = mtState::template getId<mtState::_vea>(camID)+i-3;
