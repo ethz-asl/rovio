@@ -173,6 +173,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   using Base::hasConverged_;
   using Base::successfulUpdate_;
   using Base::cancelIteration_;
+  using Base::candidateCounter_;
   typedef typename Base::mtState mtState;
   typedef typename Base::mtFilterState mtFilterState;
   typedef typename Base::mtInnovation mtInnovation;
@@ -226,6 +227,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double alignmentHuberNormThreshold_; /**<Intensity error threshold for Huber norm.*/
   double alignmentGaussianWeightingSigma_; /**<Width of Gaussian which is used for pixel error weighting.*/
   double alignmentGradientExponent_; /**<Exponent used for gradient based weighting of residuals.*/
+  double discriminativeSamplingDistance_; /**<Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).*/
+  double discriminativeSamplingGain_; /**<Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).*/
 
 
   // Temporary
@@ -246,6 +249,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   mutable Eigen::Matrix2d A_red_;
   mutable Eigen::Vector2d b_red_;
 
+  mutable Eigen::MatrixXd canditateGenerationH_;
+  mutable Eigen::MatrixXd canditateGenerationDifVec_;
+  mutable Eigen::MatrixXd canditateGenerationPy_;
+  mutable Eigen::EigenSolver<Eigen::MatrixXd> candidateGenerationES_;
+
   mutable MultilevelPatchAlignment<mtState::nLevels_,mtState::patchSize_> alignment_; /**<Patch aligner*/
   mutable cv::Mat drawImg_; /**<Image currently used for drawing*/
 
@@ -253,7 +261,13 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
    *
    *   Loads and sets the needed parameters.
    */
-  ImgUpdate(): transformFeatureOutputCT_(nullptr), pixelOutputCov_((int)(PixelOutput::D_),(int)(PixelOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)), featureOutputJac_((int)(FeatureOutput::D_),(int)(mtState::D_)){
+  ImgUpdate(): transformFeatureOutputCT_(nullptr),
+      pixelOutputCov_((int)(PixelOutput::D_),(int)(PixelOutput::D_)),
+      featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
+      featureOutputJac_((int)(FeatureOutput::D_),(int)(mtState::D_)),
+      canditateGenerationH_((int)(mtState::D_),2),
+      canditateGenerationDifVec_((int)(mtState::D_),1),
+      canditateGenerationPy_(2,2){
     mpMultiCamera_ = nullptr;
     initCovFeature_.setIdentity();
     initDepth_ = 0.5;
@@ -293,6 +307,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doStereoInitialization_ = true;
     removalFactor_ = 1.1;
     alignmentGaussianWeightingSigma_ = 2.0;
+    discriminativeSamplingDistance_ = 0.0;
+    discriminativeSamplingGain_ = 0.0;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -312,6 +328,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("alignConvergencePixelRange",alignConvergencePixelRange_);
     doubleRegister_.registerScalar("alignCoverageRatio",alignCoverageRatio_);
     doubleRegister_.registerScalar("removalFactor",removalFactor_);
+    doubleRegister_.registerScalar("discriminativeSamplingDistance",discriminativeSamplingDistance_);
+    doubleRegister_.registerScalar("discriminativeSamplingGain",discriminativeSamplingGain_);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);
@@ -421,8 +439,42 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     }
   }
 
+  bool generateCandidates(const mtFilterState& filterState, mtState& candidate) const{
+    candidate = filterState.state_;
+
+    if(candidateCounter_ == 0){
+      const int& ID = candidate.aux().activeFeature_;
+      const int& camID = candidate.CfP(ID).camID_;
+      const int activeCamID = (candidate.aux().activeCameraCounter_ + camID)%mtState::nCam_;
+      transformFeatureOutputCT_.setFeatureID(ID);
+      transformFeatureOutputCT_.setOutputCameraID(activeCamID);
+      transformFeatureOutputCT_.transformState(candidate,featureOutput_);
+      transformFeatureOutputCT_.jacTransform(featureOutputJac_,candidate);
+      mpMultiCamera_->cameras_[activeCamID].bearingToPixel(featureOutput_.c().get_nor(),c_temp_,c_J_);
+
+      canditateGenerationH_  = c_J_*featureOutputJac_.template block<2,mtState::D_>(0,0);
+      canditateGenerationPy_ = canditateGenerationH_*filterState.cov_*canditateGenerationH_.transpose();
+      candidateGenerationES_.compute(canditateGenerationPy_);
+    }
+
+    while(++candidateCounter_){
+      int u = (candidateCounter_-1)/(2*alignMaxUniSample_+1)-alignMaxUniSample_;
+      if(u>alignMaxUniSample_)
+        break;
+      int v = (candidateCounter_-1)%(2*alignMaxUniSample_+1)-alignMaxUniSample_;
+      if(pow(u*alignConvergencePixelRange_,2)/candidateGenerationES_.eigenvalues()(0).real()
+          + pow(v*alignConvergencePixelRange_,2)/candidateGenerationES_.eigenvalues()(1).real() < pow(alignCoverageRatio_,2)){
+        Eigen::Vector2d dy = u*alignConvergencePixelRange_*candidateGenerationES_.eigenvectors().col(0).real()
+            + v*alignConvergencePixelRange_*candidateGenerationES_.eigenvectors().col(1).real();
+        canditateGenerationDifVec_ = -filterState.cov_*canditateGenerationH_.transpose()*canditateGenerationPy_.inverse()*dy;
+        candidate.boxPlus(canditateGenerationDifVec_,candidate);
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool extraOutlierCheck(const mtState& state) const{
-    if(!hasConverged_) return false;
     const int& ID = state.aux().activeFeature_;
     const int& camID = state.CfP(ID).camID_;
     const int activeCamID = (state.aux().activeCameraCounter_ + camID)%mtState::nCam_;
@@ -430,17 +482,57 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     transformFeatureOutputCT_.setOutputCameraID(activeCamID);
     transformFeatureOutputCT_.transformState(state,featureOutput_);
 
+    if(!hasConverged_){
+      if(verbose_) std::cout << "    \033[31mREJECTED (iterations did no converge)\033[0m" << std::endl;
+      if(mlpTemp1_.isMultilevelPatchInFrame(meas_.aux().pyr_[activeCamID],featureOutput_.c(),startLevel_,false)){
+        featureOutput_.c().drawPoint(drawImg_, cv::Scalar(255,0,0),1.0);
+      }
+      return false;
+    }
+
     if(patchRejectionTh_ >= 0){
       if(!mlpTemp1_.isMultilevelPatchInFrame(meas_.aux().pyr_[activeCamID],featureOutput_.c(),startLevel_,false)){
+        if(verbose_) std::cout << "    \033[31mREJECTED (not in frame)\033[0m" << std::endl;
         return false;
       }
       mlpTemp1_.extractMultilevelPatchFromImage(meas_.aux().pyr_[activeCamID],featureOutput_.c(),startLevel_,false);
       const float avgError = mlpTemp1_.computeAverageDifference(*state.aux().mpCurrentFeature_->mpMultilevelPatch_,endLevel_,startLevel_);
       if(avgError > patchRejectionTh_){
         if(verbose_) std::cout << "    \033[31mREJECTED (error too large: " << avgError << ")\033[0m" << std::endl;
+        featureOutput_.c().drawPoint(drawImg_, cv::Scalar(255,255,0),1.0);
         return false;
       }
+
+      // Use 4 sample around feature, at least two should be above the treshold
+      if(discriminativeSamplingDistance_ > 0.0){
+        FeatureOutput sample;
+        V3D d;
+        int countAboveThreshold = 0;
+        for(int i=0;i<4;i++){
+          d.setZero();
+          d(i%2) = (i/2*2-1)*discriminativeSamplingDistance_;
+          featureOutput_.boxPlus(d,sample);
+          if(mlpTemp1_.isMultilevelPatchInFrame(meas_.aux().pyr_[activeCamID],sample.c(),startLevel_,false)){
+            mlpTemp1_.extractMultilevelPatchFromImage(meas_.aux().pyr_[activeCamID],sample.c(),startLevel_,false);
+            const float sampleError = mlpTemp1_.computeAverageDifference(*state.aux().mpCurrentFeature_->mpMultilevelPatch_,endLevel_,startLevel_);
+            const bool isAboveThreshold = (discriminativeSamplingGain_ <= 1.0 & sampleError > patchRejectionTh_)
+                | (discriminativeSamplingGain_ > 1.0 & sampleError > discriminativeSamplingGain_*avgError);
+            countAboveThreshold += isAboveThreshold;
+            if(isAboveThreshold){
+              sample.c().drawPoint(drawImg_, cv::Scalar(0,255,0),2.0);
+            } else {
+              sample.c().drawPoint(drawImg_, cv::Scalar(0,0,255),2.0);
+            }
+          }
+        }
+        if(countAboveThreshold < 2){
+          if(verbose_) std::cout << "    \033[31mREJECTED (feature location not discriminative enough)\033[0m" << std::endl;
+          return false;
+        }
+      }
     }
+
+    featureOutput_.c().drawPoint(drawImg_, cv::Scalar(0,0,255),1.0);
     return true;
   }
 
@@ -696,7 +788,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[ID];
       const int camID = f.mpCoordinates_->camID_;
       const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
-      drawImg_ = filterState.img_[activeCamID];
 
       // Remove negative feature
       if(removeNegativeFeatureAfterUpdate_){
@@ -836,7 +927,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           }
           const double qALQ = f.mpStatistics_->getAverageLocalQuality();
           cv::line(filterState.patchDrawing_,cv::Point2i(1,(i+1)*filterState.drawPS_-10),cv::Point2i(1+(filterState.drawPS_-3)*qALQ,(i+1)*filterState.drawPS_-10),cv::Scalar(0,255*qALQ,255*(1-qALQ)),2,8,0);
-          const double qLV = f.mpStatistics_->getLocalVisibility();
+          const double qLV = f.mpStatistics_->getJointLocalVisibility();
           cv::line(filterState.patchDrawing_,cv::Point2i(1,(i+1)*filterState.drawPS_-7),cv::Point2i(1+(filterState.drawPS_-3)*qLV,(i+1)*filterState.drawPS_-7),cv::Scalar(0,255*qLV,255*(1-qLV)),2,8,0);
           const double qGQ = f.mpStatistics_->getGlobalQuality();
           cv::line(filterState.patchDrawing_,cv::Point2i(1,(i+1)*filterState.drawPS_-4),cv::Point2i(1+(filterState.drawPS_-3)*qGQ,(i+1)*filterState.drawPS_-4),cv::Scalar(0,255*qGQ,255*(1-qALQ)),2,8,0);
@@ -925,9 +1016,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
             transformFeatureOutputCT_.transformState(filterState.state_,featureOutput_);
             if(alignment_.align2DAdaptive(alignedCoordinates_,meas.aux().pyr_[otherCam],*f.mpMultilevelPatch_,featureOutput_.c(),startLevel_,endLevel_,
                                             alignConvergencePixelRange_,alignCoverageRatio_,alignMaxUniSample_)){
-              bool valid = mlpTemp1_.isMultilevelPatchInFrame(meas_.aux().pyr_[otherCam],featureOutput_.c(),startLevel_,false);
+              bool valid = mlpTemp1_.isMultilevelPatchInFrame(meas.aux().pyr_[otherCam],alignedCoordinates_,startLevel_,false);
               if(valid && patchRejectionTh_ >= 0){
-                mlpTemp1_.extractMultilevelPatchFromImage(meas_.aux().pyr_[otherCam],featureOutput_.c(),startLevel_,false);
+                mlpTemp1_.extractMultilevelPatchFromImage(meas.aux().pyr_[otherCam],alignedCoordinates_,startLevel_,false);
                 const float avgError = mlpTemp1_.computeAverageDifference(*f.mpMultilevelPatch_,endLevel_,startLevel_);
                 if(avgError > patchRejectionTh_){
                   valid = false;
