@@ -108,7 +108,7 @@ ImgUpdate
     fastDetectionThreshold 5;									Fast corner detector treshold while adding new feature
     alignConvergencePixelRange 10;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;										How many sigma of the uncertainty should be covered in the adaptive alignement
-    alignMaxUniSample 2;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
+    alignMaxUniSample 1;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
     patchRejectionTh 50.0;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
     alignmentHuberNormThreshold -1;								Intensity error threshold for Huber norm (enabled if > 0)
     alignmentGaussianWeightingSigma -1;							Width of Gaussian which is used for pixel error weighting (enabled if > 0)
