@@ -1,7 +1,7 @@
 ###### Camera Calibration File For Cam 1 of Euroc Datasets ######
 image_width: 752
 image_height: 480
-camera_name: cam0
+camera_name: cam1
 camera_matrix:
   rows: 3
   cols: 3

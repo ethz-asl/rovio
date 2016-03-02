@@ -48,6 +48,7 @@
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
 #include "rovio/CoordinateTransform/YprOutput.hpp"
+#include "rovio/CoordinateTransform/LandmarkOutput.hpp"
 
 namespace rovio {
 
@@ -86,6 +87,7 @@ class RovioNode{
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
   ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
+  ros::Publisher pubPatch_;            /**<Publisher: Patch data.*/
   ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
   ros::Publisher pubExtrinsics_[mtState::nMax_];
   ros::Publisher pubImuBias_;
@@ -95,6 +97,7 @@ class RovioNode{
   nav_msgs::Odometry odometryMsg_;
   geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nMax_];
   sensor_msgs::PointCloud2 pclMsg_;
+  sensor_msgs::PointCloud2 patchMsg_;
   visualization_msgs::Marker markerMsg_;
   sensor_msgs::Imu imuBiasMsg_;
   int msgSeq_;
@@ -108,8 +111,11 @@ class RovioNode{
   CameraOutputCT<mtState> cameraOutputCT_;
   ImuOutputCT<mtState> imuOutputCT_;
   rovio::TransformFeatureOutputCT<mtState> transformFeatureOutputCT_;
+  rovio::LandmarkOutputImuCT<mtState> landmarkOutputImuCT_;
   rovio::FeatureOutput featureOutput_;
+  rovio::LandmarkOutput landmarkOutput_;
   MXD featureOutputCov_;
+  MXD landmarkOutputCov_;
   rovio::FeatureOutputReadableCT featureOutputReadableCT_;
   rovio::FeatureOutputReadable featureOutputReadable_;
   MXD featureOutputReadableCov_;
@@ -123,8 +129,8 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_),
-        cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_), landmarkOutputImuCT_(&mpFilter->multiCamera_),
+        cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)), landmarkOutputCov_(3,3),
         featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
     #ifndef NDEBUG
       ROS_WARN("====================== Debug Mode ======================");
@@ -143,6 +149,7 @@ class RovioNode{
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
+    pubPatch_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/patch", 1);
     pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
     for(int camID=0;camID<mtState::nCam_;camID++){
       pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
@@ -177,34 +184,57 @@ class RovioNode{
       imuBiasMsg_.orientation_covariance[i] = 0.0;
     }
 
-    // PointCloud2 message.
-    pclMsg_.header.frame_id = camera_frame_ + std::to_string(0); // TODO: fix the hack, there should be one msg per camera
+    // PointCloud message.
+    pclMsg_.header.frame_id = imu_frame_;
     pclMsg_.height = 1;               // Unordered point cloud.
     pclMsg_.width  = mtState::nMax_;  // Number of features/points.
-    const int nFields = 18;
-    std::string name[nFields] = {"x","y","z","rgb","b_x","b_y","b_z","d","c_00","c_01","c_02","c_03","c_11","c_12","c_13","c_22","c_23","c_33"};
-    int size[nFields] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
-    int datatype[nFields] = {sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::UINT32,
+    const int nFieldsPcl = 17;
+    std::string namePcl[nFieldsPcl] = {"id","camId","rgb","status","x","y","z","b_x","b_y","b_z","d","c_00","c_01","c_02","c_11","c_12","c_22"};
+    int sizePcl[nFieldsPcl] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
+    int countPcl[nFieldsPcl] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+    int datatypePcl[nFieldsPcl] = {sensor_msgs::PointField::INT32,sensor_msgs::PointField::INT32,sensor_msgs::PointField::UINT32,sensor_msgs::PointField::UINT32,
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
         sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
-        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
-        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
-        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
-    pclMsg_.fields.resize(nFields);
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+    pclMsg_.fields.resize(nFieldsPcl);
     int byteCounter = 0;
-    for(int i=0;i<nFields;i++){
-      pclMsg_.fields[i].name     = name[i];
+    for(int i=0;i<nFieldsPcl;i++){
+      pclMsg_.fields[i].name     = namePcl[i];
       pclMsg_.fields[i].offset   = byteCounter;
-      pclMsg_.fields[i].count    = 1;
-      pclMsg_.fields[i].datatype = datatype[i];
-      byteCounter += size[i];
+      pclMsg_.fields[i].count    = countPcl[i];
+      pclMsg_.fields[i].datatype = datatypePcl[i];
+      byteCounter += sizePcl[i]*countPcl[i];
     }
     pclMsg_.point_step = byteCounter;
     pclMsg_.row_step = pclMsg_.point_step * pclMsg_.width;
     pclMsg_.data.resize(pclMsg_.row_step * pclMsg_.height);
     pclMsg_.is_dense = false;
 
+    // PointCloud message.
+    patchMsg_.header.frame_id = "";
+    patchMsg_.height = 1;               // Unordered point cloud.
+    patchMsg_.width  = mtState::nMax_;  // Number of features/points.
+    const int nFieldsPatch = 5;
+    std::string namePatch[nFieldsPatch] = {"id","patch","dx","dy","error"};
+    int sizePatch[nFieldsPatch] = {4,4,4,4,4};
+    int countPatch[nFieldsPatch] = {1,mtState::nLevels_*mtState::patchSize_*mtState::patchSize_,mtState::nLevels_*mtState::patchSize_*mtState::patchSize_,mtState::nLevels_*mtState::patchSize_*mtState::patchSize_,mtState::nLevels_*mtState::patchSize_*mtState::patchSize_};
+    int datatypePatch[nFieldsPatch] = {sensor_msgs::PointField::INT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+    patchMsg_.fields.resize(nFieldsPatch);
+    byteCounter = 0;
+    for(int i=0;i<nFieldsPatch;i++){
+      patchMsg_.fields[i].name     = namePatch[i];
+      patchMsg_.fields[i].offset   = byteCounter;
+      patchMsg_.fields[i].count    = countPatch[i];
+      patchMsg_.fields[i].datatype = datatypePatch[i];
+      byteCounter += sizePatch[i]*countPatch[i];
+    }
+    patchMsg_.point_step = byteCounter;
+    patchMsg_.row_step = patchMsg_.point_step * patchMsg_.width;
+    patchMsg_.data.resize(patchMsg_.row_step * patchMsg_.height);
+    patchMsg_.is_dense = false;
+
     // Marker message (vizualization of uncertainty)
-    markerMsg_.header.frame_id = camera_frame_ + std::to_string(0); // TODO: fix the hack, there should be one msg per camera
+    markerMsg_.header.frame_id = imu_frame_;
     markerMsg_.id = 0;
     markerMsg_.type = visualization_msgs::Marker::LINE_LIST;
     markerMsg_.action = visualization_msgs::Marker::ADD;
@@ -240,12 +270,22 @@ class RovioNode{
     predictionMeas_.setRandom(s);
     imgUpdateMeas_.setRandom(s);
 
+    LWF::NormalVectorElement tempNor;
     for(int i=0;i<mtState::nMax_;i++){
       testState.CfP(i).camID_ = 0;
-      testState.CfP(i).nor_.setRandom(s);
-      testState.CfP(i).valid_nor_ = true;
+      tempNor.setRandom(s);
+      if(tempNor.getVec()(2) < 0){
+        tempNor.boxPlus(Eigen::Vector2d(3.14,0),tempNor);
+      }
+      testState.CfP(i).set_nor(tempNor);
       testState.CfP(i).trackWarping_ = false;
-      testState.aux().bearingMeas_[i].setRandom(s);
+      tempNor.setRandom(s);
+      if(tempNor.getVec()(2) < 0){
+        tempNor.boxPlus(Eigen::Vector2d(3.14,0),tempNor);
+      }
+      testState.aux().feaCoorMeas_[i].set_nor(tempNor,true);
+      testState.aux().feaCoorMeas_[i].mpCamera_ = &mpFilter_->multiCamera_.cameras_[0];
+      testState.aux().feaCoorMeas_[i].camID_ = 0;
     }
     testState.CfP(0).camID_ = mtState::nCam_-1;
     mpTestFilterState->fsm_.setAllCameraPointers();
@@ -256,15 +296,13 @@ class RovioNode{
 
     // Update
     if(!mpImgUpdate_->useDirectMethod_){
-      std::cout << "Testing Update" << std::endl;
+      std::cout << "Testing Update (can sometimes exhibit large absolut errors due to the float precision)" << std::endl;
       for(int i=0;i<(std::min((int)mtState::nMax_,2));i++){
         testState.aux().activeFeature_ = i;
         testState.aux().activeCameraCounter_ = 0;
-        const int camID = testState.CfP(i).camID_;
-        int activeCamID = (testState.aux().activeCameraCounter_ + camID)%mtState::nCam_;
-        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
+        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-4,1e-5);
         testState.aux().activeCameraCounter_ = mtState::nCam_-1;
-        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-8,1e-5);
+        mpImgUpdate_->testUpdateJacs(testState,imgUpdateMeas_,1e-4,1e-5);
       }
     }
 
@@ -286,6 +324,11 @@ class RovioNode{
     }
     transformFeatureOutputCT_.setOutputCameraID(0);
     transformFeatureOutputCT_.testTransformJac(testState,1e-8,1e-5);
+
+    // Testing LandmarkOutputImuCT
+    std::cout << "Testing LandmarkOutputImuCT" << std::endl;
+    landmarkOutputImuCT_.setFeatureID(0);
+    landmarkOutputImuCT_.testTransformJac(testState,1e-8,1e-5);
 
     // Getting featureOutput for next tests
     transformFeatureOutputCT_.transformState(testState,featureOutput_);
@@ -433,6 +476,7 @@ class RovioNode{
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;
+        state.updateMultiCameraExtrinsics(&mpFilter_->multiCamera_);
         MXD& cov = mpFilter_->safe_.cov_;
         imuOutputCT_.transformState(state,imuOutput_);
 
@@ -586,10 +630,13 @@ class RovioNode{
           pubImuBias_.publish(imuBiasMsg_);
         }
 
-        // PointCloud2 message.
+        // PointCloud message.
         if(pubPcl_.getNumSubscribers() > 0 || pubURays_.getNumSubscribers() > 0){
           pclMsg_.header.seq = msgSeq_;
           pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          markerMsg_.header.seq = msgSeq_;
+          markerMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          markerMsg_.points.clear();
           float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
           int offset = 0;
 
@@ -599,19 +646,23 @@ class RovioNode{
           for (unsigned int i=0;i<mtState::nMax_; i++, offset += pclMsg_.point_step) {
             if(filterState.fsm_.isValid_[i]){
               // Get 3D feature coordinates.
+              int camID = filterState.fsm_.features_[i].mpCoordinates_->camID_;
               distance = state.dep(i);
               d = distance.getDistance();
               const double sigma = sqrt(cov(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2));
               distance.p_ -= stretchFactor*sigma;
               d_minus = distance.getDistance();
               if(d_minus > 1000) d_minus = 1000;
+              if(d_minus < 0) d_minus = 0;
               distance.p_ += 2*stretchFactor*sigma;
               d_plus = distance.getDistance();
               if(d_plus > 1000) d_plus = 1000;
+              if(d_plus < 0) d_plus = 0;
               Eigen::Vector3d bearingVector = filterState.state_.CfP(i).get_nor().getVec();
-              const Eigen::Vector3f pos = bearingVector.cast<float>()*d;
-              const Eigen::Vector3f pos_minus = bearingVector.cast<float>()*d_minus;
-              const Eigen::Vector3f pos_plus = bearingVector.cast<float>()*d_plus;
+              const Eigen::Vector3d CrCPm = bearingVector*d_minus;
+              const Eigen::Vector3d CrCPp = bearingVector*d_plus;
+              const Eigen::Vector3f MrMPm = V3D(mpFilter_->multiCamera_.BrBC_[camID] + mpFilter_->multiCamera_.qCB_[camID].inverseRotate(CrCPm)).cast<float>();
+              const Eigen::Vector3f MrMPp = V3D(mpFilter_->multiCamera_.BrBC_[camID] + mpFilter_->multiCamera_.qCB_[camID].inverseRotate(CrCPp)).cast<float>();
 
               // Get human readable output
               transformFeatureOutputCT_.setFeatureID(i);
@@ -621,27 +672,38 @@ class RovioNode{
               featureOutputReadableCT_.transformState(featureOutput_,featureOutputReadable_);
               featureOutputReadableCT_.transformCovMat(featureOutput_,featureOutputCov_,featureOutputReadableCov_);
 
-              // Add feature coordinates to pcl message.
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[0].offset], &pos[0], sizeof(float));  // x
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[1].offset], &pos[1], sizeof(float));  // y
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[2].offset], &pos[2], sizeof(float));  // z
+              // Get landmark output
+              landmarkOutputImuCT_.setFeatureID(i);
+              landmarkOutputImuCT_.transformState(state,landmarkOutput_);
+              landmarkOutputImuCT_.transformCovMat(state,cov,landmarkOutputCov_);
+              const Eigen::Vector3f MrMP = landmarkOutput_.get<LandmarkOutput::_lmk>().cast<float>();
 
-              // Add color (gray values).
+              // Write feature id, camera id, and rgb
               uint8_t gray = 255;
               uint32_t rgb = (gray << 16) | (gray << 8) | gray;
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[3].offset], &rgb, sizeof(uint32_t));
+              uint32_t status = filterState.fsm_.features_[i].mpStatistics_->status_[0];
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[0].offset], &filterState.fsm_.features_[i].idx_, sizeof(int));  // id
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[1].offset], &camID, sizeof(int));  // cam id
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[2].offset], &rgb, sizeof(uint32_t));  // rgb
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[3].offset], &status, sizeof(int));  // status
+
+              // Write coordinates to pcl message.
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[4].offset], &MrMP[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[5].offset], &MrMP[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &MrMP[2], sizeof(float));  // z
 
               // Add feature bearing vector and distance
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[4].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[5].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.dis(), sizeof(float));
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[9].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[10].offset], &featureOutputReadable_.dis(), sizeof(float));
 
               // Add the corresponding covariance (upper triangular)
-              int mCounter = 8;
-              for(int row=0;row<4;row++){
-                for(int col=row;col<4;col++){
-                  memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &featureOutputReadableCov_(row,col), sizeof(float));
+              Eigen::Matrix3f cov_MrMP = landmarkOutputCov_.cast<float>();
+              int mCounter = 11;
+              for(int row=0;row<3;row++){
+                for(int col=row;col<3;col++){
+                  memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &cov_MrMP(row,col), sizeof(float));
                   mCounter++;
                 }
               }
@@ -649,27 +711,54 @@ class RovioNode{
               // Line markers (Uncertainty rays).
               geometry_msgs::Point point_near_msg;
               geometry_msgs::Point point_far_msg;
-              point_near_msg.x = float(pos_plus[0]);
-              point_near_msg.y = float(pos_plus[1]);
-              point_near_msg.z = float(pos_plus[2]);
-              point_far_msg.x = float(pos_minus[0]);
-              point_far_msg.y = float(pos_minus[1]);
-              point_far_msg.z = float(pos_minus[2]);
-              markerMsg_.header.seq = msgSeq_;
-              markerMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-              markerMsg_.points.clear();
+              point_near_msg.x = float(CrCPp[0]);
+              point_near_msg.y = float(CrCPp[1]);
+              point_near_msg.z = float(CrCPp[2]);
+              point_far_msg.x = float(CrCPm[0]);
+              point_far_msg.y = float(CrCPm[1]);
+              point_far_msg.z = float(CrCPm[2]);
               markerMsg_.points.push_back(point_near_msg);
               markerMsg_.points.push_back(point_far_msg);
             }
             else {
               // If current feature is not valid copy NaN
-              for(int j=0;j<pclMsg_.fields.size();j++){
+              int id = -1;
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[0].offset], &id, sizeof(int));  // id
+              for(int j=1;j<pclMsg_.fields.size();j++){
                 memcpy(&pclMsg_.data[offset + pclMsg_.fields[j].offset], &badPoint, sizeof(float));
               }
             }
           }
           pubPcl_.publish(pclMsg_);
           pubURays_.publish(markerMsg_);
+        }
+        if(pubPatch_.getNumSubscribers() > 0){
+          patchMsg_.header.seq = msgSeq_;
+          patchMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          int offset = 0;
+          for (unsigned int i=0;i<mtState::nMax_; i++, offset += patchMsg_.point_step) {
+            if(filterState.fsm_.isValid_[i]){
+              memcpy(&patchMsg_.data[offset + patchMsg_.fields[0].offset], &filterState.fsm_.features_[i].idx_, sizeof(int));  // id
+              // Add patch data
+              for(int l=0;l<mtState::nLevels_;l++){
+                for(int y=0;y<mtState::patchSize_;y++){
+                  for(int x=0;x<mtState::patchSize_;x++){
+                    memcpy(&patchMsg_.data[offset + patchMsg_.fields[1].offset + (l*mtState::patchSize_*mtState::patchSize_ + y*mtState::patchSize_ + x)*4], &filterState.fsm_.features_[i].mpMultilevelPatch_->patches_[l].patch_[y*mtState::patchSize_ + x], sizeof(float)); // Patch
+                    memcpy(&patchMsg_.data[offset + patchMsg_.fields[2].offset + (l*mtState::patchSize_*mtState::patchSize_ + y*mtState::patchSize_ + x)*4], &filterState.fsm_.features_[i].mpMultilevelPatch_->patches_[l].dx_[y*mtState::patchSize_ + x], sizeof(float)); // dx
+                    memcpy(&patchMsg_.data[offset + patchMsg_.fields[3].offset + (l*mtState::patchSize_*mtState::patchSize_ + y*mtState::patchSize_ + x)*4], &filterState.fsm_.features_[i].mpMultilevelPatch_->patches_[l].dy_[y*mtState::patchSize_ + x], sizeof(float)); // dy
+                    memcpy(&patchMsg_.data[offset + patchMsg_.fields[4].offset + (l*mtState::patchSize_*mtState::patchSize_ + y*mtState::patchSize_ + x)*4], &filterState.mlpErrorLog_[i].patches_[l].patch_[y*mtState::patchSize_ + x], sizeof(float)); // error
+                  }
+                }
+              }
+            }
+            else {
+              // If current feature is not valid copy NaN
+              int id = -1;
+              memcpy(&patchMsg_.data[offset + patchMsg_.fields[0].offset], &id, sizeof(int));  // id
+            }
+          }
+
+          pubPatch_.publish(patchMsg_);
         }
       }
     }

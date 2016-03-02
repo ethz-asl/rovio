@@ -76,18 +76,19 @@ ImgUpdate
     doFrameVisualisation true;									Should the frames be visualized
     visualizePatches false;										Should the patches be visualized
     useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
-    startLevel 3;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
+    innovationInterpolationFactor 1.0;							How much should be used from the direct or indirect error terms. Value must be between 0 and 1.
+    startLevel 2;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
     endLevel 1;													Lowest patch level which is being employed
     nDetectionBuckets 100;										Number of discretization buckets used during the candidates selection
     MahalanobisTh 0.1;											Mahalanobis treshold for the update, 5.8858356
     UpdateNoise
     {
-        nor 1e-5;												Covariance used for the reprojection error, 1/focal_length is roughly 1 pixel std [rad] (~1/f ~ 1/400^2 = 1/160000)
-        int 100;												Covariance used for the photometric error [intensity^2]
+        pix 2;													Covariance used for the reprojection error, 1/focal_length is roughly 1 pixel std [rad] (~1/f ~ 1/400^2 = 1/160000)
+        int 10000;												Covariance used for the photometric error [intensity^2]
     }
-    initCovFeature_0 0.5;										Covariance for the initial distance (in the selected parametrization)
-    initCovFeature_1 1e-5;										Covariance for the initial bearing vector, x-component [rad]
-    initCovFeature_2 1e-5;										Covariance for the initial bearing vector, y-component [rad]
+    initCovFeature_0 2.0;										Covariance for the initial distance (Relative to initialization depth [m^2/m^2])
+    initCovFeature_1 1e-5;										Covariance for the initial bearing vector, x-component [rad^2]
+    initCovFeature_2 1e-5;										Covariance for the initial bearing vector, y-component [rad^2]
     initDepth 0.5;												Initial value for the initial distance parameter
     startDetectionTh 0.8;										Threshold for detecting new features (min: 0, max: 1)
     scoreDetectionExponent 0.25;								Exponent used for weighting the distance between candidates
@@ -96,8 +97,8 @@ ImgUpdate
     statLocalQualityRange 10;									Number of frames for local quality evaluation
     statLocalVisibilityRange 100;								Number of frames for local visibility evaluation
     statMinGlobalQualityRange 100;								Minimum number of frames for obtaining maximal global quality
-    trackingUpperBound 0.9;										Threshold for local quality for min overall global quality
-    trackingLowerBound 0.1;										Threshold for local quality for max overall global quality
+    trackingUpperBound 0.999;										Threshold for local quality for min overall global quality
+    trackingLowerBound 0.999;										Threshold for local quality for max overall global quality
     minTrackedAndFreeFeatures 0.75;								Minimum of amount of feature which are either tracked or free
     removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
@@ -109,9 +110,14 @@ ImgUpdate
     alignMaxUniSample 1;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
     matchingPixelThreshold 0.0;									Below this treshold no pre-alignment is carried out [pixels]
     minNoAlignment 5;											Minimal number of alignment every feature must make through.
-    specialLinearizationThreshold 0.0;							Below this treshold no special linearization point gets computed (1 pixel ~ 0.0025) [rad]
+    specialLinearizationThreshold 0.0;							Below this treshold no special linearization point gets computed [pixel]
     patchRejectionTh -1;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
-    bearingVectorMahalTh 9.21;									Threshold for the aligned patch to be accepted as inlier
+    alignmentHuberNormThreshold -1;								Intensity error threshold for Huber norm (enabled if > 0)
+    alignmentGaussianWeightingSigma -1;							Width of Gaussian which is used for pixel error weighting (enabled if > 0)
+    alignmentGradientExponent 0.0;								Exponent used for gradient based weighting of residuals
+    useIntensityOffsetForAlignment true;						Should an intensity offset between the patches be considered
+    useIntensitySqewForAlignment true;							Should an intensity sqew between the patches be considered
+    bearingVectorMahalTh 1.21;									Threshold for the aligned patch to be accepted as inlier
     removeNegativeFeatureAfterUpdate true;						Should feature with negative distance get removed
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
     useCrossCameraMeasurements true;							Should cross measurements between frame be used. Might be turned of in calibration phase.

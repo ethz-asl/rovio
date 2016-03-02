@@ -51,6 +51,44 @@ class MultilevelPatchAlignment {
   mutable FeatureCoordinates bestCoordinateMatch_; /**<Best current pixel coordinate match.*/
   mutable double bestIntensityError_; /**<Intensity error for the match.*/
   mutable MultilevelPatch<nLevels,patch_size> mlpTemp_; /**<Temporary multilevel patch used for various computations.*/
+  mutable MultilevelPatch<nLevels,patch_size> mlpError_;  /**<Multilevel patch containing errors and its gradient.*/
+  Patch<patch_size> extractedPatches_[nLevels];  /**<Extracted patches used for alignment.*/
+  float huberNormThreshold_;  /**<Intensity error threshold for Huber norm.*/
+  float w_[nLevels*patch_size*patch_size] __attribute__ ((aligned (16)));  /**<Weighting for patch intensity errors.*/
+  bool useWeighting_; /**<Should weighting be performed for patch intensity errors.*/
+  bool useIntensityOffset_; /**<Should an intensity offset between the patches be considered.*/
+  bool useIntensitySqew_; /**<Should an intensity sqewing between the patches be considered.*/
+  float gradientExponent_;  /**<Exponent used for gradient based weighting of residuals.*/
+
+  /** \brief Constructor
+   */
+  MultilevelPatchAlignment(){
+    huberNormThreshold_ = 0.0;
+    bestIntensityError_ = 0.0;
+    computeWeightings(0.0);
+    useIntensityOffset_ = true;
+    useIntensitySqew_ = true;
+    gradientExponent_ = 0.0;
+  }
+
+  /** \brief Computes the weigting mask for patches
+   *
+   * @param sigma - widtf of Gaussian filter
+   */
+  void computeWeightings(const float sigma){
+    useWeighting_ = sigma > 0;
+    if(useWeighting_){
+      for(int l = 0; l < nLevels; l++){
+        for(int y=0; y<patch_size; ++y){
+          for(int x=0; x<patch_size; ++x){
+            const int x_coor = x-0.5*(patch_size-1);
+            const int y_coor = y-0.5*(patch_size-1);
+            w_[l*patch_size*patch_size+y*patch_size+x] = std::exp(-(x_coor*x_coor+y_coor*y_coor)/(2*sigma*sigma));
+          }
+        }
+      }
+    }
+  }
 
   /** \brief Destructor
    */
@@ -83,43 +121,78 @@ class MultilevelPatchAlignment {
     int numLevel = 0;
     FeatureCoordinates c_level;
     const int halfpatch_size = patch_size/2;
-    float mean_diff = 0;
-    float mean_diff_dx = 0;
-    float mean_diff_dy = 0;
-    Patch<patch_size> extractedPatch;
+    float wTot = 0;
+    float mean_x = 0;
+    float mean_xx = 0;
+    float mean_xy = 0;
+    float mean_xy_dx = 0;
+    float mean_xy_dy = 0;
+    float mean_y = 0;
+    float mean_y_dx = 0;
+    float mean_y_dy = 0;
+
+    // Compute raw error and gradients, as well as mean
+    for(int l = 0; l < nLevels; l++){
+      mlpError_.isValidPatch_[l] = false;
+    }
     for(int l = l1; l <= l2; l++){
       pyr.levelTranformCoordinates(c,c_level,0,l);
-      if(mp.isValidPatch_[l] && extractedPatch.isPatchInFrame(pyr.imgs_[l],c_level,false)){
+      if(mp.isValidPatch_[l] && extractedPatches_[l].isPatchInFrame(pyr.imgs_[l],c_level,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
+          mlpError_.isValidPatch_[l] = true;
           numLevel++;
-          A.conservativeResize(numLevel*patch_size*patch_size,2);
-          b.conservativeResize(numLevel*patch_size*patch_size,1);
-          const int refStep = pyr.imgs_[l].step.p[0];
+          extractedPatches_[l].extractPatchFromImage(pyr.imgs_[l],c_level,false);
+          const float* it_patch_extracted = extractedPatches_[l].patch_;
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-          extractedPatch.extractPatchFromImage(pyr.imgs_[l],c_level,false);
-          const float* it_patch_extracted = extractedPatch.patch_;
+//          extractedPatches_[l].computeGradientParameters();
+//          const float* it_dx_extracted = extractedPatches_[l].dx_; // TODO: investigate further averaging of gradients
+//          const float* it_dy_extracted = extractedPatches_[l].dy_;
+          float* it_error = mlpError_.patches_[l].patch_;
+          float* it_dx_error = mlpError_.patches_[l].dx_;
+          float* it_dy_error = mlpError_.patches_[l].dy_;
+          const float* it_w = &w_[l*patch_size*patch_size];
           for(int y=0; y<patch_size; ++y){
-            for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy){
-              const float res = *it_patch_extracted - *it_patch;
-              const float Jx = -pow(0.5,l)*(*it_dx);
+            for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_dx, ++it_dy, ++it_error, ++it_dx_error, ++it_dy_error, ++it_w){
+              *it_error = *it_patch_extracted - *it_patch;
+              const float Jx = -pow(0.5,l)*(*it_dx); // TODO: make pre-computation in Patch
               const float Jy = -pow(0.5,l)*(*it_dy);
-              mean_diff += res;
-              b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = res;
               if(c.isNearIdentityWarping()){
-                mean_diff_dx += Jx;
-                mean_diff_dy += Jy;
-                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx;
-                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = Jy;
+                *it_dx_error = Jx;
+                *it_dy_error = Jy;
               } else {
-                const float Jx_warp = Jx*affInv(0,0)+Jy*affInv(1,0);
-                const float Jy_warp = Jx*affInv(0,1)+Jy*affInv(1,1);
-                mean_diff_dx += Jx_warp;
-                mean_diff_dy += Jy_warp;
-                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = Jx_warp;
-                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = Jy_warp;
+                *it_dx_error = Jx*affInv(0,0)+Jy*affInv(1,0);
+                *it_dy_error = Jx*affInv(0,1)+Jy*affInv(1,1);
+              }
+              if(useIntensityOffset_ || useIntensitySqew_){
+                if(useWeighting_){
+                  mean_x += (*it_w)*(*it_patch);
+                  mean_y += (*it_w)*(*it_patch_extracted);
+                  mean_y_dx += (*it_w)*(*it_dx_error);
+                  mean_y_dy += (*it_w)*(*it_dy_error);
+                  wTot += *it_w;
+                } else {
+                  mean_x += *it_patch;
+                  mean_y += *it_patch_extracted;
+                  mean_y_dx += *it_dx_error;
+                  mean_y_dy += *it_dy_error;
+                  wTot += 1.0;
+                }
+              }
+              if(useIntensitySqew_){
+                if(useWeighting_){
+                  mean_xx += (*it_w)*(*it_patch)*(*it_patch);
+                  mean_xy += (*it_w)*(*it_patch)*(*it_patch_extracted);
+                  mean_xy_dx += (*it_w)*(*it_patch)*(*it_dx_error);
+                  mean_xy_dy += (*it_w)*(*it_patch)*(*it_dy_error);
+                } else {
+                  mean_xx += (*it_patch)*(*it_patch);
+                  mean_xy += (*it_patch)*(*it_patch_extracted);
+                  mean_xy_dx += (*it_patch)*(*it_dx_error);
+                  mean_xy_dy += (*it_patch)*(*it_dy_error);
+                }
               }
             }
           }
@@ -129,12 +202,93 @@ class MultilevelPatchAlignment {
     if(numLevel==0){
       return false;
     }
-    mean_diff = mean_diff/static_cast<float>(numLevel*patch_size*patch_size);
-    mean_diff_dx = mean_diff_dx/static_cast<float>(numLevel*patch_size*patch_size);
-    mean_diff_dy = mean_diff_dy/static_cast<float>(numLevel*patch_size*patch_size);
-    b.array() -= mean_diff;
-    A.col(0).array() -= mean_diff_dx;
-    A.col(1).array() -= mean_diff_dy;
+
+    float reg_a, reg_a_dx, reg_a_dy, reg_b, reg_b_dx, reg_b_dy;
+    if(useIntensityOffset_ || useIntensitySqew_){
+      mean_x = mean_x/wTot;
+      mean_xx = mean_xx/wTot;
+      mean_xy = mean_xy/wTot;
+      mean_xy_dx = mean_xy_dx/wTot;
+      mean_xy_dy = mean_xy_dy/wTot;
+      mean_y = mean_y/wTot;
+      mean_y_dx = mean_y_dx/wTot;
+      mean_y_dy = mean_y_dy/wTot;
+
+      if(useIntensitySqew_){
+        reg_a = (mean_xy-mean_x*mean_y)/(mean_xx-mean_x*mean_x);
+        reg_a_dx = (mean_xy_dx-mean_x*mean_y_dx)/(mean_xx-mean_x*mean_x);
+        reg_a_dy = (mean_xy_dy-mean_x*mean_y_dy)/(mean_xx-mean_x*mean_x);
+        if(reg_a < 0.5f){
+          reg_a = 0.5;
+          reg_a_dx = 0.0;
+          reg_a_dy = 0.0;
+        }
+      } else {
+        reg_a = 1.0;
+        reg_a_dx = 0.0;
+        reg_a_dy = 0.0;
+      }
+      if(useIntensityOffset_){
+        reg_b = mean_y-reg_a*mean_x;
+        reg_b_dx = mean_y_dx-reg_a_dx*mean_x;
+        reg_b_dy = mean_y_dy-reg_a_dy*mean_x;
+      } else {
+        reg_b = 0.0;
+        reg_b_dx = 0.0;
+        reg_b_dy = 0.0;
+      }
+    }
+
+    // Compute correct patch error and gradient (based on linear brightness fix), apply Huber norm, apply weighting
+    numLevel = 0;
+    for(int l = l1; l <= l2; l++){
+      if(mlpError_.isValidPatch_[l]){
+        numLevel++;
+        A.conservativeResize(numLevel*patch_size*patch_size,2);
+        b.conservativeResize(numLevel*patch_size*patch_size,1);
+        const float* it_patch = mp.patches_[l].patch_;
+        const float* it_patch_extracted = extractedPatches_[l].patch_;
+        float* it_error = mlpError_.patches_[l].patch_;
+        float* it_dx_error = mlpError_.patches_[l].dx_;
+        float* it_dy_error = mlpError_.patches_[l].dy_;
+        const float* it_w = &w_[l*patch_size*patch_size];
+        for(int y=0; y<patch_size; ++y){
+          for(int x=0; x<patch_size; ++x, ++it_patch, ++it_patch_extracted, ++it_error,  ++it_dx_error, ++it_dy_error, ++it_w){
+            if(useIntensityOffset_ || useIntensitySqew_){
+              *it_error = *it_patch_extracted - reg_a*(*it_patch) - reg_b;
+              *it_dx_error = reg_a*(*it_dx_error - reg_a_dx*(*it_patch) - reg_b_dx);
+              *it_dy_error = reg_a*(*it_dy_error - reg_a_dy*(*it_patch) - reg_b_dy);
+            }
+            b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = *it_error;
+            A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = *it_dx_error;
+            A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = *it_dy_error;
+
+            if(huberNormThreshold_ > 0.0){ // TODO: investigate why 1.0 leads to non-deterministic behavior
+              const float b_abs = std::fabs(*it_error);
+              if(b_abs > huberNormThreshold_){
+                b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = std::sqrt(huberNormThreshold_*(2.0*b_abs - huberNormThreshold_));
+                const float f = huberNormThreshold_/b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0)*copysign(1.0, *it_error);
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = f*A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0);
+                A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = f*A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1);
+              }
+            }
+
+            if(gradientExponent_ >0.0){
+              const float gradientBasedWeighting = 1.0-std::pow(((*it_dx_error)*(*it_dx_error)+(*it_dy_error)*(*it_dy_error))/(2*128*128),0.5*gradientExponent_);
+              b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) *= gradientBasedWeighting;
+              A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) *= gradientBasedWeighting;
+              A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) *= gradientBasedWeighting;
+            }
+
+            if(useWeighting_){
+              b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) *= *it_w;
+              A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) *= *it_w;
+              A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) *= *it_w;
+            }
+          }
+        }
+      }
+    }
     return true;
   }
 
