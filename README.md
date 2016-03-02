@@ -4,6 +4,10 @@ This repository contains the ROVIO (Robust Visual Inertial Odometry) framework. 
 
 Video: https://youtu.be/ZMAISVy-6ao
 
+Paper:  http://dx.doi.org/10.3929/ethz-a-010566547
+
+Please also have a look at the wiki: https://github.com/ethz-asl/rovio/wiki
+
 ### Install without opengl scene ###
 Dependencies:
 * ros
