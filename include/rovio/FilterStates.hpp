@@ -635,7 +635,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
           transformFeatureOutputCT_.transformState(state_, featureOutput_);
           if(featureOutput_.c().isInFront()){
             transformFeatureOutputCT_.transformCovMat(state_, cov_, featureOutputCov_);
-            const double uncertainty = sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative();
+            const double uncertainty = std::fabs(sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative());
             const double depth = featureOutput_.d().getDistance();
             if(uncertainty/depth < maxUncertaintyToDistanceRatio){
               distanceParameterCollection[camID].push_back(featureOutput_.d().p_);
