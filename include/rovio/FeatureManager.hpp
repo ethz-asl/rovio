@@ -54,7 +54,6 @@ class FeatureManager{
 
   FeatureCoordinates log_previous_;
   FeatureCoordinates log_prediction_;
-  FeatureCoordinates log_meas_;
 
   FeatureCoordinates* mpCoordinates_;
   FeatureDistance* mpDistance_;
@@ -96,7 +95,6 @@ class FeatureManager{
     idx_ = other.idx_;
     log_previous_ = other.log_previous_;
     log_prediction_ = other.log_prediction_;
-    log_meas_ = other.log_meas_;
     *mpStatistics_ = *other.mpStatistics_;
     return *this;
   }

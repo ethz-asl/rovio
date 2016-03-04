@@ -9,24 +9,24 @@ Common
 Camera0
 {
 	CalibrationFile ;												Camera-Calibration file for intrinsics
-	qCM_x  -0.00832709949084;										X-entry of IMU to Camera quaterion (JPL)
-	qCM_y  0.00620149479559;										Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.701058841361;											Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  0.713027840849;											W-entry of IMU to Camera quaterion (JPL)
-	MrMC_x -0.011004900471;											X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_y -0.0569319964508;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_z 0.0113601006563;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	qCM_x  -0.00666398307551;										X-entry of IMU to Camera quaterion (JPL)
+	qCM_y  0.0079168224269;										Y-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.701985972528;											Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w   0.712115587266;											W-entry of IMU to Camera quaterion (JPL)
+	MrMC_x -0.0111674199187;											X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y -0.0574640920022;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z 0.0207586947896;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Camera1
 {
 	CalibrationFile ;												Camera-Calibration file for intrinsics
-	qCM_x  -0.00322690532625;										X-entry of IMU to Camera quaterion (JPL)
-	qCM_y  0.0108061278686;											Y-entry of IMU to Camera quaterion (JPL)
-	qCM_z  0.701771385411;											Z-entry of IMU to Camera quaterion (JPL)
-	qCM_w  0.712312948991;											W-entry of IMU to Camera quaterion (JPL)
-	MrMC_x -0.00935932265733;										X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_y 0.0509200856267;											Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-	MrMC_z 0.011414241067;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	qCM_x  -0.00151329637706;										X-entry of IMU to Camera quaterion (JPL)
+	qCM_y  0.0123329249764;										Y-entry of IMU to Camera quaterion (JPL)
+	qCM_z  0.702657352863;											Z-entry of IMU to Camera quaterion (JPL)
+	qCM_w  0.711419885414;											W-entry of IMU to Camera quaterion (JPL)
+	MrMC_x -0.0091929160801;											X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y 0.0540646643676;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z 0.0190387660614;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Init
 {
@@ -63,24 +63,25 @@ Init
         gyb_0 3e-4;			X-Covariance of initial gyroscope bias [rad^2/s^2]
         gyb_1 3e-4;			Y-Covariance of initial gyroscope bias [rad^2/s^2]
         gyb_2 3e-4;			Z-Covariance of initial gyroscope bias [rad^2/s^2]
-        vep 0.0001;			Covariance of initial linear camera-IMU extrinsics, same for all entries [m^2]
+        vep 0.01;			Covariance of initial linear camera-IMU extrinsics, same for all entries [m^2]
         att_0 0.1;			X-Covariance of initial attitude [rad^2]
         att_1 0.1;			Y-Covariance of initial attitude [rad^2]
         att_2 0.1;			Z-Covariance of initial attitude [rad^2]
-        vea 0.0001;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
+        vea 0.01;			Covariance of initial rotational camera-IMU extrinsics, same for all entries [rad^2]
     }
 }
 ImgUpdate
 {
+	updateVecNormTermination 1e-4;
+	maxNumIteration 20;
     doPatchWarping true;										Should the patches be warped
     doFrameVisualisation true;									Should the frames be visualized
     visualizePatches false;										Should the patches be visualized
     useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
-    innovationInterpolationFactor 1.0;							How much should be used from the direct or indirect error terms. Value must be between 0 and 1.
     startLevel 2;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
     endLevel 1;													Lowest patch level which is being employed
     nDetectionBuckets 100;										Number of discretization buckets used during the candidates selection
-    MahalanobisTh 0.1;											Mahalanobis treshold for the update, 5.8858356
+    MahalanobisTh 2.21;											Mahalanobis treshold for the update, 5.8858356
     UpdateNoise
     {
         pix 2;													Covariance used for the reprojection error, 1/focal_length is roughly 1 pixel std [rad] (~1/f ~ 1/400^2 = 1/160000)
@@ -92,36 +93,35 @@ ImgUpdate
     initDepth 0.5;												Initial value for the initial distance parameter
     startDetectionTh 0.8;										Threshold for detecting new features (min: 0, max: 1)
     scoreDetectionExponent 0.25;								Exponent used for weighting the distance between candidates
-    penaltyDistance 100;										Maximal distance which gets penalized during bucketing [pix]
+    penaltyDistance 50;										Maximal distance which gets penalized during bucketing [pix]
     zeroDistancePenalty 100;									Penalty for zero distance (max: nDetectionBuckets)
     statLocalQualityRange 10;									Number of frames for local quality evaluation
     statLocalVisibilityRange 100;								Number of frames for local visibility evaluation
     statMinGlobalQualityRange 100;								Minimum number of frames for obtaining maximal global quality
-    trackingUpperBound 0.999;										Threshold for local quality for min overall global quality
-    trackingLowerBound 0.999;										Threshold for local quality for max overall global quality
+    trackingUpperBound 0.9;										Threshold for local quality for min overall global quality
+    trackingLowerBound 0.8;										Threshold for local quality for max overall global quality
     minTrackedAndFreeFeatures 0.75;								Minimum of amount of feature which are either tracked or free
     removalFactor 1.1;											Factor for enforcing feature removal if not enough free
     minRelativeSTScore 0.75;									Minimum relative ST-score for extracting new feature patch
     minAbsoluteSTScore 5.0;										Minimum absolute ST-score for extracting new feature patch
     minTimeBetweenPatchUpdate 1.0;								Minimum time between new multilevel patch extrection [s]
     fastDetectionThreshold 5;									Fast corner detector treshold while adding new feature
-    alignConvergencePixelRange 1;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
+    alignConvergencePixelRange 10;								Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;										How many sigma of the uncertainty should be covered in the adaptive alignement
     alignMaxUniSample 1;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
-    matchingPixelThreshold 0.0;									Below this treshold no pre-alignment is carried out [pixels]
-    minNoAlignment 5;											Minimal number of alignment every feature must make through.
-    specialLinearizationThreshold 0.0;							Below this treshold no special linearization point gets computed [pixel]
-    patchRejectionTh -1;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
+    patchRejectionTh 50.0;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
     alignmentHuberNormThreshold -1;								Intensity error threshold for Huber norm (enabled if > 0)
     alignmentGaussianWeightingSigma -1;							Width of Gaussian which is used for pixel error weighting (enabled if > 0)
     alignmentGradientExponent 0.0;								Exponent used for gradient based weighting of residuals
     useIntensityOffsetForAlignment true;						Should an intensity offset between the patches be considered
     useIntensitySqewForAlignment true;							Should an intensity sqew between the patches be considered
-    bearingVectorMahalTh 1.21;									Threshold for the aligned patch to be accepted as inlier
     removeNegativeFeatureAfterUpdate true;						Should feature with negative distance get removed
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
     useCrossCameraMeasurements true;							Should cross measurements between frame be used. Might be turned of in calibration phase.
     doStereoInitialization true;								Should a stereo match be used for feature initialization.
+    noiseGainForOffCamera 10.0;									Factor added on update noise if not main camera
+    discriminativeSamplingDistance 0.02;						Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).
+    discriminativeSamplingGain 2.0;								Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).
     MotionDetection
     {
     	isEnabled 0;											Is the motion detection enabled
@@ -149,20 +149,20 @@ Prediction
         pos_0 1e-4;								X-covariance parameter of position prediction [m^2/s]
         pos_1 1e-4;								Y-covariance parameter of position prediction [m^2/s]
         pos_2 1e-4;								Z-covariance parameter of position prediction [m^2/s]
-        vel_0 4e-5; 4e-6						X-covariance parameter of velocity prediction [m^2/s^3]
-        vel_1 4e-5;								Y-covariance parameter of velocity prediction [m^2/s^3]
-        vel_2 4e-5;								Z-covariance parameter of velocity prediction [m^2/s^3]
+        vel_0 4e-4; 4e-6						X-covariance parameter of velocity prediction [m^2/s^3]
+        vel_1 4e-4;								Y-covariance parameter of velocity prediction [m^2/s^3]
+        vel_2 4e-4;								Z-covariance parameter of velocity prediction [m^2/s^3]
         acb_0 1e-8;								X-covariance parameter of accelerometer bias prediction [m^2/s^5]
         acb_1 1e-8;								Y-covariance parameter of accelerometer bias prediction [m^2/s^5]
         acb_2 1e-8;								Z-covariance parameter of accelerometer bias prediction [m^2/s^5]
         gyb_0 3.8e-7;							X-covariance parameter of gyroscope bias prediction [rad^2/s^3]
         gyb_1 3.8e-7;							Y-covariance parameter of gyroscope bias prediction [rad^2/s^3]
         gyb_2 3.8e-7;							Z-covariance parameter of gyroscope bias prediction [rad^2/s^3]
-        vep 1e-4;								Covariance parameter of linear extrinsics prediction [m^2/s]
+        vep 1e-8;								Covariance parameter of linear extrinsics prediction [m^2/s]
         att_0 7.6e-6; 7.6e-7					X-Covariance parameter of attitude prediction [rad^2/s]
         att_1 7.6e-6;							Y-Covariance parameter of attitude prediction [rad^2/s]
         att_2 7.6e-6;							Z-Covariance parameter of attitude prediction [rad^2/s]
-        vea 1e-6;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
+        vea 1e-8;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
         dep 0.0001;							Covariance parameter of distance prediction [m^2/s]
         nor 0.00001;								Covariance parameter of bearing vector prediction [rad^2/s]
     }

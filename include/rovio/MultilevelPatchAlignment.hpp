@@ -147,9 +147,6 @@ class MultilevelPatchAlignment {
           const float* it_patch = mp.patches_[l].patch_;
           const float* it_dx = mp.patches_[l].dx_;
           const float* it_dy = mp.patches_[l].dy_;
-//          extractedPatches_[l].computeGradientParameters();
-//          const float* it_dx_extracted = extractedPatches_[l].dx_; // TODO: investigate further averaging of gradients
-//          const float* it_dy_extracted = extractedPatches_[l].dy_;
           float* it_error = mlpError_.patches_[l].patch_;
           float* it_dx_error = mlpError_.patches_[l].dx_;
           float* it_dy_error = mlpError_.patches_[l].dy_;
@@ -266,7 +263,7 @@ class MultilevelPatchAlignment {
             if(huberNormThreshold_ > 0.0){ // TODO: investigate why 1.0 leads to non-deterministic behavior
               const float b_abs = std::fabs(*it_error);
               if(b_abs > huberNormThreshold_){
-                b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = std::sqrt(huberNormThreshold_*(2.0*b_abs - huberNormThreshold_));
+                b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = std::sqrt(huberNormThreshold_*(2.0*b_abs - huberNormThreshold_))*copysign(1.0, *it_error);
                 const float f = huberNormThreshold_/b((numLevel-1)*patch_size*patch_size+y*patch_size+x,0)*copysign(1.0, *it_error);
                 A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0) = f*A((numLevel-1)*patch_size*patch_size+y*patch_size+x,0);
                 A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1) = f*A((numLevel-1)*patch_size*patch_size+y*patch_size+x,1);

@@ -197,8 +197,8 @@ namespace rovio{
     }
   }
 
-  void FeatureCoordinates::drawPoint(cv::Mat& drawImg, const cv::Scalar& color) const{
-    cv::Size size(2,2);
+  void FeatureCoordinates::drawPoint(cv::Mat& drawImg, const cv::Scalar& color, const float s) const{
+    cv::Size size(s,s);
     cv::ellipse(drawImg,get_c(),size,0,0,360,color,-1,8,0);
   }
 
@@ -215,16 +215,27 @@ namespace rovio{
     cv::putText(drawImg,s,get_c(),cv::FONT_HERSHEY_SIMPLEX, 0.4, color);
   }
 
-  bool FeatureCoordinates::getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d){
+  bool FeatureCoordinates::getDepthFromTriangulation(const FeatureCoordinates& other, const V3D& C2rC2C1, const QPD& qC2C1, FeatureDistance& d, const double minDistance){
     const V3D C2v1 = qC2C1.rotate(get_nor().getVec());
     const V3D C2v2 = other.get_nor().getVec();
     const double a = 1.0-pow(C2v1.dot(C2v2),2.0);
-    if(a < 1e-3){
+    if(a < 1e-6){
       return false;
     }
-    const double distance = C2v1.dot((M3D::Identity()-C2v2*C2v2.transpose())*C2rC2C1) / a;
-    d.setParameter(fabs(distance));
+
+    const double distance = -C2v1.dot((M3D::Identity()-C2v2*C2v2.transpose())*C2rC2C1) / a;
+    if(distance < minDistance){
+      return false;
+    }
+    d.setParameter(distance);
     return true;
+
+//    Possible alternative -> investigate
+//    Eigen::Matrix<double,3,2> V;
+//    V.col(0) = -C2v1;
+//    V.col(1) = C2v2;
+//    Eigen::JacobiSVD<Eigen::Matrix<double,3,2>> svd(V, Eigen::ComputeThinU | Eigen::ComputeThinV);
+//    Eigen::Vector2d distances = svd.solve(C2rC2C1);
   }
 
   float FeatureCoordinates::getDepthUncertaintyTau(const V3D& C1rC1C2, const float d, const float px_error_angle){
