@@ -99,6 +99,7 @@ int main(int argc, char** argv){
   // Node
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
+  double resetTrigger = 0.0;
   nh_private.param("record_odometry", rovioNode.forceOdometryPublishing_, rovioNode.forceOdometryPublishing_);
   nh_private.param("record_transform", rovioNode.forceTransformPublishing_, rovioNode.forceTransformPublishing_);
   nh_private.param("record_extrinsics", rovioNode.forceExtrinsicsPublishing_, rovioNode.forceExtrinsicsPublishing_);
@@ -106,6 +107,7 @@ int main(int argc, char** argv){
   nh_private.param("record_pcl", rovioNode.forcePclPublishing_, rovioNode.forcePclPublishing_);
   nh_private.param("record_markers", rovioNode.forceMarkersPublishing_, rovioNode.forceMarkersPublishing_);
   nh_private.param("record_patch", rovioNode.forcePatchPublishing_, rovioNode.forcePatchPublishing_);
+  nh_private.param("reset_trigger", resetTrigger, resetTrigger);
 
   std::cout << "Recording";
   if(rovioNode.forceOdometryPublishing_) std::cout << ", odometry";
@@ -171,6 +173,9 @@ int main(int argc, char** argv){
   topics.push_back(std::string(cam1_topic_name));
   rosbag::View view(bagIn, rosbag::TopicQuery(topics));
 
+
+  bool isTriggerInitialized = false;
+  double lastTriggerTime = 0.0;
   for(rosbag::View::iterator it = view.begin();it != view.end() && ros::ok();it++){
     if(it->getTopic() == imu_topic_name){
       sensor_msgs::Imu::ConstPtr imuMsg = it->instantiate<sensor_msgs::Imu>();
@@ -199,6 +204,16 @@ int main(int argc, char** argv){
         if(rovioNode.forceMarkersPublishing_) bagOut.write(u_rays_topic_name,ros::Time::now(),rovioNode.markerMsg_);
         if(rovioNode.forcePatchPublishing_) bagOut.write(patch_topic_name,ros::Time::now(),rovioNode.patchMsg_);
         lastSafeTime = rovioNode.mpFilter_->safe_.t_;
+      }
+      if(!isTriggerInitialized){
+        lastTriggerTime = lastSafeTime;
+        isTriggerInitialized = true;
+      }
+      if(resetTrigger>0.0 && lastSafeTime - lastTriggerTime > resetTrigger){
+        rovioNode.isInitialized_ = false;
+        rovioNode.mpFilter_->init_.state_.WrWM() = rovioNode.mpFilter_->safe_.state_.WrWM();
+        rovioNode.mpFilter_->init_.state_.qWM() = rovioNode.mpFilter_->safe_.state_.qWM();
+        lastTriggerTime = lastSafeTime;
       }
     }
   }

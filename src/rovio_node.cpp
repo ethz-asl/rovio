@@ -49,7 +49,7 @@ static constexpr int nLevels_ = 4; // // Total number of pyramid levels consider
 #ifdef ROVIO_PATCHSIZE
 static constexpr int patchSize_ = ROVIO_PATCHSIZE;
 #else
-static constexpr int patchSize_ = 8; // Edge length of the patches (in pixel). Must be a multiple of 2!
+static constexpr int patchSize_ = 6; // Edge length of the patches (in pixel). Must be a multiple of 2!
 #endif
 
 #ifdef ROVIO_NCAM
