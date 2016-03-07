@@ -85,6 +85,7 @@ catkin_package(
 	std_msgs
 	tf
 	rosbag
+  yaml_cpp_catkin
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
