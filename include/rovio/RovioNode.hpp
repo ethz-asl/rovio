@@ -692,7 +692,7 @@ class RovioNode{
               landmarkOutputImuCT_.setFeatureID(i);
               landmarkOutputImuCT_.transformState(state,landmarkOutput_);
               landmarkOutputImuCT_.transformCovMat(state,cov,landmarkOutputCov_);
-              const Eigen::Vector3f MrMP = landmarkOutput_.get<LandmarkOutput::_lmk>().cast<float>();
+              const Eigen::Vector3f MrMP = landmarkOutput_.get<LandmarkOutput::_lmk>().template cast<float>();
 
               // Write feature id, camera id, and rgb
               uint8_t gray = 255;
@@ -709,7 +709,7 @@ class RovioNode{
               memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &MrMP[2], sizeof(float));  // z
 
               // Add feature bearing vector and distance
-              const Eigen::Vector3f bearing = featureOutputReadable_.bea().cast<float>();
+              const Eigen::Vector3f bearing = featureOutputReadable_.bea().template cast<float>();
               const float distance = static_cast<float>(featureOutputReadable_.dis());
               memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &bearing[0], sizeof(float));  // x
               memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &bearing[1], sizeof(float));  // y
