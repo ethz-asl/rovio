@@ -56,12 +56,16 @@ namespace rovio {
  *
  *  @tparam FILTER  - \ref rovio::RovioFilter
  */
+
+// defines a templated class RovioNode with FILTER as the template parameter
 template<typename FILTER>
 class RovioNode{
  public:
   // Filter Stuff
+  // mtFilter is shorthand for FILTER inside this class
   typedef FILTER mtFilter;
   std::shared_ptr<mtFilter> mpFilter_;
+  // mtFilterState is a synonym for mtFilterState and not an object
   typedef typename mtFilter::mtFilterState mtFilterState;
   typedef typename mtFilterState::mtState mtState;
   typedef typename mtFilter::mtPrediction::mtMeas mtPredictionMeas;
@@ -75,6 +79,14 @@ class RovioNode{
   mtPoseMeas poseUpdateMeas_;
   mtPoseUpdate* mpPoseUpdate_;
   bool isInitialized_;
+  bool forceOdometryPublishing_;
+  bool forceTransformPublishing_;
+  bool forceExtrinsicsPublishing_;
+  bool forceImuBiasPublishing_;
+  bool forcePclPublishing_;
+  bool forceMarkersPublishing_;
+  bool forcePatchPublishing_;
+  bool gotFirstMessages_;
 
   // Nodes, Subscriber, Publishers
   ros::NodeHandle nh_;
@@ -83,19 +95,20 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
+  ros::Subscriber subMag_;        // subscriber for IMU message with global orientation
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
   ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
   ros::Publisher pubPatch_;            /**<Publisher: Patch data.*/
-  ros::Publisher pubURays_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
-  ros::Publisher pubExtrinsics_[mtState::nMax_];
+  ros::Publisher pubMarkers_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
+  ros::Publisher pubExtrinsics_[mtState::nCam_];
   ros::Publisher pubImuBias_;
 
   // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
-  geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nMax_];
+  geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nCam_];
   sensor_msgs::PointCloud2 pclMsg_;
   sensor_msgs::PointCloud2 patchMsg_;
   visualization_msgs::Marker markerMsg_;
@@ -126,7 +139,12 @@ class RovioNode{
   std::string camera_frame_;
   std::string imu_frame_;
 
-  /** \brief Constructor
+  // Variables for initialGlobalOrientation
+  QPD initialGlobalOrientation_;
+  bool init_yaw_;
+  bool receivedInitialOrientation_;
+
+    /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
       : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_), landmarkOutputImuCT_(&mpFilter->multiCamera_),
@@ -138,19 +156,30 @@ class RovioNode{
     mpImgUpdate_ = &std::get<0>(mpFilter_->mUpdates_);
     mpPoseUpdate_ = &std::get<1>(mpFilter_->mUpdates_);
     isInitialized_ = false;
+    forceOdometryPublishing_ = false;
+    forceTransformPublishing_ = false;
+    forceExtrinsicsPublishing_ = false;
+    forceImuBiasPublishing_ = false;
+    forcePclPublishing_ = false;
+    forceMarkersPublishing_ = false;
+    forcePatchPublishing_ = false;
+    gotFirstMessages_ = false;
+    init_yaw_ = false;
+    receivedInitialOrientation_ = false;
 
     // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
+    subMag_ = nh_.subscribe("mag_imu", 1000, &RovioNode::magCallback,this);
 
     // Advertise topics
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubPatch_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/patch", 1);
-    pubURays_ = nh_.advertise<visualization_msgs::Marker>("rovio/urays", 1 );
+    pubMarkers_ = nh_.advertise<visualization_msgs::Marker>("rovio/markers", 1 );
     for(int camID=0;camID<mtState::nCam_;camID++){
       pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
     }
@@ -165,6 +194,9 @@ class RovioNode{
     nh_private_.param("world_frame", world_frame_, world_frame_);
     nh_private_.param("camera_frame", camera_frame_, camera_frame_);
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
+
+    // Check whether to initialise global yaw
+    nh_private_.param("init_yaw", init_yaw_, init_yaw_);
 
     // Initialize messages
     transformMsg_.header.frame_id = world_frame_;
@@ -188,14 +220,14 @@ class RovioNode{
     pclMsg_.header.frame_id = imu_frame_;
     pclMsg_.height = 1;               // Unordered point cloud.
     pclMsg_.width  = mtState::nMax_;  // Number of features/points.
-    const int nFieldsPcl = 17;
-    std::string namePcl[nFieldsPcl] = {"id","camId","rgb","status","x","y","z","b_x","b_y","b_z","d","c_00","c_01","c_02","c_11","c_12","c_22"};
-    int sizePcl[nFieldsPcl] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
-    int countPcl[nFieldsPcl] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+    const int nFieldsPcl = 18;
+    std::string namePcl[nFieldsPcl] = {"id","camId","rgb","status","x","y","z","b_x","b_y","b_z","d","c_00","c_01","c_02","c_11","c_12","c_22","c_d"};
+    int sizePcl[nFieldsPcl] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
+    int countPcl[nFieldsPcl] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
     int datatypePcl[nFieldsPcl] = {sensor_msgs::PointField::INT32,sensor_msgs::PointField::INT32,sensor_msgs::PointField::UINT32,sensor_msgs::PointField::UINT32,
         sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
         sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,
-        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
+        sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32,sensor_msgs::PointField::FLOAT32};
     pclMsg_.fields.resize(nFieldsPcl);
     int byteCounter = 0;
     for(int i=0;i<nFieldsPcl;i++){
@@ -367,11 +399,30 @@ class RovioNode{
       mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
       updateAndPublish();
     } else {
-      mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
-      std::cout << std::setprecision(12);
-      std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
-      isInitialized_ = true;
+      if (init_yaw_) {
+        if (receivedInitialOrientation_){
+          mpFilter_->resetWithAccelerometerAndMag(predictionMeas_.template get<mtPredictionMeas::_acc>(), initialGlobalOrientation_, imu_msg->header.stamp.toSec());
+          std::cout << std::setprecision(12);
+          std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
+          std::cout << "Set initial global orientation" << std::endl;
+          isInitialized_ = true;
+        }
+      }
+      else {
+        mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
+        std::cout << std::setprecision(12);
+        std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
+        isInitialized_ = true;
+      }
     }
+  }
+
+  /** \brief Callback for MAG-IMU-Messages. Initialises the filter with provided global yaw.
+   */
+
+  void magCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
+    initialGlobalOrientation_ = QPD(imu_msg->orientation.w, imu_msg->orientation.x, imu_msg->orientation.y, imu_msg->orientation.z);
+    receivedInitialOrientation_ = true;
   }
 
   /** \brief Image callback for the camera with ID 0
@@ -528,7 +579,7 @@ class RovioNode{
         }
 
         // Publish Odometry
-        if(pubOdometry_.getNumSubscribers() > 0){
+        if(pubOdometry_.getNumSubscribers() > 0 || forceOdometryPublishing_){
           // Compute covariance of output
           imuOutputCT_.transformCovMat(state,cov,imuOutputCov_);
 
@@ -569,7 +620,7 @@ class RovioNode{
         }
 
         // Send IMU pose message.
-        if(pubTransform_.getNumSubscribers() > 0){
+        if(pubTransform_.getNumSubscribers() > 0 || forceTransformPublishing_){
           transformMsg_.header.seq = msgSeq_;
           transformMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           transformMsg_.transform.translation.x = imuOutput_.WrWB()(0);
@@ -584,7 +635,7 @@ class RovioNode{
 
         // Publish Extrinsics
         for(int camID=0;camID<mtState::nCam_;camID++){
-          if(pubExtrinsics_[camID].getNumSubscribers() > 0){
+          if(pubExtrinsics_[camID].getNumSubscribers() > 0 || forceExtrinsicsPublishing_){
             extrinsicsMsg_[camID].header.seq = msgSeq_;
             extrinsicsMsg_[camID].header.stamp = ros::Time(mpFilter_->safe_.t_);
             extrinsicsMsg_[camID].pose.pose.position.x = state.MrMC(camID)(0);
@@ -608,7 +659,7 @@ class RovioNode{
         }
 
         // Publish IMU biases
-        if(pubImuBias_.getNumSubscribers() > 0){
+        if(pubImuBias_.getNumSubscribers() > 0 || forceImuBiasPublishing_){
           imuBiasMsg_.header.seq = msgSeq_;
           imuBiasMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           imuBiasMsg_.angular_velocity.x = state.gyb()(0);
@@ -624,14 +675,14 @@ class RovioNode{
           }
           for(int i=0;i<3;i++){
             for(int j=0;j<3;j++){
-              imuBiasMsg_.angular_velocity_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
+              imuBiasMsg_.linear_acceleration_covariance[3*i+j] = cov(mtState::template getId<mtState::_acb>()+i,mtState::template getId<mtState::_acb>()+j);
             }
           }
           pubImuBias_.publish(imuBiasMsg_);
         }
 
         // PointCloud message.
-        if(pubPcl_.getNumSubscribers() > 0 || pubURays_.getNumSubscribers() > 0){
+        if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
           pclMsg_.header.seq = msgSeq_;
           pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           markerMsg_.header.seq = msgSeq_;
@@ -676,7 +727,7 @@ class RovioNode{
               landmarkOutputImuCT_.setFeatureID(i);
               landmarkOutputImuCT_.transformState(state,landmarkOutput_);
               landmarkOutputImuCT_.transformCovMat(state,cov,landmarkOutputCov_);
-              const Eigen::Vector3f MrMP = landmarkOutput_.get<LandmarkOutput::_lmk>().cast<float>();
+              const Eigen::Vector3f MrMP = landmarkOutput_.get<LandmarkOutput::_lmk>().template cast<float>();
 
               // Write feature id, camera id, and rgb
               uint8_t gray = 255;
@@ -693,10 +744,12 @@ class RovioNode{
               memcpy(&pclMsg_.data[offset + pclMsg_.fields[6].offset], &MrMP[2], sizeof(float));  // z
 
               // Add feature bearing vector and distance
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &featureOutputReadable_.bea()[0], sizeof(float));  // x
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &featureOutputReadable_.bea()[1], sizeof(float));  // y
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[9].offset], &featureOutputReadable_.bea()[2], sizeof(float));  // z
-              memcpy(&pclMsg_.data[offset + pclMsg_.fields[10].offset], &featureOutputReadable_.dis(), sizeof(float));
+              const Eigen::Vector3f bearing = featureOutputReadable_.bea().template cast<float>();
+              const float distance = static_cast<float>(featureOutputReadable_.dis());
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[7].offset], &bearing[0], sizeof(float));  // x
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[8].offset], &bearing[1], sizeof(float));  // y
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[9].offset], &bearing[2], sizeof(float));  // z
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[10].offset], &distance, sizeof(float)); // d
 
               // Add the corresponding covariance (upper triangular)
               Eigen::Matrix3f cov_MrMP = landmarkOutputCov_.cast<float>();
@@ -707,6 +760,10 @@ class RovioNode{
                   mCounter++;
                 }
               }
+
+              // Add distance uncertainty
+              const float distance_cov = static_cast<float>(featureOutputReadableCov_(3,3));
+              memcpy(&pclMsg_.data[offset + pclMsg_.fields[mCounter].offset], &distance_cov, sizeof(float));
 
               // Line markers (Uncertainty rays).
               geometry_msgs::Point point_near_msg;
@@ -730,9 +787,9 @@ class RovioNode{
             }
           }
           pubPcl_.publish(pclMsg_);
-          pubURays_.publish(markerMsg_);
+          pubMarkers_.publish(markerMsg_);
         }
-        if(pubPatch_.getNumSubscribers() > 0){
+        if(pubPatch_.getNumSubscribers() > 0 || forcePatchPublishing_){
           patchMsg_.header.seq = msgSeq_;
           patchMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           int offset = 0;
@@ -760,6 +817,7 @@ class RovioNode{
 
           pubPatch_.publish(patchMsg_);
         }
+        gotFirstMessages_ = true;
       }
     }
   }

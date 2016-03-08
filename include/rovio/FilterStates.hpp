@@ -94,6 +94,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
   rot::RotationQuaternionPD poseMeasRot_; /**<Groundtruth attitude measurement. qMI.*/
   Eigen::Vector3d poseMeasLin_; /**<Groundtruth position measurement. IrIM*/
+  FeatureManager<nLevels,patchSize,nCam>* mpCurrentFeature_; /**<Pointer to active feature*/
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -596,6 +597,17 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
     }
   }
 
+  void initWithAccelerometerAndMag(const V3D& fMeasInit, const QPD& yawMeasInit){
+    V3D unitZ(0,0,1);
+    if(fMeasInit.norm()>1e-6){
+      state_.qWM().setFromVectors(unitZ,fMeasInit);
+      state_.qWM() = yawMeasInit * state_.qWM();
+      state_.qWM().fix();
+    } else {
+      state_.qWM().setIdentity();
+    }
+  }
+
   /** \brief Resets the covariance of a feature
    *
    *  @param i       - Feature index.
@@ -634,9 +646,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
           transformFeatureOutputCT_.transformState(state_, featureOutput_);
           if(featureOutput_.c().isInFront()){
             transformFeatureOutputCT_.transformCovMat(state_, cov_, featureOutputCov_);
-            const double uncertainty = sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative();
-            const double depth = fsm_.features_[i].mpDistance_->getDistance();
-            if(uncertainty/depth > maxUncertaintyToDistanceRatio){
+            const double uncertainty = std::fabs(sqrt(featureOutputCov_(2,2))*featureOutput_.d().getDistanceDerivative());
+            const double depth = featureOutput_.d().getDistance();
+            if(uncertainty/depth < maxUncertaintyToDistanceRatio){
               distanceParameterCollection[camID].push_back(featureOutput_.d().p_);
             }
           }
