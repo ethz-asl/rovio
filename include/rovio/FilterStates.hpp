@@ -604,9 +604,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
 
   void initWithAccelerometerAndMag(const V3D& fMeasInit, const QPD& yawMeasInit){
   V3D unitZ(0,0,1);
+  QPD qVM(0.4021, 0.5791, -0.5893, 0.3945);
   if(fMeasInit.norm()>1e-6){
     state_.qWM().setFromVectors(unitZ,fMeasInit);
-    state_.qWM() = yawMeasInit * state_.qWM();
+    state_.qWM() = yawMeasInit * qVM * state_.qWM().inverted() * state_.qWM();
     state_.qWM().fix();
   } else {
     state_.qWM().setIdentity();
