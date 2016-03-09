@@ -196,6 +196,18 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     reset(t);
   }
 
+  /** \brief Resets the filter with an accelerometer and global orientation measurement.
+   *
+   *  @param fMeasInit - Accelerometer measurement.
+      @param yawMeasInit - Quaternion representing a global yaw measurement.
+   *  @param t         - Current time.
+   */
+
+  void resetWithAccelerometerAndMag(const V3D& fMeasInit, const QPD& yawMeasInit, double t = 0.0){
+    init_.initWithAccelerometerAndMag(fMeasInit, yawMeasInit);
+    reset(t);
+  }
+
   /** \brief Sets the transformation between IMU and Camera.
    *
    *  @param R_VM  -  Rotation matrix, expressing the orientation of the IMU  in Camera Cooridinates (IMU Coordinates -> Camera Coordinates).

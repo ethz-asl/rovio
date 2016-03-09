@@ -83,6 +83,7 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
+  ros::Subscriber subMag_; // subscriber for IMU message with global orientation
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
@@ -126,6 +127,11 @@ class RovioNode{
   std::string camera_frame_;
   std::string imu_frame_;
 
+  // Variables for initialGlobalOrientation
+ QPD initialGlobalOrientation_;
+ bool init_yaw_;
+ bool receivedInitialOrientation_;
+
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
@@ -138,12 +144,16 @@ class RovioNode{
     mpImgUpdate_ = &std::get<0>(mpFilter_->mUpdates_);
     mpPoseUpdate_ = &std::get<1>(mpFilter_->mUpdates_);
     isInitialized_ = false;
+    init_yaw_ = false;
+    receivedInitialOrientation_ = false;
 
     // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
+    subMag_ = nh_.subscribe("mag_imu", 1000, &RovioNode::magCallback,this);
+
 
     // Advertise topics
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
@@ -165,6 +175,9 @@ class RovioNode{
     nh_private_.param("world_frame", world_frame_, world_frame_);
     nh_private_.param("camera_frame", camera_frame_, camera_frame_);
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
+
+    // Check whether to initialise global yaw
+    nh_private_.param("init_yaw", init_yaw_, init_yaw_);
 
     // Initialize messages
     transformMsg_.header.frame_id = world_frame_;
@@ -359,19 +372,38 @@ class RovioNode{
   }
 
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.
-   */
-  void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
-    predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);
-    predictionMeas_.template get<mtPredictionMeas::_gyr>() = Eigen::Vector3d(imu_msg->angular_velocity.x,imu_msg->angular_velocity.y,imu_msg->angular_velocity.z);
-    if(isInitialized_){
-      mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
-      updateAndPublish();
-    } else {
-      mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
-      std::cout << std::setprecision(12);
-      std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
-      isInitialized_ = true;
+     */
+    void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
+      predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);
+      predictionMeas_.template get<mtPredictionMeas::_gyr>() = Eigen::Vector3d(imu_msg->angular_velocity.x,imu_msg->angular_velocity.y,imu_msg->angular_velocity.z);
+      if(isInitialized_){
+        mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
+        updateAndPublish();
+      } else {
+        if (init_yaw_) {
+          if (receivedInitialOrientation_){
+            mpFilter_->resetWithAccelerometerAndMag(predictionMeas_.template get<mtPredictionMeas::_acc>(), initialGlobalOrientation_, imu_msg->header.stamp.toSec());
+            std::cout << std::setprecision(12);
+            std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
+            std::cout << "Set initial global orientation" << std::endl;
+            isInitialized_ = true;
+          }
+        }
+        else {
+          mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
+          std::cout << std::setprecision(12);
+          std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
+          isInitialized_ = true;
+        }
+      }
     }
+
+    /** \brief Callback for MAG-IMU-Messages. Initialises the filter with provided global yaw.
+   */
+
+  void magCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
+    initialGlobalOrientation_ = QPD(imu_msg->orientation.w, imu_msg->orientation.x, imu_msg->orientation.y, imu_msg->orientation.z);
+    receivedInitialOrientation_ = true;
   }
 
   /** \brief Image callback for the camera with ID 0
