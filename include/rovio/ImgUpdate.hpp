@@ -265,7 +265,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       pixelOutputCov_((int)(PixelOutput::D_),(int)(PixelOutput::D_)),
       featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)),
       featureOutputJac_((int)(FeatureOutput::D_),(int)(mtState::D_)),
-      canditateGenerationH_((int)(mtState::D_),2),
+      canditateGenerationH_(2,(int)(mtState::D_)),
       canditateGenerationDifVec_((int)(mtState::D_),1),
       canditateGenerationPy_(2,2){
     mpMultiCamera_ = nullptr;
@@ -452,7 +452,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       transformFeatureOutputCT_.jacTransform(featureOutputJac_,candidate);
       mpMultiCamera_->cameras_[activeCamID].bearingToPixel(featureOutput_.c().get_nor(),c_temp_,c_J_);
 
-      canditateGenerationH_  = c_J_*featureOutputJac_.template block<2,mtState::D_>(0,0);
+      canditateGenerationH_  = -c_J_*featureOutputJac_.template block<2,mtState::D_>(0,0);
       canditateGenerationPy_ = canditateGenerationH_*filterState.cov_*canditateGenerationH_.transpose();
       candidateGenerationES_.compute(canditateGenerationPy_);
     }
