@@ -10,7 +10,7 @@
   <url></url>
   <author>bloeschm</author>
   <maintainer email="bloeschm@ethz.ch">bloeschm</maintainer>
-  <license>Propriatary</license>
+  <license>BSD License</license>
   <buildtool_depend>catkin</buildtool_depend>
 
   <depend>cmake_modules</depend>
