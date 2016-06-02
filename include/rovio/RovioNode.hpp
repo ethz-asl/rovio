@@ -475,7 +475,6 @@ class RovioNode{
    *   @param camID - Camera ID.
    */
   void imgCallback(const sensor_msgs::ImageConstPtr & img, const int camID = 0){
-    std::lock_guard<std::mutex> lock(m_filter_);
     // Get image from msg
     cv_bridge::CvImagePtr cv_ptr;
     try {
