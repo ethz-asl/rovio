@@ -26,8 +26,16 @@
 *
 */
 
-#include <ros/package.h>
+
 #include <memory>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <ros/ros.h>
+#include <ros/package.h>
+#include <geometry_msgs/Pose.h>
+#pragma GCC diagnostic pop
+
 #include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
 #ifdef MAKE_SCENE
@@ -109,7 +117,7 @@ int main(int argc, char** argv){
   std::string mFSFileName = rootdir + "/shaders/shader.fs";
   mRovioScene.initScene(argc,argv,mVSFileName,mFSFileName,mpFilter);
   mRovioScene.setIdleFunction(idleFunc);
-  mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.isInitialized_=false;});
+  mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.requestReset();});
   glutMainLoop();
 #else
   ros::spin();

@@ -69,6 +69,16 @@ find_package(catkin REQUIRED COMPONENTS
 	rosbag
 )
 
+add_service_files(
+  DIRECTORY srv
+  FILES SrvResetToPose.srv
+)
+
+generate_messages(DEPENDENCIES
+  std_msgs
+  geometry_msgs
+)
+
 catkin_package(
 	INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
     LIBRARIES ${PROJECT_NAME}
