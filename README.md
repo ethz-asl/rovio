@@ -29,7 +29,7 @@ catkin build rovio --cmake-args -DCMAKE_BUILD_TYPE=Release -DMAKE_SCENE=ON
 ```
 
 ### Euroc Datasets ###
-The rovio_node.launch file loads parameters such that ROVIO runs properly on the Euroc datasets. The datasets are availavle under:
+The rovio_node.launch file loads parameters such that ROVIO runs properly on the Euroc datasets. The datasets are available under:
 http://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets
 
 ### Further notes ###
