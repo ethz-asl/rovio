@@ -201,6 +201,17 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     reset(t);
   }
 
+  /** \brief Resets the filter with an external pose.
+   *
+   *  @param WrWM - Position Vector, pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.
+   *  @param qMW  - Quaternion, expressing World-Frame in IMU-Coordinates (World Coordinates->IMU Coordinates)
+   *  @param t    - Current time.
+   */
+  void resetWithPose(V3D WrWM, QPD qMW, double t = 0.0) {
+    init_.initWithImuPose(WrWM, qMW);
+    reset(t);
+  }
+
   /** \brief Sets the transformation between IMU and Camera.
    *
    *  @param R_VM  -  Rotation matrix, expressing the orientation of the IMU  in Camera Cooridinates (IMU Coordinates -> Camera Coordinates).

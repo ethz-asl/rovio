@@ -15,7 +15,7 @@ add_definitions(-DROVIO_NPOSE=${ROVIO_NPOSE})
 add_subdirectory(lightweight_filtering)
 
 ##################### Find, include, and compile library #####################
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 if(0)
 	find_package(OpenMP REQUIRED)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -67,6 +67,16 @@ find_package(catkin REQUIRED COMPONENTS
 	std_msgs
 	tf
 	rosbag
+)
+
+add_service_files(
+  DIRECTORY srv
+  FILES SrvResetToPose.srv
+)
+
+generate_messages(DEPENDENCIES
+  std_msgs
+  geometry_msgs
 )
 
 catkin_package(
