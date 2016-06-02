@@ -1,0 +1,5 @@
+# Initial pose after reset. T_IW takes points from world coordinates to IMU
+# coordinates: I_p = T_IW * W_p
+geometry_msgs/Pose T_IW
+---
+std_msgs/Empty nothing

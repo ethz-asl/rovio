@@ -29,21 +29,26 @@
 #ifndef ROVIO_ROVIONODE_HPP_
 #define ROVIO_ROVIONODE_HPP_
 
-#include <queue>
 #include <memory>
-#include <ros/ros.h>
-#include <geometry_msgs/TransformStamped.h>
+#include <mutex>
+#include <queue>
+
+#include <cv_bridge/cv_bridge.h>
+#include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <sensor_msgs/Imu.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <nav_msgs/Odometry.h>
-#include <cv_bridge/cv_bridge.h>
-#include "rovio/RovioFilter.hpp"
+#include <std_srvs/Empty.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 
+#include <rovio/SrvResetToPose.h>
+#include "rovio/RovioFilter.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
@@ -74,7 +79,37 @@ class RovioNode{
   typedef typename mtPoseUpdate::mtMeas mtPoseMeas;
   mtPoseMeas poseUpdateMeas_;
   mtPoseUpdate* mpPoseUpdate_;
-  bool isInitialized_;
+
+  struct FilterInitializationState {
+    FilterInitializationState()
+        : WrWM_(V3D::Zero()),
+          state_(State::WaitForInitUsingAccel) {}
+
+    enum class State {
+      // Initialize the filter using accelerometer measurement on the next
+      // opportunity.
+      WaitForInitUsingAccel,
+      // Initialize the filter using an external pose on the next opportunity.
+      WaitForInitExternalPose,
+      // The filter is initialized.
+      Initialized
+    } state_;
+
+    // Buffer to hold the initial pose that should be set during initialization
+    // with the state WaitForInitExternalPose.
+    V3D WrWM_;
+    QPD qMW_;
+
+    explicit operator bool() const {
+      return isInitialized();
+    }
+
+    bool isInitialized() const {
+      return (state_ == State::Initialized);
+    }
+  };
+  FilterInitializationState init_state_;
+
   bool forceOdometryPublishing_;
   bool forceTransformPublishing_;
   bool forceExtrinsicsPublishing_;
@@ -83,6 +118,7 @@ class RovioNode{
   bool forceMarkersPublishing_;
   bool forcePatchPublishing_;
   bool gotFirstMessages_;
+  std::mutex m_filter_;
 
   // Nodes, Subscriber, Publishers
   ros::NodeHandle nh_;
@@ -91,6 +127,8 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
+  ros::ServiceServer srvResetFilter_;
+  ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
   tf::TransformBroadcaster tb_;
@@ -145,7 +183,6 @@ class RovioNode{
     #endif
     mpImgUpdate_ = &std::get<0>(mpFilter_->mUpdates_);
     mpPoseUpdate_ = &std::get<1>(mpFilter_->mUpdates_);
-    isInitialized_ = false;
     forceOdometryPublishing_ = false;
     forceTransformPublishing_ = false;
     forceExtrinsicsPublishing_ = false;
@@ -160,6 +197,10 @@ class RovioNode{
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
+
+    // Initialize ROS service servers.
+    srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
+    srvResetToPoseFilter_ = nh_.advertiseService("rovio/reset_to_pose", &RovioNode::resetToPoseServiceCallback, this);
 
     // Advertise topics
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
@@ -377,16 +418,34 @@ class RovioNode{
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.
    */
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg){
+    std::lock_guard<std::mutex> lock(m_filter_);
     predictionMeas_.template get<mtPredictionMeas::_acc>() = Eigen::Vector3d(imu_msg->linear_acceleration.x,imu_msg->linear_acceleration.y,imu_msg->linear_acceleration.z);
     predictionMeas_.template get<mtPredictionMeas::_gyr>() = Eigen::Vector3d(imu_msg->angular_velocity.x,imu_msg->angular_velocity.y,imu_msg->angular_velocity.z);
-    if(isInitialized_){
+    if(init_state_.isInitialized()){
       mpFilter_->addPredictionMeas(predictionMeas_,imu_msg->header.stamp.toSec());
       updateAndPublish();
     } else {
-      mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
+      switch(init_state_.state_) {
+        case FilterInitializationState::State::WaitForInitExternalPose: {
+          std::cout << "-- Filter: Initializing using external pose ..." << std::endl;
+          mpFilter_->resetWithPose(init_state_.WrWM_, init_state_.qMW_, imu_msg->header.stamp.toSec());
+          break;
+        }
+        case FilterInitializationState::State::WaitForInitUsingAccel: {
+          std::cout << "-- Filter: Initializing using accel. measurement ..." << std::endl;
+          mpFilter_->resetWithAccelerometer(predictionMeas_.template get<mtPredictionMeas::_acc>(),imu_msg->header.stamp.toSec());
+          break;
+        }
+        default: {
+          std::cout << "Unhandeld initialization type." << std::endl;
+          abort();
+          break;
+        }
+      }
+
       std::cout << std::setprecision(12);
       std::cout << "-- Filter: Initialized at t = " << imu_msg->header.stamp.toSec() << std::endl;
-      isInitialized_ = true;
+      init_state_.state_ = FilterInitializationState::State::Initialized;
     }
   }
 
@@ -396,6 +455,7 @@ class RovioNode{
    * @todo generalize
    */
   void imgCallback0(const sensor_msgs::ImageConstPtr & img){
+    std::lock_guard<std::mutex> lock(m_filter_);
     imgCallback(img,0);
   }
 
@@ -404,7 +464,8 @@ class RovioNode{
    * @param img - Image message.
    * @todo generalize
    */
-  void imgCallback1(const sensor_msgs::ImageConstPtr & img){
+  void imgCallback1(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
     if(mtState::nCam_ > 1) imgCallback(img,1);
   }
 
@@ -424,7 +485,7 @@ class RovioNode{
     }
     cv::Mat cv_img;
     cv_ptr->image.copyTo(cv_img);
-    if(isInitialized_ && !cv_img.empty()){
+    if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
         for(int i=0;i<mtState::nCam_;i++){
@@ -450,7 +511,8 @@ class RovioNode{
    *  @param transform - Groundtruth message.
    */
   void groundtruthCallback(const geometry_msgs::TransformStamped::ConstPtr& transform){
-    if(isInitialized_){
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(init_state_.isInitialized()){
       poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
       poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
@@ -458,10 +520,60 @@ class RovioNode{
     }
   }
 
+  /** \brief ROS service handler for resetting the filter.
+   */
+  bool resetServiceCallback(std_srvs::Empty::Request& /*request*/,
+                            std_srvs::Empty::Response& /*response*/){
+    requestReset();
+    return true;
+  }
+
+  /** \brief ROS service handler for resetting the filter to a given pose.
+   */
+  bool resetToPoseServiceCallback(rovio::SrvResetToPose::Request& request,
+                                  rovio::SrvResetToPose::Response& /*response*/){
+    V3D WrWM(request.T_IW.position.x, request.T_IW.position.y,
+             request.T_IW.position.z);
+    QPD qMW(request.T_IW.orientation.w, request.T_IW.orientation.x,
+            request.T_IW.orientation.y, request.T_IW.orientation.z);
+    requestResetToPose(WrWM, qMW);
+    return true;
+  }
+
+  /** \brief Reset the filter when the next IMU measurement is received.
+   *         The orientaetion is initialized using an accel. measurement.
+   */
+  void requestReset() {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if (!init_state_.isInitialized()) {
+      std::cout << "Reinitialization already triggered. Ignoring request...";
+      return;
+    }
+
+    init_state_.state_ = FilterInitializationState::State::WaitForInitUsingAccel;
+  }
+
+  /** \brief Reset the filter when the next IMU measurement is received.
+   *         The pose is initialized to the passed pose.
+   *  @param WrWM - Position Vector, pointing from the World-Frame to the IMU-Frame, expressed in World-Coordinates.
+   *  @param qMW  - Quaternion, expressing World-Frame in IMU-Coordinates (World Coordinates->IMU Coordinates)
+   */
+  void requestResetToPose(const V3D& WrWM, const QPD& qMW) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if (!init_state_.isInitialized()) {
+      std::cout << "Reinitialization already triggered. Ignoring request...";
+      return;
+    }
+
+    init_state_.WrWM_ = WrWM;
+    init_state_.qMW_ = qMW;
+    init_state_.state_ = FilterInitializationState::State::WaitForInitExternalPose;
+  }
+
   /** \brief Executes the update step of the filter and publishes the updated data.
    */
   void updateAndPublish(){
-    if(isInitialized_){
+    if(init_state_.isInitialized()){
       // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
       int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
