@@ -210,7 +210,7 @@ int main(int argc, char** argv){
         isTriggerInitialized = true;
       }
       if(resetTrigger>0.0 && lastSafeTime - lastTriggerTime > resetTrigger){
-        rovioNode.isInitialized_ = false;
+        rovioNode.requestReset();
         rovioNode.mpFilter_->init_.state_.WrWM() = rovioNode.mpFilter_->safe_.state_.WrWM();
         rovioNode.mpFilter_->init_.state_.qWM() = rovioNode.mpFilter_->safe_.state_.qWM();
         lastTriggerTime = lastSafeTime;
