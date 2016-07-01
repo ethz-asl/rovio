@@ -93,7 +93,7 @@ class LandmarkOutputImuCT:public LWF::CoordinateTransform<STATE,LandmarkOutput>{
 
     if(input.aux().doVECalibration_){
       J.template block<3,3>(mtOutput::template getId<mtOutput::_lmk>(),mtInput::template getId<mtInput::_vep>()) = M3D::Identity();
-      J.template block<3,3>(mtOutput::template getId<mtOutput::_lmk>(),mtInput::template getId<mtInput::_vea>()) = -mBC*gSM(CrCP);
+      J.template block<3,3>(mtOutput::template getId<mtOutput::_lmk>(),mtInput::template getId<mtInput::_vea>()) = mBC*gSM(CrCP);
     }
   }
 };

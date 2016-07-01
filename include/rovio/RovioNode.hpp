@@ -576,11 +576,14 @@ class RovioNode{
     if(init_state_.isInitialized()){
       // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
-      int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
       const double oldSafeTime = mpFilter_->safe_.t_;
-      mpFilter_->updateSafe();
+      int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
+      double lastImageTime;
+      if(std::get<0>(mpFilter_->updateTimelineTuple_).getLastTime(lastImageTime)){
+        mpFilter_->updateSafe(&lastImageTime);
+      }
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -625,7 +628,7 @@ class RovioNode{
         // Send Map (Pose Sensor, I) to World (rovio-intern, W) transformation
         if(mpPoseUpdate_->inertialPoseIndex_ >=0){
           Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
-          rot::RotationQuaternionPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
+          QPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
           tf::StampedTransform tf_transform_WI;
           tf_transform_WI.frame_id_ = map_frame_;
           tf_transform_WI.child_frame_id_ = world_frame_;

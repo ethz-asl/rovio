@@ -431,22 +431,22 @@ namespace rovio{
   }
   void Scene::setView(const Eigen::Vector3f& pos, const Eigen::Vector3f& target){
     W_r_WC_ = pos;
-    q_CW_.setFromVectors(Eigen::Vector3f(0.0f,0.0f,-1.0f),Eigen::Vector3f(target-pos));
+    q_CW_.setFromVectors(Eigen::Vector3f(target-pos),Eigen::Vector3f(0.0f,0.0f,-1.0f));
   }
   void Scene::setYDown(float step){
     float min = 1.0f;
     float minAng = 0.0;
     float angle = 0.0;
-    rot::RotationQuaternionPF q;
+    kindr::RotationQuaternionPF q;
     while(angle<=2*M_PI){
-      q = rot::EulerAnglesYprPF(angle,0,0);
+      q = kindr::EulerAnglesYprPF(angle,0,0);
       if((q*q_CW_).inverseRotate(Eigen::Vector3f(0,-1,0))(2) < min){
         minAng = angle;
         min = (q*q_CW_).inverseRotate(Eigen::Vector3f(0,-1,0))(2);
       }
       angle += step;
     }
-    q_CW_ = rot::EulerAnglesYprPF(minAng,0,0)*q_CW_;
+    q_CW_ = kindr::EulerAnglesYprPF(minAng,0,0)*q_CW_;
   }
   void Scene::SpecialKeyboardCB(int Key, int x, int y)
   {
@@ -477,8 +477,8 @@ namespace rovio{
 
       Eigen::Vector3f vec;
       vec.setZero();
-      vec(0) = -(float)DeltaY / 50.0f;
-      vec(1) = -(float)DeltaX/ 50.0f;
+      vec(0) = (float)DeltaY / 50.0f;
+      vec(1) = (float)DeltaX / 50.0f;
 
       q_CW_ = q_CW_.boxPlus(vec);
       q_CW_.fix();

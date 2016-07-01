@@ -92,7 +92,7 @@ class StateAuxiliary: public LWF::AuxiliaryBase<StateAuxiliary<nMax,nLevels,patc
   int activeCameraCounter_;  /**<Counter for iterating through the cameras, used such that when updating a feature we always start with the camId where the feature is expressed in.*/
   double timeSinceLastInertialMotion_;  /**<Time since the IMU showed motion last.*/
   double timeSinceLastImageMotion_;  /**<Time since the Image showed motion last.*/
-  rot::RotationQuaternionPD poseMeasRot_; /**<Groundtruth attitude measurement. qMI.*/
+  QPD poseMeasRot_; /**<Groundtruth attitude measurement. qMI.*/
   Eigen::Vector3d poseMeasLin_; /**<Groundtruth position measurement. IrIM*/
   FeatureManager<nLevels,patchSize,nCam>* mpCurrentFeature_; /**<Pointer to active feature*/
 };
@@ -591,7 +591,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   void initWithAccelerometer(const V3D& fMeasInit){
     V3D unitZ(0,0,1);
     if(fMeasInit.norm()>1e-6){
-      state_.qWM().setFromVectors(unitZ,fMeasInit);
+      state_.qWM().setFromVectors(fMeasInit,unitZ);
     } else {
       state_.qWM().setIdentity();
     }

@@ -37,8 +37,6 @@
 #include "rovio/ImuPrediction.hpp"
 #include "rovio/MultiCamera.hpp"
 
-namespace rot = kindr::rotations::eigen_impl;
-
 namespace rovio {
 /** \brief Class, defining the Rovio Filter.
  *
@@ -219,8 +217,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
    *  @param camID -  ID of the considered camera.
    */
   void setExtrinsics(const Eigen::Matrix3d& R_CM, const Eigen::Vector3d& CrCM, const int camID = 0){
-    rot::RotationMatrixAD R(R_CM);
-    init_.state_.aux().qCM_[camID] = QPD(R.getPassive());
+    kindr::RotationMatrixD R(R_CM);
+    init_.state_.aux().qCM_[camID] = QPD(R);
     init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM);
   }
 };

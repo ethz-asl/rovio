@@ -72,16 +72,16 @@ static bool ReadShaderFile(const char* pFileName, std::string& outFile){
   return ret;
 }
 
-static Eigen::Matrix4f InitTransform(const Eigen::Vector3f& v,const rot::RotationQuaternionPF& q){
+static Eigen::Matrix4f InitTransform(const Eigen::Vector3f& v,const kindr::RotationQuaternionPF& q){
   Eigen::Matrix4f m = Eigen::Matrix4f::Identity();
-  m.block<3,3>(0,0) = rot::RotationMatrixPF(q).matrix();
+  m.block<3,3>(0,0) = kindr::RotationMatrixPF(q).matrix();
   m.block<3,1>(0,3) = -q.rotate(v);
   return m;
 }
 
-static Eigen::Matrix4f InitInverseTransform(const Eigen::Vector3f& v,const rot::RotationQuaternionPF& q){
+static Eigen::Matrix4f InitInverseTransform(const Eigen::Vector3f& v,const kindr::RotationQuaternionPF& q){
   Eigen::Matrix4f m = Eigen::Matrix4f::Identity();
-  m.block<3,3>(0,0) = rot::RotationMatrixPF(q).inverted().matrix();
+  m.block<3,3>(0,0) = kindr::RotationMatrixPF(q).inverted().matrix();
   m.block<3,1>(0,3) = v;
   return m;
 }
@@ -172,7 +172,7 @@ class SceneObject{
   void CalcNormals();
   void loadOptions();
   Eigen::Vector3f W_r_WB_;
-  rot::RotationQuaternionPF q_BW_;
+  kindr::RotationQuaternionPF q_BW_;
   std::vector<Vertex> vertices_;
   std::vector<unsigned int> indices_;
   GLuint VBO_;
@@ -226,7 +226,7 @@ class Scene{
   DirectionalLight mDirectionalLight_;
 
   Eigen::Vector3f W_r_WC_;
-  rot::RotationQuaternionPF q_CW_;
+  kindr::RotationQuaternionPF q_CW_;
 
   Eigen::Matrix4f C_TF_W_;
   Eigen::Matrix4f V_TF_C_;
