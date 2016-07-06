@@ -33,8 +33,6 @@
 #include "rovio/Scene.hpp"
 #include <memory>
 
-namespace rot = kindr::rotations::eigen_impl;
-
 namespace rovio {
 
 template<typename FILTER>

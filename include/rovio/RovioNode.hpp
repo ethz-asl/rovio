@@ -513,8 +513,10 @@ class RovioNode{
   void groundtruthCallback(const geometry_msgs::TransformStamped::ConstPtr& transform){
     std::lock_guard<std::mutex> lock(m_filter_);
     if(init_state_.isInitialized()){
-      poseUpdateMeas_.pos() = Eigen::Vector3d(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
-      poseUpdateMeas_.att() = QPD(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
+      Eigen::Vector3d JrJV(transform->transform.translation.x,transform->transform.translation.y,transform->transform.translation.z);
+      poseUpdateMeas_.pos() = JrJV;
+      QPD qJV(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
+      poseUpdateMeas_.att() = qJV.inverted();
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
       updateAndPublish();
     }
@@ -534,9 +536,9 @@ class RovioNode{
                                   rovio::SrvResetToPose::Response& /*response*/){
     V3D WrWM(request.T_IW.position.x, request.T_IW.position.y,
              request.T_IW.position.z);
-    QPD qMW(request.T_IW.orientation.w, request.T_IW.orientation.x,
+    QPD qWM(request.T_IW.orientation.w, request.T_IW.orientation.x,
             request.T_IW.orientation.y, request.T_IW.orientation.z);
-    requestResetToPose(WrWM, qMW);
+    requestResetToPose(WrWM, qWM.inverted());
     return true;
   }
 
@@ -576,11 +578,14 @@ class RovioNode{
     if(init_state_.isInitialized()){
       // Execute the filter update.
       const double t1 = (double) cv::getTickCount();
-      int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       static double timing_T = 0;
       static int timing_C = 0;
       const double oldSafeTime = mpFilter_->safe_.t_;
-      mpFilter_->updateSafe();
+      int c1 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
+      double lastImageTime;
+      if(std::get<0>(mpFilter_->updateTimelineTuple_).getLastTime(lastImageTime)){
+        mpFilter_->updateSafe(&lastImageTime);
+      }
       const double t2 = (double) cv::getTickCount();
       int c2 = std::get<0>(mpFilter_->updateTimelineTuple_).measMap_.size();
       timing_T += (t2-t1)/cv::getTickFrequency()*1000;
@@ -625,13 +630,13 @@ class RovioNode{
         // Send Map (Pose Sensor, I) to World (rovio-intern, W) transformation
         if(mpPoseUpdate_->inertialPoseIndex_ >=0){
           Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
-          rot::RotationQuaternionPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
+          QPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
           tf::StampedTransform tf_transform_WI;
           tf_transform_WI.frame_id_ = map_frame_;
           tf_transform_WI.child_frame_id_ = world_frame_;
           tf_transform_WI.stamp_ = ros::Time(mpFilter_->safe_.t_);
           tf_transform_WI.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
-          tf_transform_WI.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),qWI.w()));
+          tf_transform_WI.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),-qWI.w()));
           tb_.sendTransform(tf_transform_WI);
         }
 
@@ -641,7 +646,7 @@ class RovioNode{
         tf_transform_MW.child_frame_id_ = imu_frame_;
         tf_transform_MW.stamp_ = ros::Time(mpFilter_->safe_.t_);
         tf_transform_MW.setOrigin(tf::Vector3(imuOutput_.WrWB()(0),imuOutput_.WrWB()(1),imuOutput_.WrWB()(2)));
-        tf_transform_MW.setRotation(tf::Quaternion(imuOutput_.qBW().x(),imuOutput_.qBW().y(),imuOutput_.qBW().z(),imuOutput_.qBW().w()));
+        tf_transform_MW.setRotation(tf::Quaternion(imuOutput_.qBW().x(),imuOutput_.qBW().y(),imuOutput_.qBW().z(),-imuOutput_.qBW().w()));
         tb_.sendTransform(tf_transform_MW);
 
         // Send camera pose.
@@ -651,7 +656,7 @@ class RovioNode{
           tf_transform_CM.child_frame_id_ = camera_frame_ + std::to_string(camID);
           tf_transform_CM.stamp_ = ros::Time(mpFilter_->safe_.t_);
           tf_transform_CM.setOrigin(tf::Vector3(state.MrMC(camID)(0),state.MrMC(camID)(1),state.MrMC(camID)(2)));
-          tf_transform_CM.setRotation(tf::Quaternion(state.qCM(camID).x(),state.qCM(camID).y(),state.qCM(camID).z(),state.qCM(camID).w()));
+          tf_transform_CM.setRotation(tf::Quaternion(state.qCM(camID).x(),state.qCM(camID).y(),state.qCM(camID).z(),-state.qCM(camID).w()));
           tb_.sendTransform(tf_transform_CM);
         }
 
@@ -665,7 +670,7 @@ class RovioNode{
           odometryMsg_.pose.pose.position.x = imuOutput_.WrWB()(0);
           odometryMsg_.pose.pose.position.y = imuOutput_.WrWB()(1);
           odometryMsg_.pose.pose.position.z = imuOutput_.WrWB()(2);
-          odometryMsg_.pose.pose.orientation.w = imuOutput_.qBW().w();
+          odometryMsg_.pose.pose.orientation.w = -imuOutput_.qBW().w();
           odometryMsg_.pose.pose.orientation.x = imuOutput_.qBW().x();
           odometryMsg_.pose.pose.orientation.y = imuOutput_.qBW().y();
           odometryMsg_.pose.pose.orientation.z = imuOutput_.qBW().z();
@@ -706,7 +711,7 @@ class RovioNode{
           transformMsg_.transform.rotation.x = imuOutput_.qBW().x();
           transformMsg_.transform.rotation.y = imuOutput_.qBW().y();
           transformMsg_.transform.rotation.z = imuOutput_.qBW().z();
-          transformMsg_.transform.rotation.w = imuOutput_.qBW().w();
+          transformMsg_.transform.rotation.w = -imuOutput_.qBW().w();
           pubTransform_.publish(transformMsg_);
         }
 
@@ -721,7 +726,7 @@ class RovioNode{
             extrinsicsMsg_[camID].pose.pose.orientation.x = state.qCM(camID).x();
             extrinsicsMsg_[camID].pose.pose.orientation.y = state.qCM(camID).y();
             extrinsicsMsg_[camID].pose.pose.orientation.z = state.qCM(camID).z();
-            extrinsicsMsg_[camID].pose.pose.orientation.w = state.qCM(camID).w();
+            extrinsicsMsg_[camID].pose.pose.orientation.w = -state.qCM(camID).w();
             for(unsigned int i=0;i<6;i++){
               unsigned int ind1 = mtState::template getId<mtState::_vep>(camID)+i;
               if(i>=3) ind1 = mtState::template getId<mtState::_vea>(camID)+i-3;

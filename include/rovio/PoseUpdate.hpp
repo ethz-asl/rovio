@@ -224,13 +224,13 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pos>()) =
             MPD(get_qWI(state).inverted()).matrix();
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_att>()) =
-            MPD(get_qWI(state).inverted()).matrix()*gSM(state.qWM().rotate(get_MrMV(state)));
+            -MPD(get_qWI(state).inverted()).matrix()*gSM(state.qWM().rotate(get_MrMV(state)));
       }
       if(inertialPoseIndex_ >= 0){
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(inertialPoseIndex_)) =
             M3D::Identity();
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_poa>(inertialPoseIndex_)) =
-            -gSM(get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))))*MPD(get_qWI(state).inverted()).matrix();
+            gSM(get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))))*MPD(get_qWI(state).inverted()).matrix();
       }
       if(bodyPoseIndex_ >= 0){
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(),mtState::template getId<mtState::_pop>(bodyPoseIndex_)) =
