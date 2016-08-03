@@ -60,8 +60,10 @@ class PoseUpdateMeas: public LWF::State<LWF::VectorElement<3>,LWF::QuaternionEle
  public:
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _att = _pos+1;
+  M3D pos_cov_; // Will be used to scale the update covariance according to the measurement
   PoseUpdateMeas(){
     static_assert(_att+1==E_,"Error with indices");
+    pos_cov_.setIdentity();
   };
   virtual ~PoseUpdateMeas(){};
   inline V3D& pos(){
@@ -75,6 +77,12 @@ class PoseUpdateMeas: public LWF::State<LWF::VectorElement<3>,LWF::QuaternionEle
   }
   inline const QPD& att() const{
     return this->template get<_att>();
+  }
+  inline M3D& pos_cov(){
+    return pos_cov_;
+  }
+  inline const M3D& pos_cov() const{
+    return pos_cov_;
   }
 };
 class PoseUpdateNoise: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{
