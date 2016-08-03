@@ -198,6 +198,7 @@ PoseUpdate
 	noFeedbackToRovio true;						By default the pose update is only used for aligning coordinate frame. Set to false if ROVIO should benefit frome the posed measurements.
 	doInertialAlignmentAtStart true;			Should the transformation between I and W be explicitly computed and set with the first pose measurement.
 	timeOffset 0.0;								Time offset added to the pose measurement timestamps
+    useOdometryPoseCov false;                    Should the UpdateNoise position covariance be scaled using the covariance in the Odometry message
     qVM_x 0;									X-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
     qVM_y 0;									Y-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
     qVM_z 0;									Z-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)

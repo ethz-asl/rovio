@@ -533,8 +533,13 @@ class RovioNode{
     if(init_state_.isInitialized()) {
       Eigen::Vector3d JrJV(odometry->pose.pose.position.x,odometry->pose.pose.position.y,odometry->pose.pose.position.z);
       poseUpdateMeas_.pos() = JrJV;
+      
       QPD qJV(odometry->pose.pose.orientation.w,odometry->pose.pose.orientation.x,odometry->pose.pose.orientation.y,odometry->pose.pose.orientation.z);
       poseUpdateMeas_.att() = qJV.inverted();
+
+      const Eigen::Matrix<double,6,6> full_cov = Eigen::Map<const Eigen::Matrix<double,6,6,Eigen::RowMajor>>(odometry->pose.covariance.data());
+      poseUpdateMeas_.pos_cov() = full_cov.template block<3,3>(0, 0);
+
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,odometry->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
       updateAndPublish();
     }
