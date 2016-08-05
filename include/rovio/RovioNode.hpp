@@ -537,8 +537,8 @@ class RovioNode{
       QPD qJV(odometry->pose.pose.orientation.w,odometry->pose.pose.orientation.x,odometry->pose.pose.orientation.y,odometry->pose.pose.orientation.z);
       poseUpdateMeas_.att() = qJV.inverted();
 
-      const Eigen::Matrix<double,6,6> full_cov = Eigen::Map<const Eigen::Matrix<double,6,6,Eigen::RowMajor>>(odometry->pose.covariance.data());
-      poseUpdateMeas_.pos_cov() = full_cov.template block<3,3>(0, 0);
+      const Eigen::Matrix<double,6,6> measuredCov = Eigen::Map<const Eigen::Matrix<double,6,6,Eigen::RowMajor>>(odometry->pose.covariance.data());
+      poseUpdateMeas_.measuredCov() = measuredCov;
 
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,odometry->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
       updateAndPublish();

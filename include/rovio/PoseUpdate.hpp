@@ -60,10 +60,10 @@ class PoseUpdateMeas: public LWF::State<LWF::VectorElement<3>,LWF::QuaternionEle
  public:
   static constexpr unsigned int _pos = 0;
   static constexpr unsigned int _att = _pos+1;
-  M3D pos_cov_; // Will be used to scale the update covariance according to the measurement
+  Eigen::Matrix<double,6,6> measuredCov_; // Will be used to scale the update covariance according to the measurement
   PoseUpdateMeas(){
     static_assert(_att+1==E_,"Error with indices");
-    pos_cov_.setIdentity();
+    measuredCov_.setIdentity();
   };
   virtual ~PoseUpdateMeas(){};
   inline V3D& pos(){
@@ -78,11 +78,11 @@ class PoseUpdateMeas: public LWF::State<LWF::VectorElement<3>,LWF::QuaternionEle
   inline const QPD& att() const{
     return this->template get<_att>();
   }
-  inline M3D& pos_cov(){
-    return pos_cov_;
+  inline Eigen::Matrix<double,6,6>& measuredCov(){
+    return measuredCov_;
   }
-  inline const M3D& pos_cov() const{
-    return pos_cov_;
+  inline const Eigen::Matrix<double,6,6>& measuredCov() const{
+    return measuredCov_;
   }
 };
 class PoseUpdateNoise: public LWF::State<LWF::VectorElement<3>,LWF::VectorElement<3>>{
@@ -154,7 +154,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
   bool noFeedbackToRovio_;
   bool doInertialAlignmentAtStart_;
   bool didAlignment_;
-  bool useOdometryPoseCov_;
+  bool useOdometryCov_;
   PoseUpdate() : defaultUpdnoiP_((int)(mtNoise::D_),(int)(mtNoise::D_)) {
     static_assert(mtState::nPose_>inertialPoseIndex_,"Please add enough poses to the filter state (templated).");
     static_assert(mtState::nPose_>bodyPoseIndex_,"Please add enough poses to the filter state (templated).");
@@ -168,7 +168,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     noFeedbackToRovio_ = true;
     doInertialAlignmentAtStart_ = true;
     didAlignment_ = false;
-    useOdometryPoseCov_ = false;
+    useOdometryCov_ = false;
     doubleRegister_.registerVector("MrMV",MrMV_);
     doubleRegister_.registerQuaternion("qVM",qVM_);
     doubleRegister_.registerVector("IrIW",IrIW_);
@@ -183,7 +183,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     boolRegister_.registerScalar("enableAttitude",enableAttitude_);
     boolRegister_.registerScalar("noFeedbackToRovio",noFeedbackToRovio_);
     boolRegister_.registerScalar("doInertialAlignmentAtStart",doInertialAlignmentAtStart_);
-    boolRegister_.registerScalar("useOdometryPoseCov",useOdometryPoseCov_);
+    boolRegister_.registerScalar("useOdometryCov",useOdometryCov_);
 
     // Unregister configured covariance
     for (int i=0;i<6;i++) {
@@ -295,16 +295,24 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
       }
       didAlignment_ = true;
     }
+
     // When enabled, scale the configured position covariance by the values in the measurement
-    if(useOdometryPoseCov_){
+    if(useOdometryCov_){
       updnoiP_ = defaultUpdnoiP_;
-      updnoiP_.template block<3,3>(0,0) *= meas.pos_cov();
+      updnoiP_ *= meas.measuredCov();
+
+      // When either position or attitude are disabled, we need to make sure that the covariance matrix is block-diagonal,
+      // otherwise the unused covariance block would affect the used one when inverting later on.
+      if (enablePosition_ != enableAttitude_) {
+        updnoiP_.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(), mtInnovation::template getId<mtInnovation::_pos>()).setZero();
+        updnoiP_.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(), mtInnovation::template getId<mtInnovation::_att>()).setZero();
+      }
     } else {
       updnoiP_ = defaultUpdnoiP_;
     }
     /* std::cout << "Default\n" << defaultUpdnoiP_ << "\n\n"
-              << "Meas\n" << meas.pos_cov() << "\n\n"
-              << "Scaled (" << useOdometryPoseCov_ << ")\n" << updnoiP_ << "\n\n"; */
+              << "Meas\n" << meas.measuredCov() << "\n\n"
+              << "Scaled (" << useOdometryCov_ << ")\n" << updnoiP_ << "\n\n"; */
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     mtState& state = filterstate.state_;
