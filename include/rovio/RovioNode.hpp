@@ -557,10 +557,10 @@ class RovioNode{
    */
   bool resetToPoseServiceCallback(rovio::SrvResetToPose::Request& request,
                                   rovio::SrvResetToPose::Response& /*response*/){
-    V3D WrWM(request.T_IW.position.x, request.T_IW.position.y,
-             request.T_IW.position.z);
-    QPD qWM(request.T_IW.orientation.w, request.T_IW.orientation.x,
-            request.T_IW.orientation.y, request.T_IW.orientation.z);
+    V3D WrWM(request.T_WM.position.x, request.T_WM.position.y,
+             request.T_WM.position.z);
+    QPD qWM(request.T_WM.orientation.w, request.T_WM.orientation.x,
+            request.T_WM.orientation.y, request.T_WM.orientation.z);
     requestResetToPose(WrWM, qWM.inverted());
     return true;
   }
