@@ -70,7 +70,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
   /** \brief Constructor. Initializes the filter.
    */
   RovioFilter(){
-    updateToUpdateMeasOnly_ = false;
+    updateToUpdateMeasOnly_ = true;
     std::get<0>(mUpdates_).setCamera(&multiCamera_);
     init_.setCamera(&multiCamera_);
     depthTypeInt_ = 1;
