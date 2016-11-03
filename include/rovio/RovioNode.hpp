@@ -233,9 +233,9 @@ class RovioNode{
     transformMsg_.header.frame_id = world_frame_;
     transformMsg_.child_frame_id = imu_frame_;
 
-    T_J_W_Msg_.child_frame_id = world_frame_; 
+    T_J_W_Msg_.child_frame_id = world_frame_;
     T_J_W_Msg_.header.frame_id = map_frame_;
- 
+
     odometryMsg_.header.frame_id = world_frame_;
     odometryMsg_.child_frame_id = imu_frame_;
     msgSeq_ = 1;
@@ -541,7 +541,7 @@ class RovioNode{
     if(init_state_.isInitialized()) {
       Eigen::Vector3d JrJV(odometry->pose.pose.position.x,odometry->pose.pose.position.y,odometry->pose.pose.position.z);
       poseUpdateMeas_.pos() = JrJV;
-      
+
       QPD qJV(odometry->pose.pose.orientation.w,odometry->pose.pose.orientation.x,odometry->pose.pose.orientation.y,odometry->pose.pose.orientation.z);
       poseUpdateMeas_.att() = qJV.inverted();
 
@@ -746,8 +746,6 @@ class RovioNode{
           pubTransform_.publish(transformMsg_);
         }
 
-
-
         if(pub_T_J_W_transform.getNumSubscribers() > 0 || forceTransformPublishing_){
           Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
           QPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
@@ -762,8 +760,6 @@ class RovioNode{
           T_J_W_Msg_.transform.rotation.w = -qWI.w();
           pub_T_J_W_transform.publish(T_J_W_Msg_);
         }
-
-
 
         // Publish Extrinsics
         for(int camID=0;camID<mtState::nCam_;camID++){
