@@ -127,6 +127,7 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
+  ros::Subscriber subGroundtruthOdometry_;
   ros::ServiceServer srvResetFilter_;
   ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
@@ -199,6 +200,7 @@ class RovioNode{
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
+    subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
@@ -514,7 +516,7 @@ class RovioNode{
     }
   }
 
-  /** \brief Groundtruth callback for external groundtruth
+  /** \brief Callback for external groundtruth as TransformStamped
    *
    *  @param transform - Groundtruth message.
    */
@@ -526,6 +528,27 @@ class RovioNode{
       QPD qJV(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
       poseUpdateMeas_.att() = qJV.inverted();
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
+      updateAndPublish();
+    }
+  }
+
+  /** \brief Callback for external groundtruth as Odometry
+   *
+   * @param odometry - Groundtruth message.
+   */
+  void groundtruthOdometryCallback(const nav_msgs::Odometry::ConstPtr& odometry) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(init_state_.isInitialized()) {
+      Eigen::Vector3d JrJV(odometry->pose.pose.position.x,odometry->pose.pose.position.y,odometry->pose.pose.position.z);
+      poseUpdateMeas_.pos() = JrJV;
+      
+      QPD qJV(odometry->pose.pose.orientation.w,odometry->pose.pose.orientation.x,odometry->pose.pose.orientation.y,odometry->pose.pose.orientation.z);
+      poseUpdateMeas_.att() = qJV.inverted();
+
+      const Eigen::Matrix<double,6,6> measuredCov = Eigen::Map<const Eigen::Matrix<double,6,6,Eigen::RowMajor>>(odometry->pose.covariance.data());
+      poseUpdateMeas_.measuredCov() = measuredCov;
+
+      mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,odometry->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
       updateAndPublish();
     }
   }
@@ -542,10 +565,10 @@ class RovioNode{
    */
   bool resetToPoseServiceCallback(rovio::SrvResetToPose::Request& request,
                                   rovio::SrvResetToPose::Response& /*response*/){
-    V3D WrWM(request.T_IW.position.x, request.T_IW.position.y,
-             request.T_IW.position.z);
-    QPD qWM(request.T_IW.orientation.w, request.T_IW.orientation.x,
-            request.T_IW.orientation.y, request.T_IW.orientation.z);
+    V3D WrWM(request.T_WM.position.x, request.T_WM.position.y,
+             request.T_WM.position.z);
+    QPD qWM(request.T_WM.orientation.w, request.T_WM.orientation.x,
+            request.T_WM.orientation.y, request.T_WM.orientation.z);
     requestResetToPose(WrWM, qWM.inverted());
     return true;
   }

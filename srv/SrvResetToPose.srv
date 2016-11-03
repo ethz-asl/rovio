@@ -1,5 +1,7 @@
-# Initial pose after reset. T_IW takes points from world coordinates to IMU
-# coordinates: I_p = T_IW * W_p
-geometry_msgs/Pose T_IW
+# Initial IMU pose after reset.
+# T_WM transforms points from IMU frame (M) to World frame (W)
+# Conventions: W_p = T_WM * M_p
+# Check wiki page "Coordinate Frames and Notation" for more information about frames
+geometry_msgs/Pose T_WM
 ---
 std_msgs/Empty nothing
