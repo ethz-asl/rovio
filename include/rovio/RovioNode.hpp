@@ -747,18 +747,20 @@ class RovioNode{
         }
 
         if(pub_T_J_W_transform.getNumSubscribers() > 0 || forceTransformPublishing_){
-          Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
-          QPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
-          T_J_W_Msg_.header.seq = msgSeq_;
-          T_J_W_Msg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-          T_J_W_Msg_.transform.translation.x = IrIW(0);
-          T_J_W_Msg_.transform.translation.y = IrIW(1);
-          T_J_W_Msg_.transform.translation.z = IrIW(2);
-          T_J_W_Msg_.transform.rotation.x = qWI.x();
-          T_J_W_Msg_.transform.rotation.y = qWI.y();
-          T_J_W_Msg_.transform.rotation.z = qWI.z();
-          T_J_W_Msg_.transform.rotation.w = -qWI.w();
-          pub_T_J_W_transform.publish(T_J_W_Msg_);
+          if (mpPoseUpdate_->inertialPoseIndex_ >= 0) {
+            Eigen::Vector3d IrIW = state.poseLin(mpPoseUpdate_->inertialPoseIndex_);
+            QPD qWI = state.poseRot(mpPoseUpdate_->inertialPoseIndex_);
+            T_J_W_Msg_.header.seq = msgSeq_;
+            T_J_W_Msg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+            T_J_W_Msg_.transform.translation.x = IrIW(0);
+            T_J_W_Msg_.transform.translation.y = IrIW(1);
+            T_J_W_Msg_.transform.translation.z = IrIW(2);
+            T_J_W_Msg_.transform.rotation.x = qWI.x();
+            T_J_W_Msg_.transform.rotation.y = qWI.y();
+            T_J_W_Msg_.transform.rotation.z = qWI.z();
+            T_J_W_Msg_.transform.rotation.w = -qWI.w();
+            pub_T_J_W_transform.publish(T_J_W_Msg_);
+          }
         }
 
         // Publish Extrinsics
