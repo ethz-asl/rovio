@@ -47,6 +47,9 @@
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 
+#include <image_transport/image_transport.h>
+
+
 #include <rovio/SrvResetToPose.h>
 #include "rovio/RovioFilter.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
@@ -139,6 +142,8 @@ class RovioNode{
   ros::Publisher pubExtrinsics_[mtState::nCam_];
   ros::Publisher pubImuBias_;
 
+  image_transport::Publisher pubImg_;
+
   // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
   nav_msgs::Odometry odometryMsg_;
@@ -214,6 +219,9 @@ class RovioNode{
       pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
     }
     pubImuBias_ = nh_.advertise<sensor_msgs::Imu>("rovio/imu_biases", 1 );
+   
+    image_transport::ImageTransport it(nh_);
+    pubImg_ = it.advertise("rovio/image", 1);
 
     // Handle coordinate frame naming
     map_frame_ = "/map";
@@ -617,6 +625,7 @@ class RovioNode{
       if(plotTiming){
         ROS_INFO_STREAM(" == Filter Update: " << (t2-t1)/cv::getTickFrequency()*1000 << " ms for processing " << c1-c2 << " images, average: " << timing_T/timing_C);
       }
+      
       if(mpFilter_->safe_.t_ > oldSafeTime){ // Publish only if something changed
         for(int i=0;i<mtState::nCam_;i++){
           if(!mpFilter_->safe_.img_[i].empty() && mpImgUpdate_->doFrameVisualisation_){
@@ -628,7 +637,12 @@ class RovioNode{
           cv::imshow("Patches", mpFilter_->safe_.patchDrawing_);
           cv::waitKey(3);
         }
-
+        if(pubImg_.getNumSubscribers() > 0){
+          for(int i=0;i<mtState::nCam_;i++){
+            sensor_msgs::ImagePtr ImgMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", mpFilter_->safe_.img_[i]).toImageMsg();
+            pubImg_.publish(ImgMsg);
+          }
+        }
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
         mtState& state = mpFilter_->safe_.state_;

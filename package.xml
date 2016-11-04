@@ -28,4 +28,6 @@
   <depend>tf</depend>
   <depend>rosbag</depend>
   <depend>yaml_cpp_catkin</depend>
+  <depend>image_transport</depend>
+
 </package>
