@@ -40,7 +40,7 @@ def mag_imu_callback(imuMsg):
             qIC = [-0.716972876291, -0.696546675882, 0.0210928794952, 0.0181028565577] # [x,y,z,w]
             qEnuI = [imuMsg.orientation.x, imuMsg.orientation.y, imuMsg.orientation.z, imuMsg.orientation.w]
             qEnuI_euler = tf.euler_from_quaternion(qEnuI)
-            qEnuI_euler = np.add(qEnuI_euler, [0,0,-0.733]) #2.407 for east
+            qEnuI_euler = np.add(qEnuI_euler, [0,0,1.638])#for big vicon room -0.733]) #2.407 for east
             print qEnuI_euler
             qEnuI = tf.quaternion_from_euler(qEnuI_euler[0], qEnuI_euler[1], qEnuI_euler[2]);
 
