@@ -109,7 +109,7 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} $
 
 add_executable(rovio_node src/rovio_node.cpp)
 target_link_libraries(rovio_node ${PROJECT_NAME})
-add_dependencies(rovio_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(rovio_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} rovio_generate_messages_cpp)
 
 add_executable(rovio_rosbag_loader src/rovio_rosbag_loader.cpp)
 target_link_libraries(rovio_rosbag_loader ${PROJECT_NAME})
