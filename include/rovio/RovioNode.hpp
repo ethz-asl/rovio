@@ -37,6 +37,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
@@ -79,6 +80,9 @@ class RovioNode{
   typedef typename mtPoseUpdate::mtMeas mtPoseMeas;
   mtPoseMeas poseUpdateMeas_;
   mtPoseUpdate* mpPoseUpdate_;
+  typedef typename std::tuple_element<2,typename mtFilter::mtUpdates>::type mtVelocityUpdate;
+  typedef typename mtVelocityUpdate::mtMeas mtVelocityMeas;
+  mtVelocityMeas velocityUpdateMeas_;
 
   struct FilterInitializationState {
     FilterInitializationState()
@@ -128,6 +132,7 @@ class RovioNode{
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
   ros::Subscriber subGroundtruthOdometry_;
+  ros::Subscriber subVelocity_;
   ros::ServiceServer srvResetFilter_;
   ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
@@ -199,6 +204,7 @@ class RovioNode{
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
+    subVelocity_ = nh_.subscribe("velocity", 1000, &RovioNode::velocityCallback,this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
@@ -541,6 +547,20 @@ class RovioNode{
       poseUpdateMeas_.measuredCov() = measuredCov;
 
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,odometry->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
+      updateAndPublish();
+    }
+  }
+
+  /** \brief Callback for external velocity measurements
+   *
+   *  @param transform - Groundtruth message.
+   */
+  void velocityCallback(const geometry_msgs::TwistWithCovarianceStamped::ConstPtr& velocity){
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(init_state_.isInitialized()){
+      Eigen::Vector3d AvM(velocity->twist.twist.linear.x,velocity->twist.twist.linear.y,velocity->twist.twist.linear.z);
+      velocityUpdateMeas_.vel() = AvM;
+      mpFilter_->template addUpdateMeas<2>(velocityUpdateMeas_,velocity->header.stamp.toSec());
       updateAndPublish();
     }
   }
