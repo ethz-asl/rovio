@@ -218,3 +218,17 @@ PoseUpdate
     IrIW_y 0;									Y-entry of vector representing World to reference inertial coordinate frame of pose measurement
     IrIW_z 0;									Z-entry of vector representing World to reference inertial coordinate frame of pose measurement
 }
+VelocityUpdate
+{
+    UpdateNoise
+    {
+        vel_0 0.0001
+        vel_1 0.0001
+        vel_2 0.0001
+    }
+    MahalanobisTh0 7.689997599999999
+    qAM_x 0
+    qAM_y 0
+    qAM_z 0
+    qAM_w 1
+}
