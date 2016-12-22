@@ -206,7 +206,7 @@ class RovioNode{
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("rovio_input/odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
-    subVelocity_ = nh_.subscribe("rovio_input/velocity", 1000, &RovioNode::velocityCallback,this);
+    subVelocity_ = nh_.subscribe("gps/velocity", 1000, &RovioNode::velocityCallback,this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
