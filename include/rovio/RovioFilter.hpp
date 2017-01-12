@@ -34,6 +34,7 @@
 #include "rovio/FilterStates.hpp"
 #include "rovio/ImgUpdate.hpp"
 #include "rovio/PoseUpdate.hpp"
+#include "rovio/VelocityUpdate.hpp"
 #include "rovio/ImuPrediction.hpp"
 #include "rovio/MultiCamera.hpp"
 
@@ -43,9 +44,15 @@ namespace rovio {
  *  @tparam FILTERSTATE - \ref rovio::FilterState
  */
 template<typename FILTERSTATE>
-class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1,(int)(FILTERSTATE::mtState::nPose_>1)*2-1>>{
+class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
+                                         ImgUpdate<FILTERSTATE>,
+                                         PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1,(int)(FILTERSTATE::mtState::nPose_>1)*2-1>,
+                                         VelocityUpdate<FILTERSTATE>>{
  public:
-  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FILTERSTATE>,PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1,(int)(FILTERSTATE::mtState::nPose_>1)*2-1>> Base;
+  typedef LWF::FilterBase<ImuPrediction<FILTERSTATE>,
+                          ImgUpdate<FILTERSTATE>,
+                          PoseUpdate<FILTERSTATE,(int)(FILTERSTATE::mtState::nPose_>0)-1,(int)(FILTERSTATE::mtState::nPose_>1)*2-1>,
+                          VelocityUpdate<FILTERSTATE>> Base;
   using Base::init_;
   using Base::reset;
   using Base::predictionTimeline_;
@@ -78,6 +85,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,ImgUpdate<FI
     subHandlers_["ImgUpdate"] = &std::get<0>(mUpdates_);
     subHandlers_.erase("Update1");
     subHandlers_["PoseUpdate"] = &std::get<1>(mUpdates_);
+    subHandlers_.erase("Update2");
+    subHandlers_["VelocityUpdate"] = &std::get<2>(mUpdates_);
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",depthTypeInt_);
     for(int camID=0;camID<mtState::nCam_;camID++){
