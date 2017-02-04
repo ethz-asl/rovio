@@ -204,7 +204,7 @@ class RovioNode{
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
-    subVelocity_ = nh_.subscribe("velocity", 1000, &RovioNode::velocityCallback,this);
+    subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
@@ -555,10 +555,10 @@ class RovioNode{
    *
    *  @param transform - Groundtruth message.
    */
-  void velocityCallback(const geometry_msgs::TwistWithCovarianceStamped::ConstPtr& velocity){
+  void velocityCallback(const geometry_msgs::TwistStamped::ConstPtr& velocity){
     std::lock_guard<std::mutex> lock(m_filter_);
     if(init_state_.isInitialized()){
-      Eigen::Vector3d AvM(velocity->twist.twist.linear.x,velocity->twist.twist.linear.y,velocity->twist.twist.linear.z);
+      Eigen::Vector3d AvM(velocity->twist.linear.x,velocity->twist.linear.y,velocity->twist.linear.z);
       velocityUpdateMeas_.vel() = AvM;
       mpFilter_->template addUpdateMeas<2>(velocityUpdateMeas_,velocity->header.stamp.toSec());
       updateAndPublish();
