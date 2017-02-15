@@ -101,6 +101,7 @@ int main(int argc, char** argv){
   rovioNode.makeTest();
   double resetTrigger = 0.0;
   nh_private.param("record_odometry", rovioNode.forceOdometryPublishing_, rovioNode.forceOdometryPublishing_);
+  nh_private.param("record_pose_with_covariance_stamped", rovioNode.forcePoseWithCovariancePublishing_, rovioNode.forcePoseWithCovariancePublishing_);
   nh_private.param("record_transform", rovioNode.forceTransformPublishing_, rovioNode.forceTransformPublishing_);
   nh_private.param("record_extrinsics", rovioNode.forceExtrinsicsPublishing_, rovioNode.forceExtrinsicsPublishing_);
   nh_private.param("record_imu_bias", rovioNode.forceImuBiasPublishing_, rovioNode.forceImuBiasPublishing_);
