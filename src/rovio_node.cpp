@@ -26,7 +26,7 @@
 *
 */
 
-
+#include <iostream>
 #include <memory>
 
 #pragma GCC diagnostic push
@@ -109,7 +109,8 @@ int main(int argc, char** argv){
 
   // Node
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
-  rovioNode.makeTest();
+  //rovioNode.makeTest();
+  std::cout << std::endl << "ROVIO: Booted already !" << std::endl;
 
 #ifdef MAKE_SCENE
   // Scene

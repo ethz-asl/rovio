@@ -49,6 +49,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
 #include <std_srvs/Empty.h>
 #include <tf/transform_broadcaster.h>
@@ -137,11 +138,9 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subGroundtruth_;
-  ros::Subscriber subGroundtruthOdometry_;
-  ros::Subscriber subVelocityGPS_;
-  ros::Subscriber subArcOrientation_;
-  ros::Subscriber subSteeringAngle_;
-  ros::Subscriber subWheelSensorVelocity_;
+  ros::Subscriber subPositionGPS_;
+  ros::Subscriber subCarModel_;
+  ros::Subscriber shutdown_;
   ros::ServiceServer srvResetFilter_;
   ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
@@ -183,12 +182,6 @@ class RovioNode{
   rovio::FeatureOutputReadable featureOutputReadable_;
   MXD featureOutputReadableCov_;
 
-  // Global used coordinates.
-  Eigen::Vector3d last_orientation_; //Last Euler Orienation from ARC State.
-  double last_orientation_time_; //Timestamp of orientation Update.
-  double wheelsensor_velocity_; //Wheel Sensor measurement.
-  double steering_angle_; //Steering angle measurement.
-
   // ROS names for output tf frames.
   std::string map_frame_;
   std::string world_frame_;
@@ -219,12 +212,9 @@ class RovioNode{
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
-    subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
-    subGroundtruthOdometry_ = nh_.subscribe("rovio_input/odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
-    subVelocityGPS_ = nh_.subscribe("gps/velocity", 1000, &RovioNode::velocityCallback,this);
-    subArcOrientation_ = nh_.subscribe("state/pose", 1000, &RovioNode::orientationCallback, this);
-    subSteeringAngle_ = nh_.subscribe("Steering", 1000, &RovioNode::steeringCallback, this);
-    subWheelSensorVelocity_ = nh_.subscribe("wheelsensor/velocity", 1000, &RovioNode::wheelSensorCallback, this);
+    subPositionGPS_ = nh_.subscribe("gps/fix_transform", 1000, &RovioNode::groundtruthCallback, this);
+    subCarModel_ = nh_.subscribe("car_model_velocity", 1000, &RovioNode::velocityCallback, this);
+    shutdown_ = nh_.subscribe("shutdown", 1000, &RovioNode::shutdownCallback, this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
@@ -591,50 +581,9 @@ class RovioNode{
     }
   }
 
-  /** \brief Callback for external orientation measurements
-  *
-   *  @usage: velocity estimation using a model
-   */
-  void orientationCallback(const geometry_msgs::PoseStamped::ConstPtr& pose){
-    Eigen::Vector4d quat(pose->pose.orientation.x, pose->pose.orientation.y, 
-                         pose->pose.orientation.z, pose->pose.orientation.w);
-    last_orientation_ = arc_tools::transformEulerQuaternionVector(quat); 
-    last_orientation_time_ = pose->header.stamp.toSec();
-  }
-
-  /** \brief Callback for external velocity measurements
-  *
-   *  @usage: velocity estimation using a model
-   */
-  void wheelSensorCallback(const std_msgs::Float32::ConstPtr& velocity){
-    wheelsensor_velocity_ = velocity->data;
-  }
-
-  /** \brief Callback for external steering angle measurements
-  *
-   *  @usage: velocity estimation using a model
-   */
-  void steeringCallback(const arc_msgs::Steering::ConstPtr& steering){
-    //Time difference.
-    double steering_time = steering->header.stamp.toSec();
-    double delta_t = steering_time - last_orientation_time_;
-    //Planar calculation.
-    double steering_angle_ = steering->angle.data;
-    double planar_orientation = last_orientation_(2) + 
-                                delta_t*wheelsensor_velocity_*tan(steering_angle_)/2.3;
-    Eigen::Vector3d planar_velocity (wheelsensor_velocity_*cos(planar_orientation), 
-                                     wheelsensor_velocity_*sin(planar_orientation), 0);
-    //3D - Correction.
-    Eigen::Matrix<double,3,3> rotation_matrix = arc_tools::getRotationMatrix(last_orientation_);
-    Eigen::Vector3d velocity_estimation = rotation_matrix*planar_velocity;
-    //Adding to Kalman Filter.
-    std::lock_guard<std::mutex> lock(m_filter_);
-    if(init_state_.isInitialized()){
-      Eigen::Vector3d AvM = velocity_estimation;
-      velocityUpdateMeas_.vel() = AvM;
-      mpFilter_->template addUpdateMeas<2>(velocityUpdateMeas_,steering_time);
-      updateAndPublish();
-    }
+  void shutdownCallback(const std_msgs::Bool::ConstPtr& msg){
+    ros::shutdown();
+    ros::waitForShutdown();
   }
 
   /** \brief ROS service handler for resetting the filter.
