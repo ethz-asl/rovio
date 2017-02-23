@@ -23,7 +23,7 @@ namespace rovio{
     K_(2,0) = config["camera_matrix"]["data"][6].as<double>();
     K_(2,1) = config["camera_matrix"]["data"][7].as<double>();
     K_(2,2) = config["camera_matrix"]["data"][8].as<double>();
-    std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
+    //std::cout << "Set Camera Matrix to:\n" << K_ << std::endl;
   }
 
   void Camera::loadRadtan(const std::string& filename){
@@ -34,7 +34,7 @@ namespace rovio{
     p1_ = config["distortion_coefficients"]["data"][2].as<double>();
     p2_ = config["distortion_coefficients"]["data"][3].as<double>();
     k3_ = config["distortion_coefficients"]["data"][4].as<double>();
-    std::cout << "Set distortion parameters (Radtan) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
+    //std::cout << "Set distortion parameters (Radtan) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), p1(" << p1_ << "), p2(" << p2_ << ")" << std::endl;
   }
 
   void Camera::loadEquidist(const std::string& filename){
@@ -44,7 +44,7 @@ namespace rovio{
     k2_ = config["distortion_coefficients"]["data"][1].as<double>();
     k3_ = config["distortion_coefficients"]["data"][2].as<double>();
     k4_ = config["distortion_coefficients"]["data"][3].as<double>();
-    std::cout << "Set distortion parameters (Equidist) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
+    //std::cout << "Set distortion parameters (Equidist) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
   }
 
   void Camera::load(const std::string& filename){

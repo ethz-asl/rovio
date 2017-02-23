@@ -67,6 +67,7 @@ find_package(catkin REQUIRED COMPONENTS
 	std_msgs
 	tf
 	rosbag
+	arc_tools
 )
 
 add_service_files(
