@@ -115,6 +115,7 @@ class RovioNode{
   FilterInitializationState init_state_;
 
   bool forceOdometryPublishing_;
+  bool forcePoseWithCovariancePublishing_;
   bool forceTransformPublishing_;
   bool forceExtrinsicsPublishing_;
   bool forceImuBiasPublishing_;
@@ -137,6 +138,7 @@ class RovioNode{
   ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
   ros::Publisher pubTransform_;
+  ros::Publisher pubPoseWithCovStamped_;
   ros::Publisher pub_T_J_W_transform;
   tf::TransformBroadcaster tb_;
   ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
@@ -149,6 +151,7 @@ class RovioNode{
   geometry_msgs::TransformStamped transformMsg_;
   geometry_msgs::TransformStamped T_J_W_Msg_;
   nav_msgs::Odometry odometryMsg_;
+  geometry_msgs::PoseWithCovarianceStamped estimatedPoseWithCovarianceStampedMsg_;
   geometry_msgs::PoseWithCovarianceStamped extrinsicsMsg_[mtState::nCam_];
   sensor_msgs::PointCloud2 pclMsg_;
   sensor_msgs::PointCloud2 patchMsg_;
@@ -192,6 +195,7 @@ class RovioNode{
     mpImgUpdate_ = &std::get<0>(mpFilter_->mUpdates_);
     mpPoseUpdate_ = &std::get<1>(mpFilter_->mUpdates_);
     forceOdometryPublishing_ = false;
+    forcePoseWithCovariancePublishing_ = false;
     forceTransformPublishing_ = false;
     forceExtrinsicsPublishing_ = false;
     forceImuBiasPublishing_ = false;
@@ -215,6 +219,7 @@ class RovioNode{
     // Advertise topics
     pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
+    pubPoseWithCovStamped_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/pose_with_covariance_stamped", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
     pubPatch_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/patch", 1);
     pubMarkers_ = nh_.advertise<visualization_msgs::Marker>("rovio/markers", 1 );
@@ -750,6 +755,34 @@ class RovioNode{
             }
           }
           pubOdometry_.publish(odometryMsg_);
+        }
+
+        if(pubPoseWithCovStamped_.getNumSubscribers() > 0 || forcePoseWithCovariancePublishing_){
+          // Compute covariance of output
+          imuOutputCT_.transformCovMat(state,cov,imuOutputCov_);
+
+          estimatedPoseWithCovarianceStampedMsg_.header.seq = msgSeq_;
+          estimatedPoseWithCovarianceStampedMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.position.x = imuOutput_.WrWB()(0);
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.position.y = imuOutput_.WrWB()(1);
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.position.z = imuOutput_.WrWB()(2);
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.orientation.w = -imuOutput_.qBW().w();
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.orientation.x = imuOutput_.qBW().x();
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.orientation.y = imuOutput_.qBW().y();
+          estimatedPoseWithCovarianceStampedMsg_.pose.pose.orientation.z = imuOutput_.qBW().z();
+
+          for(unsigned int i=0;i<6;i++){
+            unsigned int ind1 = mtOutput::template getId<mtOutput::_pos>()+i;
+            if(i>=3) ind1 = mtOutput::template getId<mtOutput::_att>()+i-3;
+            for(unsigned int j=0;j<6;j++){
+              unsigned int ind2 = mtOutput::template getId<mtOutput::_pos>()+j;
+              if(j>=3) ind2 = mtOutput::template getId<mtOutput::_att>()+j-3;
+              estimatedPoseWithCovarianceStampedMsg_.pose.covariance[j+6*i] = imuOutputCov_(ind1,ind2);
+            }
+          }
+
+          pubPoseWithCovStamped_.publish(estimatedPoseWithCovarianceStampedMsg_);
+
         }
 
         // Send IMU pose message.
