@@ -113,8 +113,10 @@ class ImagePyramid{
    * @param l2         - Output pyramid level.
    * @return the corresponding pixel coordinates on pyramid level l2.
    */
-  void levelTranformCoordinates(const FeatureCoordinates& cIn,FeatureCoordinates& cOut,const int l1, const int l2) const{
+  FeatureCoordinates levelTranformCoordinates(const FeatureCoordinates& cIn, const int l1, const int l2) const{
     assert(l1<n_levels && l2<n_levels && l1>=0 && l2>=0);
+
+    FeatureCoordinates cOut;
     cOut.set_c((centers_[l1]-centers_[l2])*pow(0.5,l2)+cIn.get_c()*pow(0.5,l2-l1));
     if(cIn.mpCamera_ != nullptr){
       if(cIn.com_warp_c()){
@@ -123,6 +125,7 @@ class ImagePyramid{
     }
     cOut.camID_ = -1;
     cOut.mpCamera_ = nullptr;
+    return cOut;
   }
 
   /** \brief Extract FastCorner coordinates
@@ -132,7 +135,7 @@ class ImagePyramid{
    * @param detectionThreshold - Detection threshold of the used cv::FastFeatureDetector.
    *                             See http://docs.opencv.org/trunk/df/d74/classcv_1_1FastFeatureDetector.html
    */
-  void detectFastCorners(std::vector<FeatureCoordinates>& candidates, int l, int detectionThreshold) const{
+  void detectFastCorners(FeatureCoordinatesVec & candidates, int l, int detectionThreshold) const{
     std::vector<cv::KeyPoint> keypoints;
 #if (CV_MAJOR_VERSION < 3)
     cv::FastFeatureDetector feature_detector_fast(detectionThreshold, true);
@@ -141,11 +144,10 @@ class ImagePyramid{
     auto feature_detector_fast = cv::FastFeatureDetector::create(detectionThreshold, true);
     feature_detector_fast->detect(imgs_[l], keypoints);
 #endif
-    FeatureCoordinates c;
     candidates.reserve(candidates.size()+keypoints.size());
     for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
-      levelTranformCoordinates(FeatureCoordinates(cv::Point2f(it->pt.x, it->pt.y)),c,l,0);
-      candidates.push_back(c);
+      candidates.push_back(
+              levelTranformCoordinates(FeatureCoordinates(cv::Point2f(it->pt.x, it->pt.y)),l,0));
     }
   }
 };

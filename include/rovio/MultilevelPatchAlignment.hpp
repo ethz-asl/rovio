@@ -119,7 +119,6 @@ class MultilevelPatchAlignment {
     }
     affInv = c.get_warp_c().inverse();
     int numLevel = 0;
-    FeatureCoordinates c_level;
     const int halfpatch_size = patch_size/2;
     float wTot = 0;
     float mean_x = 0;
@@ -136,7 +135,7 @@ class MultilevelPatchAlignment {
       mlpError_.isValidPatch_[l] = false;
     }
     for(int l = l1; l <= l2; l++){
-      pyr.levelTranformCoordinates(c,c_level,0,l);
+      const auto c_level = pyr.levelTranformCoordinates(c,0,l);
       if(mp.isValidPatch_[l] && extractedPatches_[l].isPatchInFrame(pyr.imgs_[l],c_level,false)){
         mp.patches_[l].computeGradientParameters();
         if(mp.patches_[l].validGradientParameters_){
