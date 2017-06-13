@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-  <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
-  <param name="filter_config" value="$(find rovio)/cfg/rovio_intel1.info"/>
-  <param name="camera0_config" value="$(find rovio)/cfg/intel1_cam.yaml"/>
-  <remap from="cam0/image_raw" to="/fisheye/fisheye"/>
-  <remap from="imu0" to="/imu/raw"/>
-  </node>
+  <group ns="raw" >
+    <node pkg="rovio" type="rovio_node" name="rovio1" output="screen">
+    <param name="filter_config" value="$(find rovio)/cfg/rovio_intel1.info"/>
+    <param name="camera0_config" value="$(find rovio)/cfg/intel1_cam.yaml"/>
+    <param name="camera_frame" value="/cam_raw"/>
+    <param name="imu_frame" value="/imu_raw"/>
+    <remap from="cam0/image_raw" to="/fisheye/fisheye"/>
+    <remap from="imu0" to="/imu/raw"/>
+    </node>
+  </group>
+
+  <group ns="comp" >
+    <node pkg="rovio" type="rovio_node" name="rovio2" output="screen">
+    <param name="filter_config" value="$(find rovio)/cfg/rovio_intel1.info"/>
+    <param name="camera0_config" value="$(find rovio)/cfg/intel1_cam.yaml"/>
+    <param name="camera_frame" value="/cam_comp"/>
+    <param name="imu_frame" value="/imu_comp"/>
+    <remap from="cam0/image_raw" to="/fisheye/fisheye"/>
+    <remap from="imu0" to="/imu/compensated"/>
+    </node>
+  </group>
 </launch>
