@@ -281,7 +281,7 @@ class FeatureSetManager{
   // @todo work more on bearing vectors (in general)
   // @todo add corner motion dependency
   // @todo check inFrame, only if COVARIANCE not too large
-  std::unordered_set<unsigned int> addBestCandidates(const std::vector<FeatureCoordinates>& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
+  std::unordered_set<unsigned int> addBestCandidates(const FeatureCoordinatesVec& candidates, const ImagePyramid<nLevels>& pyr, const int camID, const double initTime,
                                                      const int l1, const int l2, const int maxAddedFeature, const int nDetectionBuckets, const double scoreDetectionExponent,
                                                      const double penaltyDistance, const double zeroDistancePenalty, const bool requireMax, const float minScore){
     std::unordered_set<unsigned int> newFeatureIDs;

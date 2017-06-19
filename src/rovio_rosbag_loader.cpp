@@ -33,6 +33,7 @@
 #include <iostream>
 #include <locale>
 #include <string>
+#include <Eigen/StdVector>
 #include "rovio/RovioFilter.hpp"
 #include "rovio/RovioNode.hpp"
 #include <boost/foreach.hpp>

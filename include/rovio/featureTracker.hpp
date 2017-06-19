@@ -228,7 +228,7 @@ class FeatureTrackerNode{
 
     // Get new features, if there are too little valid MultilevelPatchFeature%s in the MultilevelPatchSet.
     if(fsm_.getValidCount() < min_feature_count_){
-      std::vector<FeatureCoordinates> candidates;
+      FeatureCoordinatesVec candidates;
       ROS_INFO_STREAM(" Adding keypoints");
       const double t1 = (double) cv::getTickCount();
       for(int l=l1;l<=l2;l++){

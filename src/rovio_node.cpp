@@ -29,6 +29,8 @@
 
 #include <memory>
 
+#include <Eigen/StdVector>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <ros/ros.h>
