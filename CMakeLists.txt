@@ -11,8 +11,6 @@ add_definitions(-DROVIO_NCAM=${ROVIO_NCAM})
 add_definitions(-DROVIO_NLEVELS=${ROVIO_NLEVELS})
 add_definitions(-DROVIO_PATCHSIZE=${ROVIO_PATCHSIZE})
 add_definitions(-DROVIO_NPOSE=${ROVIO_NPOSE})
-add_definitions(-DEIGEN_DONT_VECTORIZE)
-add_definitions(-DEIGEN_DISABLE_UNALIGNED_ARRAY_ASSERT)
 
 add_subdirectory(lightweight_filtering)
 
