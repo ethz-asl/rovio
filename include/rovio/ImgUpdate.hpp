@@ -196,6 +196,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double penaltyDistance_;
   double zeroDistancePenalty_;
   double trackingUpperBound_,trackingLowerBound_;
+  int maxFeatureFrames_;
   double minTrackedAndFreeFeatures_;
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
@@ -285,6 +286,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     verbose_ = false;
     trackingUpperBound_ = 0.9;
     trackingLowerBound_ = 0.1;
+    maxFeatureFrames_ = 10000;
     minTrackedAndFreeFeatures_ = 0.5;
     minRelativeSTScore_ = 0.2;
     minAbsoluteSTScore_ = 0.2;
@@ -336,6 +338,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     intRegister_.registerScalar("nDetectionBuckets",nDetectionBuckets_);
     intRegister_.registerScalar("MotionDetection.minFeatureCountForNoMotionDetection",minFeatureCountForNoMotionDetection_);
     intRegister_.registerScalar("alignMaxUniSample",alignMaxUniSample_);
+    intRegister_.registerScalar("maxFeatureFrames",maxFeatureFrames_);
     boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
@@ -941,7 +944,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     for(unsigned int i=0;i<mtState::nMax_;i++){
       if(filterState.fsm_.isValid_[i]){
         FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[i];
-        if(!f.mpStatistics_->isGoodFeature(trackingUpperBound_,trackingLowerBound_)){
+        if(!f.mpStatistics_->isGoodFeature(trackingUpperBound_,trackingLowerBound_, maxFeatureFrames_)){
           if(verbose_) std::cout << filterState.fsm_.features_[i].idx_ << ", ";
           filterState.fsm_.isValid_[i] = false;
           filterState.resetFeatureCovariance(i,Eigen::Matrix3d::Identity());
@@ -956,7 +959,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     while((int)(mtState::nMax_) - (int)(filterState.fsm_.getValidCount()) < requiredFreeFeature){
       if(filterState.fsm_.isValid_[featureIndex]){
         FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[featureIndex];
-        if(!f.mpStatistics_->trackedInSomeFrame() && !f.mpStatistics_->isGoodFeature(trackingUpperBound_*factor,trackingLowerBound_*factor)){
+        if(!f.mpStatistics_->trackedInSomeFrame() && !f.mpStatistics_->isGoodFeature(trackingUpperBound_*factor,trackingLowerBound_*factor, maxFeatureFrames_)){
           if(verbose_) std::cout << filterState.fsm_.features_[featureIndex].idx_ << ", ";
           filterState.fsm_.isValid_[featureIndex] = false;
           filterState.resetFeatureCovariance(featureIndex,Eigen::Matrix3d::Identity());

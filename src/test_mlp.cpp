@@ -199,7 +199,7 @@ TEST_F(MLPTesting, statistics) {
   ASSERT_EQ(stat_.localQuality_[0],localQuality[0]);
   ASSERT_EQ(stat_.localQuality_[1],localQuality[1]);
   ASSERT_EQ(stat_.getGlobalQuality(),6.0/10.0);
-  ASSERT_EQ(stat_.isGoodFeature(0.9,0.1),true);
+  ASSERT_EQ(stat_.isGoodFeature(0.9,0.1,10000),true);
 }
 
 // Test isMultilevelPatchInFrame

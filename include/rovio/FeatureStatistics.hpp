@@ -324,13 +324,17 @@ class FeatureStatistics{
    * @param localVisibilityRange local range for visibility quality
    * @param upper                if the global quality is bad (0) than the combination of local and visibility quality must be above this
    * @param lower                if the global quality is very good (1) than the combination of local and visibility quality must be above this
+   * @param maxCount             the maximum number of frames a feature can exist for and still be considered good
    * @return whether this is a good feature or not
-   * @todo consider information quality (neibours, shape)
+   * @todo consider information quality (neighbors, shape)
    */
-  bool isGoodFeature(const double upper = 0.8, const double lower = 0.1) const{
+  bool isGoodFeature(const double upper = 0.8, const double lower = 0.1, const int maxCount = 10000) const{
     bool isGood = false;
     for(int i=0;i<nCam;i++){
       isGood = isGood | getLocalQuality(i)*getLocalVisibility(i) > upper-(upper-lower)*getGlobalQuality();
+    }
+    if(totCount_ > maxCount){
+      isGood = false;
     }
     return isGood;
   }
