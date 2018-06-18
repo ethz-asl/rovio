@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<launch> 
+  <node name="image_proc" pkg="image_proc" type="image_proc" ns="camera/color"/>
+  <include file="$(find mavros)/launch/px4.launch"/>
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch"/>
+  <include file="$(find rovio)/launch/rovio_node.launch"/>
+</launch>
