@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?> 
 <launch>
+    <arg name="filter_config"   default="$(find rovio)/cfg/rovio.info"/>
+    <arg name="camera0_config"  default="$(find rovio)/cfg/rs_color_D435_intel.yaml"/>
+    <arg name="topic_cam0" default="0"/>
+    <arg name="topic_cam1" default="0"/>
+    <arg name="topic_imu" default="0"/>
+
   <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
-    <param name="filter_config" value="$(find rovio)/cfg/rovio.info"/>
-    <param name="camera0_config" value="$(find rovio)/cfg/rs_color_radtan_intel.yaml"/>
-    <remap from="/cam0/image_raw" to="/camera/color/image_mono"/>
-    <remap from="/imu0" to="/mavros/imu/data"/>
+    <param name="filter_config"   value="$(arg filter_config)"/>
+    <param name="camera0_config"  value="$(arg camera0_config)"/>
+    <remap unless="$(eval topic_cam0 == 0)" from="/cam0/image_raw" to="$(arg topic_cam0)"/>
+    <remap unless="$(eval topic_cam1 == 0)" from="/cam1/image_raw" to="$(arg topic_cam1)"/>
+    <remap unless="$(eval topic_imu == 0)"  from="/imu0" to="$(arg topic_imu)"/>
   </node>
 </launch>
