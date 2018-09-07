@@ -134,8 +134,9 @@ class ImagePyramid{
    * @param l                  - Pyramid level at which the corners should be extracted.
    * @param detectionThreshold - Detection threshold of the used cv::FastFeatureDetector.
    *                             See http://docs.opencv.org/trunk/df/d74/classcv_1_1FastFeatureDetector.html
+   * @param valid_radius       - Radius inside which a feature is considered valid (as ratio of shortest image side)
    */
-  void detectFastCorners(FeatureCoordinatesVec & candidates, int l, int detectionThreshold) const{
+  void detectFastCorners(FeatureCoordinatesVec & candidates, int l, int detectionThreshold, double valid_radius = std::numeric_limits<double>::max()) const{
     std::vector<cv::KeyPoint> keypoints;
 #if (CV_MAJOR_VERSION < 3)
     cv::FastFeatureDetector feature_detector_fast(detectionThreshold, true);
