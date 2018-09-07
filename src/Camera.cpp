@@ -8,6 +8,7 @@ namespace rovio{
     p1_ = 0.0; p2_ = 0.0; s1_ = 0.0; s2_ = 0.0; s3_ = 0.0; s4_ = 0.0;
     K_.setIdentity();
     type_ = RADTAN;
+    valid_radius_ = std::numeric_limits<double>::max();
   };
 
   Camera::~Camera(){};
@@ -47,6 +48,19 @@ namespace rovio{
     std::cout << "Set distortion parameters (Equidist) to: k1(" << k1_ << "), k2(" << k2_ << "), k3(" << k3_ << "), k4(" << k4_ << ")" << std::endl;
   }
 
+  void Camera::loadDoubleSphere(const std::string& filename){
+    loadCameraMatrix(filename);
+    YAML::Node config = YAML::LoadFile(filename);
+    k1_ = config["distortion_coefficients"]["data"][0].as<double>();
+    k2_ = config["distortion_coefficients"]["data"][1].as<double>();
+
+    if(config["valid_radius"]){
+      valid_radius_ = config["valid_radius"].as<double>();
+    }
+
+    std::cout << "Set distortion parameters (Double Sphere) to: k1(" << k1_ << "), k2(" << k2_ << "), valid_radius(" << valid_radius_ << ")" << std::endl;
+  }
+
   void Camera::load(const std::string& filename){
     YAML::Node config = YAML::LoadFile(filename);
     std::string distortionModel;
@@ -57,6 +71,9 @@ namespace rovio{
     } else if(distortionModel == "equidistant"){
       type_ = EQUIDIST;
       loadEquidist(filename);
+    } else if(distortionModel == "ds"){
+      type_ = DS;
+      loadDoubleSphere(filename);
     } else {
       std::cout << "ERROR: no camera Model detected!";
     }
@@ -144,6 +161,54 @@ namespace rovio{
     J(1,1) = s + in(1)*s_r*r_y;
   }
 
+  void Camera::distortDoubleSphere(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
+
+      const double x2 = in(0) * in(0);
+      const double y2 = in(1) * in(1);
+
+      if((x2 + y2) < 1e-16){
+        out(0) = in(0);
+        out(1) = in(1);
+        return;
+      }
+
+      const double d1 = std::sqrt(x2 + y2 + 1.0);
+      const double d2 = std::sqrt(x2 + y2 + (k1_*d1 + 1.0)*(k1_*d1 + 1.0));
+      const double scaling = 1.0f/(k2_*d2 + (1-k2_)*(k1_*d1+1.0));
+      
+      out(0) = in(0) * scaling;
+      out(1) = in(1) * scaling;
+  }
+
+  void Camera::distortDoubleSphere(const Eigen::Vector2d& in, Eigen::Vector2d& out, Eigen::Matrix2d& J) const{
+    const double x2 = in(0) * in(0);
+    const double y2 = in(1) * in(1);
+
+    if((x2 + y2) < 1e-16){
+      out(0) = in(0);
+      out(1) = in(1);
+      J.setIdentity();
+      return;
+    }
+
+    const double d1 = std::sqrt(x2 + y2 + 1.0);
+    const double d2 = std::sqrt(x2 + y2 + (k1_*d1 + 1.0)*(k1_*d1 + 1.0));
+    const double s = 1.0f/(k2_*d2 + (1-k2_)*(k1_*d1+1.0));
+    
+    out(0) = in(0) * s;
+    out(1) = in(1) * s;
+
+    const double d1dx = in(0)/d1;
+    const double d1dy = in(1)/d1;
+    const double d2dx = (2.0*in(0) + 2.0*d1dx*k1_*(d1*k1_ + 1.0))/(2.0*d2);
+    const double d2dy = (2.0*in(1) + 2.0*d1dy*k1_*(d1*k1_ + 1.0))/(2.0*d2);
+
+    J(0,0) = -in(0)*(d2dx*k2_ - d1dx*k1_*(k2_ - 1.0))*s*s + s;
+    J(0,1) = -s*s*in(0)*(d2dy*k2_ - d1dy*k1_*(k2_ - 1.0));
+    J(1,0) = -s*s*in(1)*(d2dx*k2_ - d1dx*k1_*(k2_ - 1.0));
+    J(1,1) = -in(1)*(d2dy*k2_ - d1dy*k1_*(k2_ - 1.0))*s*s + s;
+  }
+
   void Camera::distort(const Eigen::Vector2d& in, Eigen::Vector2d& out) const{
     switch(type_){
       case RADTAN:
@@ -151,6 +216,9 @@ namespace rovio{
         break;
       case EQUIDIST:
         distortEquidist(in,out);
+        break;
+      case DS:
+        distortDoubleSphere(in,out);
         break;
       default:
         distortRadtan(in,out);
@@ -165,6 +233,9 @@ namespace rovio{
         break;
       case EQUIDIST:
         distortEquidist(in,out,J);
+        break;
+      case DS:
+        distortDoubleSphere(in,out,J);
         break;
       default:
         distortRadtan(in,out,J);

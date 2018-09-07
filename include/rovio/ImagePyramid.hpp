@@ -144,8 +144,18 @@ class ImagePyramid{
     auto feature_detector_fast = cv::FastFeatureDetector::create(detectionThreshold, true);
     feature_detector_fast->detect(imgs_[l], keypoints);
 #endif
+
     candidates.reserve(candidates.size()+keypoints.size());
     for (auto it = keypoints.cbegin(), end = keypoints.cend(); it != end; ++it) {
+
+      const double x_dist = it->pt.x - imgs_[l].cols/2.0;
+      const double y_dist = it->pt.y - imgs_[l].rows/2.0;
+      const double max_valid_dist = valid_radius*std::min(imgs_[l].cols, imgs_[l].rows);
+
+      if((x_dist*x_dist + y_dist*y_dist) > (max_valid_dist*max_valid_dist)){
+        continue;
+      }
+
       candidates.push_back(
               levelTranformCoordinates(FeatureCoordinates(cv::Point2f(it->pt.x, it->pt.y)),l,0));
     }
