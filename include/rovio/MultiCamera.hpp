@@ -71,7 +71,7 @@ class MultiCamera{
    *   @param filename - Path to the yaml-file, containing the distortion model and distortion coefficient data.
    */
   void load(const int i, const std::string& filename){
-    cameras_[i].load(filename, valid_radius);
+    cameras_[i].load(filename);
   }
 
   /** \brief Transforms feature coordinates from one camera frame to another
