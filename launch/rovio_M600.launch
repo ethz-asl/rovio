@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+    <arg name="setup_config"    default="$(find rovio)/cfg/rovio_M600.info"/>
+    <arg name="camera_config"   default="$(find rovio)/cfg/rs_color_D435_intel.yaml"/>
+    <arg name="topic_cam0"      default="/camera2/camera/color/image_mono"/>
+    <arg name="topic_imu"       default="/mavros/imu/data_raw"/>
+
+    <node name="image_proc" pkg="image_proc" type="image_proc" ns="camera2/camera/color"/>
+
+    <include file="$(find rovio)/launch/rovio_node.launch">
+        <arg name="filter_config"   value="$(arg setup_config)"/>
+        <arg name="camera0_config"  value="$(arg camera_config)"/>
+        <arg name="topic_cam0"      value="$(arg topic_cam0)"/>
+        <arg name="topic_imu"       value="$(arg topic_imu)"/>
+    </include>
+
+</launch>        

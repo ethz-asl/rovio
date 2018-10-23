@@ -10,5 +10,4 @@ distortion_model: plumb_bob
 distortion_coefficients:
   rows: 1
   cols: 5
-  data:  [-0.28340811, 0.07395907, 0.00019359, 1.76187114e-05, 0.0]
-
+data: [-0.28340811, 0.07395907, 0.00019359, 1.76187114e-05, 0.0]

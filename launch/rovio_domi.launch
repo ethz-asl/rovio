@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?> 
 <launch>
     <arg name="filter_config"   default="$(find rovio)/cfg/rovio_domi.info"/>
-    <arg name="camera0_config"  default="$(find rovio)/cfg/rs_color_D435_intel.yaml"/>
-    <arg name="topic_cam0" default="0"/>
-    <arg name="topic_cam1" default="0"/>
-    <arg name="topic_imu" default="0"/>
+    <arg name="camera0_config"  default="$(find rovio)/cfg/domi_cam0.yaml"/>    
+    <arg name="camera1_config"  default="$(find rovio)/cfg/domi_cam2.yaml"/>
+    <arg name="topic_cam0" default="/uvc_camera/cam_0/image_raw"/>
+    <arg name="topic_cam1" default="/uvc_camera/cam_2/image_raw"/>
+    <arg name="topic_imu" default="/uvc_camera/adis_imu"/>
 
   <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
     <param name="filter_config"   value="$(arg filter_config)"/>
