@@ -20,6 +20,17 @@ Camera0
 Camera1
 {
     CalibrationFile  ;            Camera-Calibration file for intrinsics
+    qCM_x  -0.00953751922809;                               X-entry of IMU to Camera quaterion (Hamilton)
+    qCM_y  -0.703628160853;                               Y-entry of IMU to Camera quaterion (Hamilton)
+    qCM_z  -0.710497111443;                               Z-entry of IMU to Camera quaterion (Hamilton)
+    qCM_w  0.00320961269892;                               W-entry of IMU to Camera quaterion (Hamilton)
+    MrMC_x 0.0341624938784;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+    MrMC_y 0.0489333125579;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+    MrMC_z -0.0250547932613;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+}
+Camera2
+{
+    CalibrationFile  ;            Camera-Calibration file for intrinsics
     qCM_x  0.498284808832;                               X-entry of IMU to Camera quaterion (Hamilton)
     qCM_y  -0.500933590992;                               Y-entry of IMU to Camera quaterion (Hamilton)
     qCM_z  0.506194778687;                               Z-entry of IMU to Camera quaterion (Hamilton)
@@ -118,7 +129,7 @@ ImgUpdate
     removeNegativeFeatureAfterUpdate true;						Should feature with negative distance get removed
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
     useCrossCameraMeasurements false;							Should cross measurements between frame be used. Might be turned of in calibration phase.
-    doStereoInitialization true;								Should a stereo match be used for feature initialization.
+    doStereoInitialization false;								Should a stereo match be used for feature initialization.
     noiseGainForOffCamera 10.0;									Factor added on update noise if not main camera
     discriminativeSamplingDistance 0.02;						Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).
     discriminativeSamplingGain 1.1;								Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).

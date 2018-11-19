@@ -131,6 +131,7 @@ class RovioNode{
   ros::Subscriber subImu_;
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
+  ros::Subscriber subImg2_;
   ros::Subscriber subGroundtruth_;
   ros::Subscriber subGroundtruthOdometry_;
   ros::Subscriber subVelocity_;
@@ -208,6 +209,7 @@ class RovioNode{
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
+    subImg2_ = nh_.subscribe("cam2/image_raw", 1000, &RovioNode::imgCallback2,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
     subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);
@@ -490,6 +492,16 @@ class RovioNode{
     if(mtState::nCam_ > 1) imgCallback(img,1);
   }
 
+  /** \brief Image callback for the camera with ID 2
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback2(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 2) imgCallback(img,2);
+  }
+
   /** \brief Image callback. Adds images (as update measurements) to the filter.
    *
    *   @param img   - Image message.
@@ -664,7 +676,7 @@ class RovioNode{
 
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
-	mtState& state = mpFilter_->safe_.state_;
+	      mtState& state = mpFilter_->safe_.state_;
         state.updateMultiCameraExtrinsics(&mpFilter_->multiCamera_);
         MXD& cov = mpFilter_->safe_.cov_;
         imuOutputCT_.transformState(state,imuOutput_);

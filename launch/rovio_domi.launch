@@ -2,16 +2,21 @@
 <launch>
     <arg name="filter_config"   default="$(find rovio)/cfg/rovio_domi.info"/>
     <arg name="camera0_config"  default="$(find rovio)/cfg/domi_cam0.yaml"/>    
-    <arg name="camera1_config"  default="$(find rovio)/cfg/domi_cam2.yaml"/>
+    <arg name="camera1_config"  default="$(find rovio)/cfg/domi_cam4.yaml"/>
+    <arg name="camera2_config"  default="$(find rovio)/cfg/domi_cam2.yaml"/>
     <arg name="topic_cam0" default="/uvc_camera/cam_0/image_raw"/>
-    <arg name="topic_cam1" default="/uvc_camera/cam_2/image_raw"/>
+    <arg name="topic_cam1" default="/uvc_camera/cam_4/image_raw"/>
+    <arg name="topic_cam2" default="/uvc_camera/cam_2/image_raw"/>
     <arg name="topic_imu" default="/uvc_camera/adis_imu"/>
 
   <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
     <param name="filter_config"   value="$(arg filter_config)"/>
     <param name="camera0_config"  value="$(arg camera0_config)"/>
+    <param name="camera1_config"  value="$(arg camera1_config)"/>
+    <param name="camera2_config"  value="$(arg camera2_config)"/>
     <remap unless="$(eval topic_cam0 == 0)" from="/cam0/image_raw" to="$(arg topic_cam0)"/>
     <remap unless="$(eval topic_cam1 == 0)" from="/cam1/image_raw" to="$(arg topic_cam1)"/>
+    <remap unless="$(eval topic_cam2 == 0)" from="/cam2/image_raw" to="$(arg topic_cam2)"/>
     <remap unless="$(eval topic_imu == 0)"  from="/imu0" to="$(arg topic_imu)"/>
   </node>
 </launch>
