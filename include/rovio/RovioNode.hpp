@@ -33,6 +33,8 @@
 #include <mutex>
 #include <queue>
 
+#include <boost/bind.hpp>
+
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
@@ -132,6 +134,8 @@ class RovioNode{
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
   ros::Subscriber subImg2_;
+  ros::Subscriber subImg3_;
+  ros::Subscriber subImg4_;
   ros::Subscriber subGroundtruth_;
   ros::Subscriber subGroundtruthOdometry_;
   ros::Subscriber subVelocity_;
@@ -207,9 +211,12 @@ class RovioNode{
 
     // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
+    // subImg0_ = nh_.subscribe("cam0/image_raw", 1000, std::bind(&RovioNode::imgCallback, std::placeholders::_1, 0),this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
     subImg2_ = nh_.subscribe("cam2/image_raw", 1000, &RovioNode::imgCallback2,this);
+    subImg3_ = nh_.subscribe("cam3/image_raw", 1000, &RovioNode::imgCallback3,this);
+    subImg4_ = nh_.subscribe("cam4/image_raw", 1000, &RovioNode::imgCallback4,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
     subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);
@@ -502,6 +509,26 @@ class RovioNode{
     if(mtState::nCam_ > 2) imgCallback(img,2);
   }
 
+    /** \brief Image callback for the camera with ID 3
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback3(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 3) imgCallback(img,3);
+  }
+
+  /** \brief Image callback for the camera with ID 4
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback4(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 4) imgCallback(img,4);
+  }
+
   /** \brief Image callback. Adds images (as update measurements) to the filter.
    *
    *   @param img   - Image message.
@@ -523,7 +550,7 @@ class RovioNode{
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
         for(int i=0;i<mtState::nCam_;i++){
           if(imgUpdateMeas_.template get<mtImgMeas::_aux>().isValidPyr_[i]){
-            std::cout << "    \033[31mFailed Synchronization of Camera Frames, t = " << msgTime << "\033[0m" << std::endl;
+            std::cout << "    \033[31mFailed Synchronization of Camera Frames, t = " << msgTime << "    " << camID << "\033[0m" << std::endl;
           }
         }
         imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
