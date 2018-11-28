@@ -545,6 +545,36 @@ class RovioNode{
     }
     cv::Mat cv_img;
     cv_ptr->image.copyTo(cv_img);
+
+    // Histogram equalization
+    //if(histogram_equalize_){
+      constexpr size_t hist_bins = 256;
+      cv::Mat hist;
+      std::vector<cv::Mat> img_vec = {cv_img};
+      cv::calcHist(img_vec, {0}, cv::Mat(), hist, {hist_bins},
+                   {0, hist_bins-1}, false);
+       cv::Mat lut(1, hist_bins, CV_8UC1);
+       double sum = 0.0;
+      //prevents an image full of noise if in total darkness
+      float max_per_bin = cv_img.cols * cv_img.rows * 0.02;
+      float min_per_bin = cv_img.cols * cv_img.rows * 0.002;
+      float total_pixels = 0;
+      for(size_t i = 0; i < hist_bins; ++i){
+        float& bin = hist.at<float>(i);
+        if(bin > max_per_bin){
+          bin = max_per_bin;
+        } else if(bin < min_per_bin){
+          bin = min_per_bin;
+        }
+        total_pixels += bin;
+      }
+      for(size_t i = 0; i < hist_bins; ++i){
+        sum += hist.at<float>(i) / total_pixels;
+        lut.at<uchar>(i) = (hist_bins-1)*sum;
+      }
+      cv::LUT(cv_img, lut, cv_img);
+    //}
+
     if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
