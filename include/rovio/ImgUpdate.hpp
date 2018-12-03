@@ -987,6 +987,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         for(int l=endLevel_;l<=startLevel_;l++){
           meas.aux().pyr_[camID].detectFastCorners(candidates_,l,fastDetectionThreshold_);
         }
+
+        // visualization of detected candidates
+        if(doFrameVisualisation_){
+          for(int i=0;i<candidates_.size();i++){
+            candidates_[i].drawPoint(filterState.img_[camID], cv::Scalar(255,0,0));
+          }
+        }
+
         const double t2 = (double) cv::getTickCount();
         if(verbose_) std::cout << "== Detected " << candidates_.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
         std::unordered_set<unsigned int> newSet = filterState.fsm_.addBestCandidates(candidates_,meas.aux().pyr_[camID],camID,filterState.t_,
@@ -1005,8 +1013,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           filterState.resetFeatureCovariance(*it,initCovFeature_);
           initCovFeature_(0,0) = initRelDepthCovTemp_;
           if(doFrameVisualisation_){
-            f.mpCoordinates_->drawPoint(filterState.img_[camID], cv::Scalar(255,0,0));
-            f.mpCoordinates_->drawText(filterState.img_[camID],std::to_string(f.idx_),cv::Scalar(255,0,0));
+            f.mpCoordinates_->drawPoint(filterState.img_[camID], cv::Scalar(255,255,0));                                    //changed color from blue to aquamarin
+            f.mpCoordinates_->drawText(filterState.img_[camID],std::to_string(f.idx_),cv::Scalar(255,255,0));               //changed color from blue to aquamarin
           }
 
           if(mtState::nCam_>1 && doStereoInitialization_){
