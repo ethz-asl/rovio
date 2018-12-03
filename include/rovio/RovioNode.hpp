@@ -125,6 +125,7 @@ class RovioNode{
   bool forceMarkersPublishing_;
   bool forcePatchPublishing_;
   bool gotFirstMessages_;
+  bool histogram_equalize_ = true;
   std::mutex m_filter_;
 
   // Nodes, Subscriber, Publishers
@@ -547,7 +548,7 @@ class RovioNode{
     cv_ptr->image.copyTo(cv_img);
 
     // Histogram equalization
-    //if(histogram_equalize_){
+    if(histogram_equalize_){
       constexpr size_t hist_bins = 256;
       cv::Mat hist;
       std::vector<cv::Mat> img_vec = {cv_img};
@@ -573,7 +574,7 @@ class RovioNode{
         lut.at<uchar>(i) = (hist_bins-1)*sum;
       }
       cv::LUT(cv_img, lut, cv_img);
-    //}
+    }
 
     if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
