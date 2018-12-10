@@ -52,6 +52,7 @@
 
 #include <rovio/SrvResetToPose.h>
 #include "rovio/RovioFilter.hpp"
+#include "rovio/HealthMonitor.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
@@ -85,6 +86,8 @@ class RovioNode{
   typedef typename std::tuple_element<2,typename mtFilter::mtUpdates>::type mtVelocityUpdate;
   typedef typename mtVelocityUpdate::mtMeas mtVelocityMeas;
   mtVelocityMeas velocityUpdateMeas_;
+
+  RovioHealthMonitor healthMonitor_;
 
   struct FilterInitializationState {
     FilterInitializationState()
@@ -125,7 +128,10 @@ class RovioNode{
   bool forceMarkersPublishing_;
   bool forcePatchPublishing_;
   bool gotFirstMessages_;
+  
   bool histogram_equalize_ = true;
+  bool healthCheck_ = false;
+
   std::mutex m_filter_;
 
   // Nodes, Subscriber, Publishers
@@ -934,6 +940,8 @@ class RovioNode{
           pubImuBias_.publish(imuBiasMsg_);
         }
 
+        std::vector<float> featureDistanceCov;
+
         // PointCloud message.
         if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
           pclMsg_.header.seq = msgSeq_;
@@ -975,6 +983,8 @@ class RovioNode{
               transformFeatureOutputCT_.transformCovMat(state,cov,featureOutputCov_);
               featureOutputReadableCT_.transformState(featureOutput_,featureOutputReadable_);
               featureOutputReadableCT_.transformCovMat(featureOutput_,featureOutputCov_,featureOutputReadableCov_);
+
+              featureDistanceCov.push_back(static_cast<float>(featureOutputReadableCov_(3, 3)));  // for health checker
 
               // Get landmark output
               landmarkOutputImuCT_.setFeatureID(i);
@@ -1071,6 +1081,19 @@ class RovioNode{
           pubPatch_.publish(patchMsg_);
         }
         gotFirstMessages_ = true;
+
+        if (healthCheck_) {
+          if(healthMonitor_.shouldResetEstimator(featureDistanceCov, imuOutput_)) {
+            if(!init_state_.isInitialized()) {
+              std::cout << "Reinitioalization already triggered. Ignoring request...";
+              return;
+            }
+
+            init_state_.WrWM_ = healthMonitor_.failsafe_WrWB();
+            init_state_.qMW_ = healthMonitor_.failsafe_qBW();
+            init_state_.state_ = FilterInitializationState::State::WaitForInitExternalPose;
+          }
+        }
       }
     }
   }
