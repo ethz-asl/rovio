@@ -209,8 +209,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
                               If false, the reprojection error is used for the innovation term.*/
   bool doFrameVisualisation_;
+  bool showCandidates_;
   bool visualizePatches_;
   bool verbose_;
+  bool healthCheck_;
   bool removeNegativeFeatureAfterUpdate_;
   bool isZeroVelocityUpdateEnabled_; /**<Should zero velocity updates be performed*/
   double minTimeForZeroVelocityUpdate_;  /**<Time until zero velocity update get performed if there is no motion*/
@@ -225,6 +227,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool useCrossCameraMeasurements_; /**<Should features be matched across cameras.*/
   bool doStereoInitialization_; /**<Should a stereo match be used for feature initialization.*/
   bool addGlobalBest_;
+  bool histogramEqualize_;
   double alignmentHuberNormThreshold_; /**<Intensity error threshold for Huber norm.*/
   double alignmentGaussianWeightingSigma_; /**<Width of Gaussian which is used for pixel error weighting.*/
   double alignmentGradientExponent_; /**<Exponent used for gradient based weighting of residuals.*/
@@ -283,8 +286,10 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     zeroDistancePenalty_ = nDetectionBuckets_*1.0;
     useDirectMethod_ = true;
     doFrameVisualisation_ = true;
+    showCandidates_ = false;
     visualizePatches_ = false;
     verbose_ = false;
+    healthCheck_ = false;
     trackingUpperBound_ = 0.9;
     trackingLowerBound_ = 0.1;
     minTrackedAndFreeFeatures_ = 0.5;
@@ -308,6 +313,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     useCrossCameraMeasurements_ = true;
     doStereoInitialization_ = true;
     addGlobalBest_ = false;
+    histogramEqualize_ = false;
     removalFactor_ = 1.1;
     alignmentGaussianWeightingSigma_ = 2.0;
     discriminativeSamplingDistance_ = 0.0;
@@ -342,11 +348,13 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     boolRegister_.registerScalar("MotionDetection.isEnabled",doVisualMotionDetection_);
     boolRegister_.registerScalar("useDirectMethod",useDirectMethod_);
     boolRegister_.registerScalar("doFrameVisualisation",doFrameVisualisation_);
+    boolRegister_.registerScalar("showCandidates",showCandidates_);
     boolRegister_.registerScalar("visualizePatches",visualizePatches_);
     boolRegister_.registerScalar("removeNegativeFeatureAfterUpdate",removeNegativeFeatureAfterUpdate_);
     boolRegister_.registerScalar("useCrossCameraMeasurements",useCrossCameraMeasurements_);
     boolRegister_.registerScalar("doStereoInitialization",doStereoInitialization_);
     boolRegister_.registerScalar("addGlobalBest",addGlobalBest_);
+    boolRegister_.registerScalar("histogramEqualize",histogramEqualize_);
     boolRegister_.registerScalar("useIntensityOffsetForAlignment",alignment_.useIntensityOffset_);
     boolRegister_.registerScalar("useIntensitySqewForAlignment",alignment_.useIntensitySqew_);
     doubleRegister_.removeScalarByVar(updnoiP_(0,0));
@@ -999,7 +1007,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         if(verbose_) std::cout << "== Detected " << candidates_[camID].size() << " candidates in Camera" << camID << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
 
         // visualization of detected candidates
-        if(doFrameVisualisation_){
+        if(doFrameVisualisation_ && showCandidates_){
           for(int i=0;i<candidates_[camID].size();i++){
             candidates_[camID][i].drawPoint(filterState.img_[camID], cv::Scalar(255,0,0));
           }

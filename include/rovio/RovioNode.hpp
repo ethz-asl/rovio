@@ -128,9 +128,6 @@ class RovioNode{
   bool forceMarkersPublishing_;
   bool forcePatchPublishing_;
   bool gotFirstMessages_;
-  
-  bool histogram_equalize_ = true;
-  bool healthCheck_ = false;
 
   std::mutex m_filter_;
 
@@ -554,7 +551,7 @@ class RovioNode{
     cv_ptr->image.copyTo(cv_img);
 
     // Histogram equalization
-    if(histogram_equalize_){
+    if(mpImgUpdate_->histogramEqualize_){
       constexpr size_t hist_bins = 256;
       cv::Mat hist;
       std::vector<cv::Mat> img_vec = {cv_img};
@@ -1082,7 +1079,7 @@ class RovioNode{
         }
         gotFirstMessages_ = true;
 
-        if (healthCheck_) {
+        if(mpImgUpdate_->healthCheck_){
           if(healthMonitor_.shouldResetEstimator(featureDistanceCov, imuOutput_)) {
             if(!init_state_.isInitialized()) {
               std::cout << "Reinitioalization already triggered. Ignoring request...";
