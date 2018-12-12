@@ -5,6 +5,7 @@ Common
 	doVECalibration false;		Should the camera-IMU extrinsics be calibrated online
 	depthType 1;				Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
 	verbose true;				Is the verbose active
+    healthCheck true;
 }
 Camera0
 {
@@ -110,6 +111,7 @@ ImgUpdate
 	maxNumIteration 20;
     doPatchWarping true;										Should the patches be warped
     doFrameVisualisation true;									Should the frames be visualized
+    showCandidates false;                                        Should the possible feature candidates be displayed
     visualizePatches false;										Should the patches be visualized
     useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
     startLevel 2;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
@@ -153,7 +155,6 @@ ImgUpdate
     maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
     useCrossCameraMeasurements false;							Should cross measurements between frame be used. Might be turned of in calibration phase.
     doStereoInitialization false;								Should a stereo match be used for feature initialization.
-    addGlobalBest true;                                         Should the best features of all cameras be added (true) or the best of each camera (false)
     noiseGainForOffCamera 10.0;									Factor added on update noise if not main camera
     discriminativeSamplingDistance 0.02;						Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).
     discriminativeSamplingGain 1.1;								Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).
@@ -176,6 +177,9 @@ ImgUpdate
         minNoMotionTime 1.0;									Min duration of no-motion
         isEnabled 0;											Should zero velocity update be applied, only works if MotionDetection.isEnabled is true
     }
+
+    addGlobalBest true;                                         Should the best features of all cameras be added (true) or the best of each camera (false)
+    histogramEqualize true;
 }
 Prediction
 {

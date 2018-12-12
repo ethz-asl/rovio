@@ -496,11 +496,7 @@ class FeatureSetManager{
       }
     }
 
-    
-
-
-    // Check Buckets for overall best features
-
+    //// Check Buckets for overall best features
     // Incrementally add features and update candidate buckets (Check distance of candidates with respect to the newly inserted feature).
     int addedCount = 0;
     std::vector< std::vector<int> > nfCandidates(2, std::vector<int>(nCam));
