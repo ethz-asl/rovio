@@ -4,14 +4,14 @@
 
     <arg name="camera0_config"    default="$(find rovio)/cfg/domi_cam0.yaml"/>    
     <arg name="camera1_config"    default="$(find rovio)/cfg/domi_cam4.yaml"/>
-    <arg name="camera2_config"    default="$(find rovio)/cfg/domi_cam2.yaml"/>
-    <arg name="camera3_config"    default="$(find rovio)/cfg/domi_cam1.yaml"/>
+    <arg name="camera2_config"    default="$(find rovio)/cfg/domi_cam1.yaml"/>
+    <arg name="camera3_config"    default="$(find rovio)/cfg/domi_cam2.yaml"/>
     <arg name="camera4_config"    default="$(find rovio)/cfg/domi_cam3.yaml"/>
 
     <arg name="topic_cam0"        default="/uvc_camera/cam_0/image_raw"/>
     <arg name="topic_cam1"        default="/uvc_camera/cam_4/image_raw"/>
-    <arg name="topic_cam2"        default="/uvc_camera/cam_2/image_raw"/>
-    <arg name="topic_cam3"        default="/uvc_camera/cam_1/image_raw"/>
+    <arg name="topic_cam2"        default="/uvc_camera/cam_1/image_raw"/>
+    <arg name="topic_cam3"        default="/uvc_camera/cam_2/image_raw"/>
     <arg name="topic_cam4"        default="/uvc_camera/cam_3/image_raw"/>
     
     <arg name="topic_imu"         default="/uvc_camera/adis_imu"/>
