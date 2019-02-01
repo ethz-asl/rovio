@@ -1,0 +1,234 @@
+Common
+{
+    doVECalibration true
+    verbose false
+    depthType 1
+}
+PoseUpdate
+{
+    doVisualization true
+}
+Init
+{
+    Covariance
+    {
+        pos_0 1
+        pos_1 1
+        pos_2 1
+        vel_0 1
+        vel_1 1
+        vel_2 1
+        acb_0 1
+        acb_1 1
+        acb_2 1
+        gyb_0 1
+        gyb_1 1
+        gyb_2 1
+        att_0 1
+        att_1 1
+        att_2 1
+        vep 1
+        vea 1
+    }
+    State
+    {
+        att_x 0
+        att_y 0
+        att_z 0
+        att_w 1
+        gyb_0 0
+        gyb_1 0
+        gyb_2 0
+        acb_0 0
+        acb_1 0
+        acb_2 0
+        vel_0 0
+        vel_1 0
+        vel_2 0
+        pos_0 0
+        pos_1 0
+        pos_2 0
+    }
+}
+Camera0
+{
+    qCM_x 0
+    qCM_y 0
+    qCM_z 0
+    qCM_w 1
+    MrMC_x 0
+    MrMC_y 0
+    MrMC_z 0
+    CalibrationFile ""
+}
+Camera1
+{
+    qCM_x 0
+    qCM_y 0
+    qCM_z 0
+    qCM_w 1
+    MrMC_x 0
+    MrMC_y 0
+    MrMC_z 0
+    CalibrationFile ""
+}
+Camera2
+{
+    qCM_x 0
+    qCM_y 0
+    qCM_z 0
+    qCM_w 1
+    MrMC_x 0
+    MrMC_y 0
+    MrMC_z 0
+    CalibrationFile ""
+}
+VelocityUpdate
+{
+    UpdateNoise
+    {
+        vel_0 0.0001
+        vel_1 0.0001
+        vel_2 0.0001
+    }
+    MahalanobisTh0 7.689997599999999
+    qAM_x 0
+    qAM_y 0
+    qAM_z 0
+    qAM_w 1
+}
+PoseUpdate
+{
+    enablePosition true
+    enableAttitude true
+    noFeedbackToRovio true
+    doInertialAlignmentAtStart true
+    useOdometryCov false
+    UpdateNoise
+    {
+        pos_0 0
+        pos_1 0
+        pos_2 0
+        att_0 0
+        att_1 0
+        att_2 0
+    }
+    MahalanobisTh0 12.6511204
+    qVM_x 0
+    qVM_y 0
+    qVM_z 0
+    qVM_w 1
+    MrMV_x 0
+    MrMV_y 0
+    MrMV_z 0
+    qWI_x 0
+    qWI_y 0
+    qWI_z 0
+    qWI_w 1
+    IrIW_x 0
+    IrIW_y 0
+    IrIW_z 0
+    timeOffset 0
+}
+ImgUpdate
+{
+    doPatchWarping false
+    MotionDetection
+    {
+        isEnabled false
+        minFeatureCountForNoMotionDetection 5
+        rateOfMovingFeaturesTh 0.5
+        pixelCoordinateMotionTh 1
+    }
+    useDirectMethod true
+    doFrameVisualisation true
+    visualizePatches false
+    removeNegativeFeatureAfterUpdate true
+    useCrossCameraMeasurements true
+    doStereoInitialization true
+    useIntensityOffsetForAlignment true
+    useIntensitySqewForAlignment true
+    statLocalQualityRange 10
+    statLocalVisibilityRange 100
+    statMinGlobalQualityRange 100
+    maxNumIteration 10
+    startLevel 3
+    endLevel 1
+    nDetectionBuckets 100
+    fastDetectionThreshold 10
+    alignMaxUniSample 5
+    updateVecNormTermination 9.9999999999999995e-07
+    MahalanobisTh 5.8858356000000001
+    initCovFeature_0 1
+    initCovFeature_1 1
+    initCovFeature_2 1
+    initDepth 0.5
+    startDetectionTh 0.90000000000000002
+    scoreDetectionExponent 0.5
+    penaltyDistance 20
+    zeroDistancePenalty 100
+    trackingUpperBound 0.90000000000000002
+    trackingLowerBound 0.10000000000000001
+    minTrackedAndFreeFeatures 0.5
+    minRelativeSTScore 0.20000000000000001
+    minAbsoluteSTScore 0.20000000000000001
+    minTimeBetweenPatchUpdate 1
+    removalFactor 1.1000000000000001
+    patchRejectionTh 10
+    maxUncertaintyToDepthRatioForDepthInitialization 0.29999999999999999
+    UpdateNoise
+    {
+        pix 2
+        int 10000
+    }
+    noiseGainForOffCamera 4
+    alignConvergencePixelRange 1
+    alignCoverageRatio 2
+    alignmentHuberNormThreshold 0
+    alignmentGaussianWeightingSigma 2
+    alignmentGradientExponent 0
+    discriminativeSamplingDistance 0
+    discriminativeSamplingGain 0
+    ZeroVelocityUpdate
+    {
+        isEnabled false
+        UpdateNoise
+        {
+            vel_0 0.0001
+            vel_1 0.0001
+            vel_2 0.0001
+        }
+        minNoMotionTime 1
+        MahalanobisTh0 7.689997599999999
+    }
+}
+Prediction
+{
+    PredictionNoise
+    {
+        pos_0 0.0001
+        pos_1 0.0001
+        pos_2 0.0001
+        vel_0 0.0001
+        vel_1 0.0001
+        vel_2 0.0001
+        acb_0 0.0001
+        acb_1 0.0001
+        acb_2 0.0001
+        gyb_0 0.0001
+        gyb_1 0.0001
+        gyb_2 0.0001
+        att_0 0.0001
+        att_1 0.0001
+        att_2 0.0001
+        vep 0.0001
+        vea 0.0001
+        nor 0.0001
+        dep 0.0001
+    }
+    MotionDetection
+    {
+        inertialMotionRorTh 0.10000000000000001
+        inertialMotionAccTh 0.10000000000000001
+    }
+}
