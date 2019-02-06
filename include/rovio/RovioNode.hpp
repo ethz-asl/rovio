@@ -217,7 +217,7 @@ class RovioNode{
     srvResetToPoseFilter_ = nh_.advertiseService("rovio/reset_to_pose", &RovioNode::resetToPoseServiceCallback, this);
 
     // Advertise topics
-    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
+    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/icp_pose", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPoseWithCovStamped_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/pose_with_covariance_stamped", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
@@ -241,8 +241,8 @@ class RovioNode{
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
 
     // Initialize messages
-    transformMsg_.header.frame_id = world_frame_;
-    transformMsg_.child_frame_id = imu_frame_;
+    transformMsg_.header.frame_id = "rovio_world";
+    transformMsg_.child_frame_id = "vio";
 
     T_J_W_Msg_.child_frame_id = world_frame_;
     T_J_W_Msg_.header.frame_id = map_frame_;
@@ -693,7 +693,7 @@ class RovioNode{
           tf_transform_WI.stamp_ = ros::Time(mpFilter_->safe_.t_);
           tf_transform_WI.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
           tf_transform_WI.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),-qWI.w()));
-          tb_.sendTransform(tf_transform_WI);
+//          tb_.sendTransform(tf_transform_WI);
         }
 
         // Send IMU pose.
@@ -703,7 +703,7 @@ class RovioNode{
         tf_transform_MW.stamp_ = ros::Time(mpFilter_->safe_.t_);
         tf_transform_MW.setOrigin(tf::Vector3(imuOutput_.WrWB()(0),imuOutput_.WrWB()(1),imuOutput_.WrWB()(2)));
         tf_transform_MW.setRotation(tf::Quaternion(imuOutput_.qBW().x(),imuOutput_.qBW().y(),imuOutput_.qBW().z(),-imuOutput_.qBW().w()));
-        tb_.sendTransform(tf_transform_MW);
+//        tb_.sendTransform(tf_transform_MW);
 
         // Send camera pose.
         for(int camID=0;camID<mtState::nCam_;camID++){
@@ -713,7 +713,7 @@ class RovioNode{
           tf_transform_CM.stamp_ = ros::Time(mpFilter_->safe_.t_);
           tf_transform_CM.setOrigin(tf::Vector3(state.MrMC(camID)(0),state.MrMC(camID)(1),state.MrMC(camID)(2)));
           tf_transform_CM.setRotation(tf::Quaternion(state.qCM(camID).x(),state.qCM(camID).y(),state.qCM(camID).z(),-state.qCM(camID).w()));
-          tb_.sendTransform(tf_transform_CM);
+//          tb_.sendTransform(tf_transform_CM);
         }
 
         // Publish Odometry
