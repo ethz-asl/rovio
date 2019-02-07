@@ -217,7 +217,7 @@ class RovioNode{
     srvResetToPoseFilter_ = nh_.advertiseService("rovio/reset_to_pose", &RovioNode::resetToPoseServiceCallback, this);
 
     // Advertise topics
-    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("/icp_pose", 1);
+    pubTransform_ = nh_.advertise<geometry_msgs::TransformStamped>("rovio/transform", 1);
     pubOdometry_ = nh_.advertise<nav_msgs::Odometry>("rovio/odometry", 1);
     pubPoseWithCovStamped_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/pose_with_covariance_stamped", 1);
     pubPcl_ = nh_.advertise<sensor_msgs::PointCloud2>("rovio/pcl", 1);
