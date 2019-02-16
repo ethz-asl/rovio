@@ -159,6 +159,9 @@ int main(int argc, char** argv){
   nh_private.param("cam0_topic_name", cam0_topic_name, cam0_topic_name);
   std::string cam1_topic_name = "/cam1/image_raw";
   nh_private.param("cam1_topic_name", cam1_topic_name, cam1_topic_name);
+  std::string gt_topic_name = rovioNode.subGroundtruth_.getTopic();
+  nh_private.param("gt_topic_name", gt_topic_name, gt_topic_name);
+
   std::string odometry_topic_name = rovioNode.pubOdometry_.getTopic();
   std::string transform_topic_name = rovioNode.pubTransform_.getTopic();
   std::string extrinsics_topic_name[mtFilter::mtState::nCam_];
@@ -173,6 +176,7 @@ int main(int argc, char** argv){
   topics.push_back(std::string(imu_topic_name));
   topics.push_back(std::string(cam0_topic_name));
   topics.push_back(std::string(cam1_topic_name));
+  topics.push_back(gt_topic_name);
   rosbag::View view(bagIn, rosbag::TopicQuery(topics));
 
 
@@ -190,6 +194,11 @@ int main(int argc, char** argv){
     if(it->getTopic() == cam1_topic_name){
       sensor_msgs::ImageConstPtr imgMsg = it->instantiate<sensor_msgs::Image>();
       if (imgMsg != NULL) rovioNode.imgCallback1(imgMsg);
+    }
+    if(it->getTopic() == gt_topic_name)
+    {
+      geometry_msgs::TransformStampedConstPtr gt_msg = it->instantiate<geometry_msgs::TransformStamped>();
+      if (gt_msg != NULL) rovioNode.groundtruthCallback(gt_msg);
     }
     ros::spinOnce();
 
