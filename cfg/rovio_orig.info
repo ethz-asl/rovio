@@ -8,14 +8,14 @@ Common
 }
 Camera0
 {
-    CalibrationFile  ;            Camera-Calibration file for intrinsics
-    qCM_x  0.498529507038;                               X-entry of IMU to Camera quaterion (Hamilton)
-    qCM_y  -0.496012173235;                               Y-entry of IMU to Camera quaterion (Hamilton)
-    qCM_z  0.511762063883;                               Z-entry of IMU to Camera quaterion (Hamilton)
-    qCM_w  0.493497562897;                               W-entry of IMU to Camera quaterion (Hamilton)
-    MrMC_x 0.000218693879012;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-    MrMC_y -0.00011610537335;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-    MrMC_z -0.000499672135095;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	CalibrationFile ;												Camera-Calibration file for intrinsics
+	qCM_x  0.00666398307551;										X-entry of IMU to Camera quaterion (Hamilton)
+	qCM_y  -0.0079168224269;										Y-entry of IMU to Camera quaterion (Hamilton)
+	qCM_z  -0.701985972528;											Z-entry of IMU to Camera quaterion (Hamilton)
+	qCM_w   0.712115587266;											W-entry of IMU to Camera quaterion (Hamilton)
+	MrMC_x -0.0111674199187;											X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y -0.0574640920022;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z 0.0207586947896;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 Camera1
 {
@@ -146,33 +146,31 @@ Prediction
 {
     PredictionNoise
     {
-        pos_0 1e-4;               X-covariance parameter of position prediction [m^2/s]
-        pos_1 1e-4;               Y-covariance parameter of position prediction [m^2/s]
-        pos_2 1e-4;               Z-covariance parameter of position prediction [m^2/s]
-        vel_0 4e-5; 4e-6          X-covariance parameter of velocity prediction [m^2/s^3]
-        vel_1 4e-5;               Y-covariance parameter of velocity prediction [m^2/s^3]
-        vel_2 4e-5;               Z-covariance parameter of velocity prediction [m^2/s^3]
-        acb_0 9e-6;               X-covariance parameter of accelerometer bias prediction [m^2/s^5]
-        acb_1 9e-6;               Y-covariance parameter of accelerometer bias prediction [m^2/s^5]
-        acb_2 9e-6;               Z-covariance parameter of accelerometer bias prediction [m^2/s^5]
-        gyb_0 2e-8;             X-covariance parameter of gyroscope bias prediction [rad^2/s^3]
-        gyb_1 2e-8;             Y-covariance parameter of gyroscope bias prediction [rad^2/s^3]
-        gyb_2 2e-8;             Z-covariance parameter of gyroscope bias prediction [rad^2/s^3]
-        vep 1e-6;                   Covariance parameter of linear extrinsics prediction [m^2/s]
-        att_0 7.6e-6; 7.6e-7      X-Covariance parameter of attitude prediction [rad^2/s]
-        att_1 7.6e-6;             Y-Covariance parameter of attitude prediction [rad^2/s]
-        att_2 7.6e-6;             Z-Covariance parameter of attitude prediction [rad^2/s]
-        vea 1e-6;                   Covariance parameter of rotational extrinsics prediction [rad^2/s]
-        dep 0.0001;                 Covariance parameter of distance prediction [m^2/s]
-        nor 0.00001;                Covariance parameter of bearing vector prediction [rad^2/s]
-
-        
+        pos_0 1e-4;								X-covariance parameter of position prediction [m^2/s]
+        pos_1 1e-4;								Y-covariance parameter of position prediction [m^2/s]
+        pos_2 1e-4;								Z-covariance parameter of position prediction [m^2/s]
+        vel_0 4e-6;								X-covariance parameter of velocity prediction [m^2/s^3]
+        vel_1 4e-6;								Y-covariance parameter of velocity prediction [m^2/s^3]
+        vel_2 4e-6;								Z-covariance parameter of velocity prediction [m^2/s^3]
+        acb_0 1e-8;								X-covariance parameter of accelerometer bias prediction [m^2/s^5]
+        acb_1 1e-8;								Y-covariance parameter of accelerometer bias prediction [m^2/s^5]
+        acb_2 1e-8;								Z-covariance parameter of accelerometer bias prediction [m^2/s^5]
+        gyb_0 3.8e-7;							X-covariance parameter of gyroscope bias prediction [rad^2/s^3]
+        gyb_1 3.8e-7;							Y-covariance parameter of gyroscope bias prediction [rad^2/s^3]
+        gyb_2 3.8e-7;							Z-covariance parameter of gyroscope bias prediction [rad^2/s^3]
+        vep 1e-8;								Covariance parameter of linear extrinsics prediction [m^2/s]
+        att_0 7.6e-7;							X-Covariance parameter of attitude prediction [rad^2/s]
+        att_1 7.6e-7;							Y-Covariance parameter of attitude prediction [rad^2/s]
+        att_2 7.6e-7;							Z-Covariance parameter of attitude prediction [rad^2/s]
+        vea 1e-8;								Covariance parameter of rotational extrinsics prediction [rad^2/s]
+        dep 0.0001;							Covariance parameter of distance prediction [m^2/s]
+        nor 0.00001;								Covariance parameter of bearing vector prediction [rad^2/s]
     }
     MotionDetection
     {
-      inertialMotionRorTh 0.1;        Treshold on rotational rate for motion detection [rad/s]
-      inertialMotionAccTh 0.5;        Treshold on acceleration for motion detection [m/s^2]
-  }
+	    inertialMotionRorTh 0.1;				Treshold on rotational rate for motion detection [rad/s]
+	    inertialMotionAccTh 0.5;				Treshold on acceleration for motion detection [m/s^2]
+	}
 }
 PoseUpdate
 {
@@ -204,14 +202,14 @@ PoseUpdate
     qVM_x 0;									X-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
     qVM_y 0;									Y-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
     qVM_z 0;									Z-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
-    qVM_w -1;									W-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
+    qVM_w 1;									W-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
     MrMV_x 0;									X-entry of vector representing IMU to reference body coordinate frame of pose measurement
     MrMV_y 0;									Y-entry of vector representing IMU to reference body coordinate frame of pose measurement
     MrMV_z 0;									Z-entry of vector representing IMU to reference body coordinate frame of pose measurement
     qWI_x 0;									X-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (Hamilton)
     qWI_y 0;									Y-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (Hamilton)
     qWI_z 0;									Z-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (Hamilton)
-    qWI_w -1;									W-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (Hamilton)
+    qWI_w 1;									W-entry of quaterion representing World to reference inertial coordinate frame of pose measurement (Hamilton)
     IrIW_x 0;									X-entry of vector representing World to reference inertial coordinate frame of pose measurement
     IrIW_y 0;									Y-entry of vector representing World to reference inertial coordinate frame of pose measurement
     IrIW_z 0;									Z-entry of vector representing World to reference inertial coordinate frame of pose measurement

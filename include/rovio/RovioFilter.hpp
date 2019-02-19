@@ -165,6 +165,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     std::get<0>(mUpdates_).outlierDetection_.setEnabledAll(true);
     std::get<1>(mUpdates_).outlierDetection_.setEnabledAll(true);
     boolRegister_.registerScalar("Common.verbose",std::get<0>(mUpdates_).verbose_);
+    boolRegister_.registerScalar("Common.healthCheck",std::get<0>(mUpdates_).healthCheck_);
     mPrediction_.doubleRegister_.removeScalarByStr("alpha");
     mPrediction_.doubleRegister_.removeScalarByStr("beta");
     mPrediction_.doubleRegister_.removeScalarByStr("kappa");

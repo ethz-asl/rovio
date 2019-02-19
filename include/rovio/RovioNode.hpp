@@ -33,6 +33,8 @@
 #include <mutex>
 #include <queue>
 
+#include <boost/bind.hpp>
+
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
@@ -50,6 +52,7 @@
 
 #include <rovio/SrvResetToPose.h>
 #include "rovio/RovioFilter.hpp"
+#include "rovio/HealthMonitor.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
@@ -83,6 +86,8 @@ class RovioNode{
   typedef typename std::tuple_element<2,typename mtFilter::mtUpdates>::type mtVelocityUpdate;
   typedef typename mtVelocityUpdate::mtMeas mtVelocityMeas;
   mtVelocityMeas velocityUpdateMeas_;
+
+  RovioHealthMonitor healthMonitor_;
 
   struct FilterInitializationState {
     FilterInitializationState()
@@ -123,6 +128,7 @@ class RovioNode{
   bool forceMarkersPublishing_;
   bool forcePatchPublishing_;
   bool gotFirstMessages_;
+
   std::mutex m_filter_;
 
   // Nodes, Subscriber, Publishers
@@ -131,6 +137,9 @@ class RovioNode{
   ros::Subscriber subImu_;
   ros::Subscriber subImg0_;
   ros::Subscriber subImg1_;
+  ros::Subscriber subImg2_;
+  ros::Subscriber subImg3_;
+  ros::Subscriber subImg4_;
   ros::Subscriber subGroundtruth_;
   ros::Subscriber subGroundtruthOdometry_;
   ros::Subscriber subVelocity_;
@@ -206,8 +215,12 @@ class RovioNode{
 
     // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
+    // subImg0_ = nh_.subscribe("cam0/image_raw", 1000, std::bind(&RovioNode::imgCallback, std::placeholders::_1, 0),this);
     subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
     subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
+    subImg2_ = nh_.subscribe("cam2/image_raw", 1000, &RovioNode::imgCallback2,this);
+    subImg3_ = nh_.subscribe("cam3/image_raw", 1000, &RovioNode::imgCallback3,this);
+    subImg4_ = nh_.subscribe("cam4/image_raw", 1000, &RovioNode::imgCallback4,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
     subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);
@@ -490,6 +503,36 @@ class RovioNode{
     if(mtState::nCam_ > 1) imgCallback(img,1);
   }
 
+  /** \brief Image callback for the camera with ID 2
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback2(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 2) imgCallback(img,2);
+  }
+
+    /** \brief Image callback for the camera with ID 3
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback3(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 3) imgCallback(img,3);
+  }
+
+  /** \brief Image callback for the camera with ID 4
+   *
+   * @param img - Image message.
+   * @todo generalize
+   */
+  void imgCallback4(const sensor_msgs::ImageConstPtr & img) {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(mtState::nCam_ > 4) imgCallback(img,4);
+  }
+
   /** \brief Image callback. Adds images (as update measurements) to the filter.
    *
    *   @param img   - Image message.
@@ -506,12 +549,42 @@ class RovioNode{
     }
     cv::Mat cv_img;
     cv_ptr->image.copyTo(cv_img);
+
+    // Histogram equalization
+    if(mpImgUpdate_->histogramEqualize_){
+      constexpr size_t hist_bins = 256;
+      cv::Mat hist;
+      std::vector<cv::Mat> img_vec = {cv_img};
+      cv::calcHist(img_vec, {0}, cv::Mat(), hist, {hist_bins},
+                   {0, hist_bins-1}, false);
+       cv::Mat lut(1, hist_bins, CV_8UC1);
+       double sum = 0.0;
+      //prevents an image full of noise if in total darkness
+      float max_per_bin = cv_img.cols * cv_img.rows * 0.02;
+      float min_per_bin = cv_img.cols * cv_img.rows * 0.002;
+      float total_pixels = 0;
+      for(size_t i = 0; i < hist_bins; ++i){
+        float& bin = hist.at<float>(i);
+        if(bin > max_per_bin){
+          bin = max_per_bin;
+        } else if(bin < min_per_bin){
+          bin = min_per_bin;
+        }
+        total_pixels += bin;
+      }
+      for(size_t i = 0; i < hist_bins; ++i){
+        sum += hist.at<float>(i) / total_pixels;
+        lut.at<uchar>(i) = (hist_bins-1)*sum;
+      }
+      cv::LUT(cv_img, lut, cv_img);
+    }
+
     if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
         for(int i=0;i<mtState::nCam_;i++){
           if(imgUpdateMeas_.template get<mtImgMeas::_aux>().isValidPyr_[i]){
-            std::cout << "    \033[31mFailed Synchronization of Camera Frames, t = " << msgTime << "\033[0m" << std::endl;
+            std::cout << "    \033[31mFailed Synchronization of Camera Frames, t = " << msgTime << "    " << camID << "\033[0m" << std::endl;
           }
         }
         imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
@@ -664,7 +737,7 @@ class RovioNode{
 
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
-	mtState& state = mpFilter_->safe_.state_;
+	      mtState& state = mpFilter_->safe_.state_;
         state.updateMultiCameraExtrinsics(&mpFilter_->multiCamera_);
         MXD& cov = mpFilter_->safe_.cov_;
         imuOutputCT_.transformState(state,imuOutput_);
@@ -864,6 +937,8 @@ class RovioNode{
           pubImuBias_.publish(imuBiasMsg_);
         }
 
+        std::vector<float> featureDistanceCov;
+
         // PointCloud message.
         if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
           pclMsg_.header.seq = msgSeq_;
@@ -905,6 +980,8 @@ class RovioNode{
               transformFeatureOutputCT_.transformCovMat(state,cov,featureOutputCov_);
               featureOutputReadableCT_.transformState(featureOutput_,featureOutputReadable_);
               featureOutputReadableCT_.transformCovMat(featureOutput_,featureOutputCov_,featureOutputReadableCov_);
+
+              featureDistanceCov.push_back(static_cast<float>(featureOutputReadableCov_(3, 3)));  // for health checker
 
               // Get landmark output
               landmarkOutputImuCT_.setFeatureID(i);
@@ -1001,6 +1078,19 @@ class RovioNode{
           pubPatch_.publish(patchMsg_);
         }
         gotFirstMessages_ = true;
+
+        if(mpImgUpdate_->healthCheck_){
+          if(healthMonitor_.shouldResetEstimator(featureDistanceCov, imuOutput_)) {
+            if(!init_state_.isInitialized()) {
+              std::cout << "Reinitioalization already triggered. Ignoring request...";
+              return;
+            }
+
+            init_state_.WrWM_ = healthMonitor_.failsafe_WrWB();
+            init_state_.qMW_ = healthMonitor_.failsafe_qBW();
+            init_state_.state_ = FilterInitializationState::State::WaitForInitExternalPose;
+          }
+        }
       }
     }
   }
