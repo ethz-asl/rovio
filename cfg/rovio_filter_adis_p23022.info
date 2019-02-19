@@ -5,18 +5,31 @@ Common
     doVECalibration false;                                      Should the camera-IMU extrinsics be calibrated online
     depthType 1;                                                Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
     verbose false;                                              Is the verbose active
+    healthCheck false;
 }
 
 Camera0
 {
   CalibrationFile  ;            Camera-Calibration file for intrinsics
-  qCM_x  0.000165602436682;                               X-entry of IMU to Camera quaterion (Hamilton)
-  qCM_y  0.0030265501512;                               Y-entry of IMU to Camera quaterion (Hamilton)
-  qCM_z  -0.00090135741849;                               Z-entry of IMU to Camera quaterion (Hamilton)
-  qCM_w  0.99999500005;                               W-entry of IMU to Camera quaterion (Hamilton)
-  MrMC_x 0.0320636599239;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_y -0.0057043408936;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_z 0.0219601108622;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  qCM_x  -0.0024325479254981523;                               X-entry of IMU to Camera quaterion (Hamilton)
+  qCM_y  -0.0015534298667596485;                               Y-entry of IMU to Camera quaterion (Hamilton)
+  qCM_z  -0.001362441782454438;                               Z-entry of IMU to Camera quaterion (Hamilton)
+  qCM_w  0.9999949066;                               W-entry of IMU to Camera quaterion (Hamilton)
+  MrMC_x 0.04225479;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_y -0.0094936;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_z 0.02672806;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+}
+
+Camera1
+{
+  CalibrationFile  ;            Camera-Calibration file for intrinsics
+  qCM_x  -0.002279719665582958;                               X-entry of IMU to Camera quaterion (Hamilton)
+  qCM_y  0.0012689824515849891;                               Y-entry of IMU to Camera quaterion (Hamilton)
+  qCM_z  -0.00023854798453463698;                               Z-entry of IMU to Camera quaterion (Hamilton)
+  qCM_w  0.9999965678224316;                               W-entry of IMU to Camera quaterion (Hamilton)
+  MrMC_x -0.07364152;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_y -0.00998682;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_z 0.02610333;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 
 Init
@@ -63,16 +76,17 @@ Init
 }
 ImgUpdate
 {
-  updateVecNormTermination 1e-4;
-  maxNumIteration 20;
-    doPatchWarping true;                    Should the patches be warped
-    doFrameVisualisation false;                 Should the frames be visualized
-    visualizePatches false;                   Should the patches be visualized
-    useDirectMethod true;                   Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
-    startLevel 2;                       Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
-    endLevel 1;                         Lowest patch level which is being employed
-    nDetectionBuckets 100;                    Number of discretization buckets used during the candidates selection
-    MahalanobisTh 9.21;                     Mahalanobis treshold for the update, 5.8858356
+	updateVecNormTermination 1e-4;
+	maxNumIteration 20;
+    doPatchWarping true;										Should the patches be warped
+    doFrameVisualisation true;									Should the frames be visualized
+    showCandidates false;                                       Should the possible feature candidates be displayed
+    visualizePatches false;										Should the patches be visualized
+    useDirectMethod true;										Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
+    startLevel 2;												Highest patch level which is being employed (must be smaller than the hardcoded template parameter)
+    endLevel 1;													Lowest patch level which is being employed
+    nDetectionBuckets 100;										Number of discretization buckets used during the candidates selection
+    MahalanobisTh 9.21;											Mahalanobis treshold for the update, 5.8858356
     UpdateNoise
     {
         pix 2;                          Covariance used for the reprojection error, 1/focal_length is roughly 1 pixel std [rad] (~1/f ~ 1/400^2 = 1/160000)
@@ -82,8 +96,8 @@ ImgUpdate
     initCovFeature_1 1e-5;                                      Covariance for the initial bearing vector, x-component [rad^2]
     initCovFeature_2 1e-5;                                      Covariance for the initial bearing vector, y-component [rad^2]
     initDepth 0.5;                                              Initial value for the initial distance parameter
-    startDetectionTh 0.99;                                       Threshold for detecting new features (min: 0, max: 1)
-    scoreDetectionExponent 0.75;                                Exponent used for weighting the distance between candidates
+    startDetectionTh 0.8;										Threshold for detecting new features (min: 0, max: 1)
+    scoreDetectionExponent 0.25;								Exponent used for weighting the distance between candidates
     penaltyDistance 100;                                        Maximal distance which gets penalized during bucketing [pix]
     zeroDistancePenalty 100;                                    Penalty for zero distance (max: nDetectionBuckets)
     statLocalQualityRange 10;                                   Number of frames for local quality evaluation
@@ -100,7 +114,8 @@ ImgUpdate
     fastDetectionThreshold 10;                                   Fast corner detector treshold while adding new feature
     alignConvergencePixelRange 10;                              Assumed convergence range for image alignment (gets scaled with the level) [pixels]
     alignCoverageRatio 2;                                       How many sigma of the uncertainty should be covered in the adaptive alignement
-    alignMaxUniSample 1;                                        Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
+    alignMaxUniSample 1;										Maximal number of alignment seeds on one side -> total number of sample = 2n+1. Carefull can get very costly if diverging!
+    patchRejectionTh 50.0;										If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
     patchRejectionTh 20.0;                                      If the average itensity error is larger than this the feauture is rejected [intensity], if smaller 0 the no check is performed
     alignmentHuberNormThreshold 10;                             Intensity error threshold for Huber norm (enabled if > 0)
     alignmentGaussianWeightingSigma -1;                         Width of Gaussian which is used for pixel error weighting (enabled if > 0)
@@ -108,15 +123,16 @@ ImgUpdate
     useIntensityOffsetForAlignment true;                        Should an intensity offset between the patches be considered
     useIntensitySqewForAlignment true;                          Should an intensity sqew between the patches be considered
     removeNegativeFeatureAfterUpdate true;                      Should feature with negative distance get removed
-    maxUncertaintyToDepthRatioForDepthInitialization 0.3;       If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
-    useCrossCameraMeasurements true;                            Should cross measurements between frame be used. Might be turned of in calibration phase.
+    maxUncertaintyToDepthRatioForDepthInitialization 0.3;		If set to 0.0 the depth is initialized with the standard value provided above, otherwise ROVIO attempts to figure out a median depth in each frame
+    useCrossCameraMeasurements false;							Should cross measurements between frame be used. Might be turned of in calibration phase.
+    doStereoInitialization false;								Should a stereo match be used for feature initialization.
     doStereoInitialization true;                                Should a stereo match be used for feature initialization.
     noiseGainForOffCamera 10.0;                                 Factor added on update noise if not main camera
     discriminativeSamplingDistance 0.02;                        Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).
     discriminativeSamplingGain 1.1;                             Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).
     MotionDetection
     {
-      isEnabled 1;                      Is the motion detection enabled
+    	isEnabled 0;											Is the motion detection enabled
       rateOfMovingFeaturesTh 0.5;               Amount of feature with motion for overall motion detection
       pixelCoordinateMotionTh 1.0;              Threshold for motion detection for patched [pixels]
       minFeatureCountForNoMotionDetection 5;          Min feature count in frame for motion detection
@@ -131,8 +147,11 @@ ImgUpdate
         }
         MahalanobisTh0 7.689997599999999;           Mahalanobid distance for zero velocity updates
         minNoMotionTime 1.0;                  Min duration of no-motion
-        isEnabled 1;                      Should zero velocity update be applied, only works if MotionDetection.isEnabled is true
+        isEnabled 0;											Should zero velocity update be applied, only works if MotionDetection.isEnabled is true
     }
+
+    addGlobalBest true;                                         Should the best features of all cameras be added (true) or the best of each camera (false)
+    histogramEqualize true;
 }
 Prediction
 {
@@ -188,7 +207,7 @@ PoseUpdate
     enablePosition true;                        Should the linear part be used during the update
     enableAttitude false;                        Should the rotation part be used during the update (e.g. set to fals eif feeding GPS-measurement)
     noFeedbackToRovio false;                     By default the pose update is only used for aligning coordinate frame. Set to false if ROVIO should benefit frome the posed measurements.
-    doInertialAlignmentAtStart false;            Should the transformation between I and W be explicitly computed and set with the first pose measurement.
+  	doInertialAlignmentAtStart true;			Should the transformation between I and W be explicitly computed and set with the first pose measurement.
     timeOffset 0.0;                             Time offset added to the pose measurement timestamps
     useOdometryCov false;                    Should the UpdateNoise position covariance be scaled using the covariance in the Odometry message
     qVM_x -0.5888409;                                    X-entry of quaterion representing IMU to reference body coordinate frame of pose measurement (Hamilton)
