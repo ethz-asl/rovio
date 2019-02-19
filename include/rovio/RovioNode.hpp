@@ -341,6 +341,14 @@ class RovioNode{
     markerMsg_.color.r = 0.0;
     markerMsg_.color.g = 1.0;
     markerMsg_.color.b = 0.0;
+
+    // HealthChecker config
+    healthMonitor_ = RovioHealthMonitor(mpImgUpdate_->hmVelocityToConsiderStatic,
+                                        mpImgUpdate_->hmMaxSubsequentUnhealthyUpdates,
+                                        mpImgUpdate_->hmHealthyFeatureDistanceCov,
+                                        mpImgUpdate_->hmHealthyFeatureDistanceCovIncrement,
+                                        mpImgUpdate_->hmUnhealthyFeatureDistanceCov,
+                                        mpImgUpdate_->hmUnhealthyVelocity);
   }
 
   /** \brief Destructor

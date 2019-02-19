@@ -14,8 +14,25 @@ class RovioHealthMonitor {
  public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    RovioHealthMonitor() : num_subsequent_unhealthy_updates_(0) {}
+    explicit RovioHealthMonitor() : num_subsequent_unhealthy_updates_(0),
+                           kVelocityToConsiderStatic(0.1f),
+                           kMaxSubsequentUnhealthyUpdates(1),
+                           kHealthyFeatureDistanceCov(0.5),
+                           kHealthyFeatureDistanceCovIncrement(0.3),
+                           kUnhealthyFeatureDistanceCov(1),
+                           kUnhealthyVelocity(5) {}
 
+    RovioHealthMonitor(double velocityToConsiderStatic, int maxSubsequentUnhealthyUpdates, double healthyFeatureDistanceCovariance,
+        double healthyFeatureDistanceCovarianceIncrement, double unhealthyFeatureDistanceCovariance, double unhealthyVelocity) :
+        kVelocityToConsiderStatic(static_cast<float>(velocityToConsiderStatic)),
+        kMaxSubsequentUnhealthyUpdates(maxSubsequentUnhealthyUpdates),
+        kHealthyFeatureDistanceCov(static_cast<float>(healthyFeatureDistanceCovariance)),
+        kHealthyFeatureDistanceCovIncrement(static_cast<float>(healthyFeatureDistanceCovarianceIncrement)),
+        kUnhealthyFeatureDistanceCov(static_cast<float>(unhealthyFeatureDistanceCovariance)),
+        kUnhealthyVelocity(static_cast<float>(unhealthyVelocity))
+    {
+
+    }
     // Returns true if healthy; false if unhealthy and reset was triggered.
     bool shouldResetEstimator(const std::vector<float>& distance_covs_in, const StandardOutput& imu_output) {
         float feature_distance_covariance_median = 0;
@@ -35,15 +52,16 @@ class RovioHealthMonitor {
                 << num_subsequent_unhealthy_updates_ << "/"
                 << kMaxSubsequentUnhealthyUpdates << ". Might reset soon.";
             if (num_subsequent_unhealthy_updates_ > kMaxSubsequentUnhealthyUpdates) {
-                std::cout << "Will reset ROVIOLI. Velocity norm: " << BvB_norm
+                std::cout << "Suggest a reset of ROVIO. Velocity norm: " << BvB_norm
                   << " (limit: " << kUnhealthyVelocity
                   << "), median of feature distance covariances: "
                   << feature_distance_covariance_median
                   << " (limit: " << kUnhealthyFeatureDistanceCov << ").";
-                return true;
+                return false;
             }
         } else {
             if (feature_distance_covariance_median < kHealthyFeatureDistanceCov) {
+                // mark this as the last safe pose
                 if (std::abs(feature_distance_covariance_median -
                   last_safe_pose_.feature_distance_covariance_median) <
                   kHealthyFeatureDistanceCovIncrement) {
@@ -78,12 +96,12 @@ class RovioHealthMonitor {
     int num_subsequent_unhealthy_updates_;
 
     // The landmark covariance is not a good measure for divergence if we are static.
-    static constexpr float kVelocityToConsiderStatic = 0.1f;
-    static constexpr int kMaxSubsequentUnhealthyUpdates = 1;
-    static constexpr float kHealthyFeatureDistanceCov = 0.5f;
-    static constexpr float kHealthyFeatureDistanceCovIncrement = 0.3f;
-    static constexpr float kUnhealthyFeatureDistanceCov = 1.0f;
-    static constexpr float kUnhealthyVelocity = 5.0f;
+    float kVelocityToConsiderStatic;
+    int kMaxSubsequentUnhealthyUpdates;
+    float kHealthyFeatureDistanceCov;
+    float kHealthyFeatureDistanceCovIncrement;
+    float kUnhealthyFeatureDistanceCov;
+    float kUnhealthyVelocity;
 };
 
 }  // namespace rovio

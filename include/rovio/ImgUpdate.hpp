@@ -233,7 +233,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double alignmentGradientExponent_; /**<Exponent used for gradient based weighting of residuals.*/
   double discriminativeSamplingDistance_; /**<Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).*/
   double discriminativeSamplingGain_; /**<Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).*/
-
+  double hmVelocityToConsiderStatic;
+  int hmMaxSubsequentUnhealthyUpdates;
+  double hmHealthyFeatureDistanceCov;
+  double hmHealthyFeatureDistanceCovIncrement;
+  double hmUnhealthyFeatureDistanceCov;
+  double hmUnhealthyVelocity;
 
   // Temporary
   mutable PixelOutputCT pixelOutputCT_;
@@ -318,6 +323,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     alignmentGaussianWeightingSigma_ = 2.0;
     discriminativeSamplingDistance_ = 0.0;
     discriminativeSamplingGain_ = 0.0;
+    hmVelocityToConsiderStatic = 0.1;
+    hmMaxSubsequentUnhealthyUpdates = 1;
+    hmHealthyFeatureDistanceCov = 0.5;
+    hmHealthyFeatureDistanceCovIncrement = 0.3;
+    hmUnhealthyFeatureDistanceCov = 1;
+    hmUnhealthyVelocity = 5;
     doubleRegister_.registerDiagonalMatrix("initCovFeature",initCovFeature_);
     doubleRegister_.registerScalar("initDepth",initDepth_);
     doubleRegister_.registerScalar("startDetectionTh",startDetectionTh_);
@@ -339,6 +350,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("removalFactor",removalFactor_);
     doubleRegister_.registerScalar("discriminativeSamplingDistance",discriminativeSamplingDistance_);
     doubleRegister_.registerScalar("discriminativeSamplingGain",discriminativeSamplingGain_);
+    doubleRegister_.registerScalar("hmVelocityToConsiderStatic",hmVelocityToConsiderStatic);
+    doubleRegister_.registerScalar("hmHealthyFeatureDistanceCov",hmHealthyFeatureDistanceCov);
+    doubleRegister_.registerScalar("hmHealthyFeatureDistanceCovIncrement",hmHealthyFeatureDistanceCovIncrement);
+    doubleRegister_.registerScalar("hmUnhealthyFeatureDistanceCov",hmUnhealthyFeatureDistanceCov);
+    doubleRegister_.registerScalar("hmUnhealthyVelocity",hmUnhealthyVelocity);
+    intRegister_.registerScalar("hmMaxSubsequentUnhealthyUpdates",hmMaxSubsequentUnhealthyUpdates);
     intRegister_.registerScalar("fastDetectionThreshold",fastDetectionThreshold_);
     intRegister_.registerScalar("startLevel",startLevel_);
     intRegister_.registerScalar("endLevel",endLevel_);

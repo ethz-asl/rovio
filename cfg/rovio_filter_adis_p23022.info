@@ -5,7 +5,7 @@ Common
     doVECalibration false;                                      Should the camera-IMU extrinsics be calibrated online
     depthType 1;                                                Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
     verbose false;                                              Is the verbose active
-    healthCheck false;
+    healthCheck true;
 }
 
 Camera0
@@ -152,6 +152,12 @@ ImgUpdate
 
     addGlobalBest true;                                         Should the best features of all cameras be added (true) or the best of each camera (false)
     histogramEqualize true;
+    hmVelocityToConsiderStatic 0.1;
+    hmMaxSubsequentUnhealthyUpdates 1;
+    hmHealthyFeatureDistanceCov 0.5;
+    hmHealthyFeatureDistanceCovIncrement 0.3;
+    hmUnhealthyFeatureDistanceCov 1;
+    hmUnhealthyVelocity 5;
 }
 Prediction
 {
