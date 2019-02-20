@@ -63,10 +63,16 @@ class ImageMask {
     }
     // Ugly or nice -- up to you. Write a lambda that looks up each feature in
     // the mask to decide if it should be erased.
+    // Values above 0 are kept, all values with 0 are erased from the feature
+    // vector like they never existed.
     feature_vec->erase(
         std::remove_if(feature_vec->begin(), feature_vec->end(),
-                       [](const FeatureCoordinates& feature_coord) {
-                         return false;
+                       [this](const FeatureCoordinates& feature_coord) -> bool {
+                         uint8_t mask_val = mask_.at<uint8_t>(feature_coord.c_);
+                         if (mask_val > 0) {
+                           return false;
+                         }
+                         return true;
                        }),
         feature_vec->end());
   }
