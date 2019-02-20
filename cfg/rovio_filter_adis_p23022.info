@@ -154,9 +154,9 @@ ImgUpdate
     histogramEqualize true;
     hmVelocityToConsiderStatic 0.1;
     hmMaxSubsequentUnhealthyUpdates 1;
-    hmHealthyFeatureDistanceCov 0.5;
+    hmHealthyFeatureDistanceCov 1.5;
     hmHealthyFeatureDistanceCovIncrement 0.3;
-    hmUnhealthyFeatureDistanceCov 1;
+    hmUnhealthyFeatureDistanceCov 3;
     hmUnhealthyVelocity 5;
 }
 Prediction

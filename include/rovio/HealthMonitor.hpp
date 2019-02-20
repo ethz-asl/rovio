@@ -33,7 +33,7 @@ class RovioHealthMonitor {
     {
 
     }
-    // Returns true if healthy; false if unhealthy and reset was triggered.
+    // Returns false if healthy; true if unhealthy and reset should be triggered.
     bool shouldResetEstimator(const std::vector<float>& distance_covs_in, const StandardOutput& imu_output) {
         float feature_distance_covariance_median = 0;
         std::vector<float> distance_covs = distance_covs_in;
@@ -48,15 +48,15 @@ class RovioHealthMonitor {
         if ((BvB_norm > kVelocityToConsiderStatic) && ((BvB_norm > kUnhealthyVelocity) ||
          (feature_distance_covariance_median > kUnhealthyFeatureDistanceCov))) {
             ++num_subsequent_unhealthy_updates_;
-            std::cout << "Estimator fault counter: "
+            std::cout << "\033[33m\nEstimator fault counter: "
                 << num_subsequent_unhealthy_updates_ << "/"
-                << kMaxSubsequentUnhealthyUpdates << ". Might reset soon.";
+                << kMaxSubsequentUnhealthyUpdates << ".\n\033[0m";
             if (num_subsequent_unhealthy_updates_ > kMaxSubsequentUnhealthyUpdates) {
-                std::cout << "Suggest a reset of ROVIO. Velocity norm: " << BvB_norm
+                std::cout << "\033[33m\nSuggest a reset of ROVIO. Velocity norm: " << BvB_norm
                   << " (limit: " << kUnhealthyVelocity
-                  << "), median of feature distance covariances: "
+                  << "),\nmedian of feature distance covariances: "
                   << feature_distance_covariance_median
-                  << " (limit: " << kUnhealthyFeatureDistanceCov << ").";
+                  << " (limit: " << kUnhealthyFeatureDistanceCov << ").\n\033[0m";
                 return false;
             }
         } else {
@@ -98,10 +98,10 @@ class RovioHealthMonitor {
     // The landmark covariance is not a good measure for divergence if we are static.
     float kVelocityToConsiderStatic;
     int kMaxSubsequentUnhealthyUpdates;
-    float kHealthyFeatureDistanceCov;
-    float kHealthyFeatureDistanceCovIncrement;
-    float kUnhealthyFeatureDistanceCov;
-    float kUnhealthyVelocity;
+    float kHealthyFeatureDistanceCov; // treshold below which a state can be marked as safe
+    float kHealthyFeatureDistanceCovIncrement; // max covariance median difference between states that can be considered safe
+    float kUnhealthyFeatureDistanceCov; // threshold above which the estimator is considered unsafe
+    float kUnhealthyVelocity; // threshold above which the estimator is considered unsafe
 };
 
 }  // namespace rovio

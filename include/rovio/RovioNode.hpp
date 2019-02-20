@@ -948,7 +948,7 @@ class RovioNode{
         std::vector<float> featureDistanceCov;
 
         // PointCloud message.
-        if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
+        if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_ || mpImgUpdate_->healthCheck_){
           pclMsg_.header.seq = msgSeq_;
           pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           markerMsg_.header.seq = msgSeq_;
