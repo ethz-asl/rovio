@@ -234,6 +234,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double discriminativeSamplingDistance_; /**<Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).*/
   double discriminativeSamplingGain_; /**<Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).*/
 
+  bool apply_image_mask_; /**< Whether to apply an image mask loaded from a path. */
 
   // Temporary
   mutable PixelOutputCT pixelOutputCT_;
@@ -992,8 +993,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           meas.aux().pyr_[camID].detectFastCorners(candidates_,l,fastDetectionThreshold_);
         }
 
-        bool apply_image_mask = true;
-        if (apply_image_mask) {
+        if (apply_image_mask_) {
           mask_.pruneFeatureVector(&candidates_);
         }
 
@@ -1127,6 +1127,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     cv::line(filterState.img_[camID],rollCenter-rollVector2,rollCenter-rollVector3,rollColor1, 2);
     cv::ellipse(filterState.img_[camID],rollCenter,cv::Size(10,10),0,0,180,rollColor1,2,8,0);
     cv::circle(filterState.img_[camID],rollCenter,2,rollColor1,-1,8,0);
+  }
+
+  void setImageMask(const std::string& image_path) {
+    if (mask_.loadImage(image_path)) {
+      apply_image_mask_ = true;
+    }
+  }
+
+  void clearImageMask() {
+    apply_image_mask_ = false;
   }
 };
 
