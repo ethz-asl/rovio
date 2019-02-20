@@ -39,6 +39,7 @@
 #include "rovio/CoordinateTransform/PixelOutput.hpp"
 #include "rovio/ZeroVelocityUpdate.hpp"
 #include "rovio/MultilevelPatchAlignment.hpp"
+#include "rovio/ImageMask.hpp"
 
 namespace rovio {
 
@@ -183,6 +184,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
 
   // Multicamera pointer
   MultiCamera<mtState::nCam_>* mpMultiCamera_;
+
+  // Optional image mask for removing features in masked parts of an image.
+  ImageMask mask_;
 
   // Parameter
   M3D initCovFeature_;
@@ -987,6 +991,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         for(int l=endLevel_;l<=startLevel_;l++){
           meas.aux().pyr_[camID].detectFastCorners(candidates_,l,fastDetectionThreshold_);
         }
+
+        bool apply_image_mask = true;
+        if (apply_image_mask) {
+          mask_.pruneFeatureVector(&candidates_);
+        }
+
         const double t2 = (double) cv::getTickCount();
         if(verbose_) std::cout << "== Detected " << candidates_.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
         std::unordered_set<unsigned int> newSet = filterState.fsm_.addBestCandidates(candidates_,meas.aux().pyr_[camID],camID,filterState.t_,
