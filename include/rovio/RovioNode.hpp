@@ -1043,15 +1043,24 @@ class RovioNode{
         gotFirstMessages_ = true;
 
         // Perform health check, if needed.
-        if (healthMonitor_.active()) {
+        if (healthMonitor_.enabled()) {
           // FeatureDistanceCov is only filled in if pointcloud output is active
           // by default.
           if (featureDistanceCov.empty()) {
             for (unsigned int i = 0; i < mtState::nMax_; i++) {
               if (filterState.fsm_.isValid_[i]) {
+                transformFeatureOutputCT_.setFeatureID(i);
+                transformFeatureOutputCT_.setOutputCameraID(
+                    filterState.fsm_.features_[i].mpCoordinates_->camID_);
+                transformFeatureOutputCT_.transformState(state, featureOutput_);
+                transformFeatureOutputCT_.transformCovMat(state, cov,
+                                                          featureOutputCov_);
+                featureOutputReadableCT_.transformState(featureOutput_,
+                                                        featureOutputReadable_);
                 featureOutputReadableCT_.transformCovMat(
                     featureOutput_, featureOutputCov_,
                     featureOutputReadableCov_);
+
                 featureDistanceCov.push_back(
                     static_cast<float>(featureOutputReadableCov_(3, 3)));
               }

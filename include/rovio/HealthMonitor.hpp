@@ -47,17 +47,36 @@ class RovioHealthMonitor {
                      const ros::NodeHandle& nh_private)
       : nh_(nh),
         nh_private_(nh_private),
-        active_(false),
+        enabled_(false),
         velocity_to_consider_static_(0.1),
-        max_subsequent_unhealthy_updates_(1),
+        max_subsequent_unhealthy_updates_(2),
         healthy_feature_distance_cov_(0.5),
         healthy_feature_distance_cov_increment_(0.3),
-        unhealthy_feature_distance_cov_(1.0),
-        unhealthy_velocity_(5.0),
-        num_subsequent_unhealthy_updates_(0) {}
+        unhealthy_feature_distance_cov_(10.0),
+        unhealthy_velocity_(6.0),
+        num_subsequent_unhealthy_updates_(0) {
+    nh_private_.param("health_monitor_enabled", enabled_, enabled_);
+    nh_private_.param("velocity_to_consider_static",
+                      velocity_to_consider_static_,
+                      velocity_to_consider_static_);
+    nh_private_.param("max_subsequent_unhealthy_updates",
+                      max_subsequent_unhealthy_updates_,
+                      max_subsequent_unhealthy_updates_);
+    nh_private_.param("healthy_feature_distance_cov",
+                      healthy_feature_distance_cov_,
+                      healthy_feature_distance_cov_);
+    nh_private_.param("healthy_feature_distance_cov_increment",
+                      healthy_feature_distance_cov_increment_,
+                      healthy_feature_distance_cov_increment_);
+    nh_private_.param("unhealthy_feature_distance_cov",
+                      unhealthy_feature_distance_cov_,
+                      unhealthy_feature_distance_cov_);
+    nh_private_.param("unhealthy_velocity", unhealthy_velocity_,
+                      unhealthy_velocity_);
+  }
 
   // Access settings programmatically.
-  bool active() const { return active_; }
+  bool enabled() const { return enabled_; }
 
   // Returns true if healthy; false if unhealthy and reset was triggered.
   bool shouldResetEstimator(const std::vector<float>& distance_covs_in,
@@ -76,13 +95,15 @@ class RovioHealthMonitor {
 
     if ((BvB_norm > velocity_to_consider_static_) &&
         ((BvB_norm > unhealthy_velocity_) ||
-         (feature_distance_covariance_median > unhealthy_feature_distance_cov_))) {
+         (feature_distance_covariance_median >
+          unhealthy_feature_distance_cov_))) {
       ++num_subsequent_unhealthy_updates_;
       std::cout << "Estimator fault counter: "
                 << num_subsequent_unhealthy_updates_ << "/"
                 << max_subsequent_unhealthy_updates_ << ". Might reset soon.";
 
-      if (num_subsequent_unhealthy_updates_ > max_subsequent_unhealthy_updates_) {
+      if (num_subsequent_unhealthy_updates_ >
+          max_subsequent_unhealthy_updates_) {
         std::cout << "Will reset ROVIOLI. Velocity norm: " << BvB_norm
                   << " (limit: " << unhealthy_velocity_
                   << "), median of feature distance covariances: "
@@ -130,7 +151,7 @@ class RovioHealthMonitor {
   ros::NodeHandle nh_private_;
 
   // Parameters
-  bool active_; // Whether the health checker is on or not.
+  bool enabled_;  // Whether the health checker is on or not.
 
   // The landmark covariance is not a good measure for divergence if we are
   // static.
