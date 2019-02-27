@@ -39,6 +39,7 @@
 #include "rovio/CoordinateTransform/PixelOutput.hpp"
 #include "rovio/ZeroVelocityUpdate.hpp"
 #include "rovio/MultilevelPatchAlignment.hpp"
+#include "rovio/ImageMask.hpp"
 
 namespace rovio {
 
@@ -184,6 +185,9 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   // Multicamera pointer
   MultiCamera<mtState::nCam_>* mpMultiCamera_;
 
+  // Optional image mask for removing features in masked parts of an image.
+  ImageMask mask_;
+
   // Parameter
   M3D initCovFeature_;
   double initDepth_;
@@ -230,6 +234,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double discriminativeSamplingDistance_; /**<Sampling distance for checking discriminativity of patch (if <= 0.0 no check is performed).*/
   double discriminativeSamplingGain_; /**<Gain for threshold above which the samples must lie (if <= 1.0 the patchRejectionTh is used).*/
 
+  bool apply_image_mask_; /**< Whether to apply an image mask loaded from a path. */
 
   // Temporary
   mutable PixelOutputCT pixelOutputCT_;
@@ -987,6 +992,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         for(int l=endLevel_;l<=startLevel_;l++){
           meas.aux().pyr_[camID].detectFastCorners(candidates_,l,fastDetectionThreshold_);
         }
+
+        if (apply_image_mask_) {
+          mask_.pruneFeatureVector(&candidates_);
+        }
+
         const double t2 = (double) cv::getTickCount();
         if(verbose_) std::cout << "== Detected " << candidates_.size() << " on levels " << endLevel_ << "-" << startLevel_ << " (" << (t2-t1)/cv::getTickFrequency()*1000 << " ms)" << std::endl;
         std::unordered_set<unsigned int> newSet = filterState.fsm_.addBestCandidates(candidates_,meas.aux().pyr_[camID],camID,filterState.t_,
@@ -1117,6 +1127,16 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     cv::line(filterState.img_[camID],rollCenter-rollVector2,rollCenter-rollVector3,rollColor1, 2);
     cv::ellipse(filterState.img_[camID],rollCenter,cv::Size(10,10),0,0,180,rollColor1,2,8,0);
     cv::circle(filterState.img_[camID],rollCenter,2,rollColor1,-1,8,0);
+  }
+
+  void setImageMask(const std::string& image_path) {
+    if (mask_.loadImage(image_path)) {
+      apply_image_mask_ = true;
+    }
+  }
+
+  void clearImageMask() {
+    apply_image_mask_ = false;
   }
 };
 
