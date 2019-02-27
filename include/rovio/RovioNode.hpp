@@ -50,12 +50,12 @@
 
 #include <rovio/SrvResetToPose.h>
 #include "rovio/RovioFilter.hpp"
-#include "rovio/HealthMonitor.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutput.hpp"
 #include "rovio/CoordinateTransform/FeatureOutputReadable.hpp"
 #include "rovio/CoordinateTransform/YprOutput.hpp"
 #include "rovio/CoordinateTransform/LandmarkOutput.hpp"
+#include "rovio/HealthMonitor.hpp"
 
 namespace rovio {
 
@@ -84,8 +84,6 @@ class RovioNode{
   typedef typename std::tuple_element<2,typename mtFilter::mtUpdates>::type mtVelocityUpdate;
   typedef typename mtVelocityUpdate::mtMeas mtVelocityMeas;
   mtVelocityMeas velocityUpdateMeas_;
-
-  RovioHealthMonitor healthMonitor_;
 
   struct FilterInitializationState {
     FilterInitializationState()
@@ -162,6 +160,9 @@ class RovioNode{
   sensor_msgs::Imu imuBiasMsg_;
   int msgSeq_;
 
+  // Utilities
+  RovioHealthMonitor healthMonitor_;
+
   // Rovio outputs and coordinate transformations
   typedef StandardOutput mtOutput;
   mtOutput cameraOutput_;
@@ -189,7 +190,7 @@ class RovioNode{
   /** \brief Constructor
    */
   RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
-      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_), landmarkOutputImuCT_(&mpFilter->multiCamera_),
+      : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), healthMonitor_(nh, nh_private), transformFeatureOutputCT_(&mpFilter->multiCamera_), landmarkOutputImuCT_(&mpFilter->multiCamera_),
         cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)), landmarkOutputCov_(3,3),
         featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
     #ifndef NDEBUG
@@ -510,7 +511,8 @@ class RovioNode{
     cv::Mat cv_img;
     cv_ptr->image.copyTo(cv_img);
 
-    //if(histogram_equalize_){
+    constexpr bool histogram_equalize = false;
+    if (histogram_equalize) {
       constexpr size_t hist_bins = 256;
       cv::Mat hist;
       std::vector<cv::Mat> img_vec = {cv_img};
@@ -538,7 +540,7 @@ class RovioNode{
         lut.at<uchar>(i) = (hist_bins-1)*sum;
       }
       cv::LUT(cv_img, lut, cv_img);
-    //}
+    }
 
     if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
@@ -698,7 +700,7 @@ class RovioNode{
 
         // Obtain the save filter state.
         mtFilterState& filterState = mpFilter_->safe_;
-	mtState& state = mpFilter_->safe_.state_;
+        mtState& state = mpFilter_->safe_.state_;
         state.updateMultiCameraExtrinsics(&mpFilter_->multiCamera_);
         MXD& cov = mpFilter_->safe_.cov_;
         imuOutputCT_.transformState(state,imuOutput_);
@@ -1040,16 +1042,34 @@ class RovioNode{
         }
         gotFirstMessages_ = true;
 
-        //perform health check
-        if(healthMonitor_.shouldResetEstimator(featureDistanceCov, imuOutput_)){
-          if (!init_state_.isInitialized()) {
-            std::cout << "Reinitialization already triggered. Ignoring request...";
-            return;
+        // Perform health check, if needed.
+        if (healthMonitor_.active()) {
+          // FeatureDistanceCov is only filled in if pointcloud output is active
+          // by default.
+          if (featureDistanceCov.empty()) {
+            for (unsigned int i = 0; i < mtState::nMax_; i++) {
+              if (filterState.fsm_.isValid_[i]) {
+                featureOutputReadableCT_.transformCovMat(
+                    featureOutput_, featureOutputCov_,
+                    featureOutputReadableCov_);
+                featureDistanceCov.push_back(
+                    static_cast<float>(featureOutputReadableCov_(3, 3)));
+              }
+            }
           }
+          if (healthMonitor_.shouldResetEstimator(featureDistanceCov,
+                                                  imuOutput_)) {
+            if (!init_state_.isInitialized()) {
+              std::cout << "Reinitialization already triggered. Ignoring "
+                           "request...";
+              return;
+            }
 
-          init_state_.WrWM_ = healthMonitor_.failsafe_WrWB();
-          init_state_.qMW_ = healthMonitor_.failsafe_qBW();
-          init_state_.state_ = FilterInitializationState::State::WaitForInitExternalPose;
+            init_state_.WrWM_ = healthMonitor_.failsafe_WrWB();
+            init_state_.qMW_ = healthMonitor_.failsafe_qBW();
+            init_state_.state_ =
+                FilterInitializationState::State::WaitForInitExternalPose;
+          }
         }
       }
     }
