@@ -180,6 +180,9 @@ class RovioNode{
   rovio::FeatureOutputReadableCT featureOutputReadableCT_;
   rovio::FeatureOutputReadable featureOutputReadable_;
   MXD featureOutputReadableCov_;
+  PixelOutput pixelOutput_;
+  MXD pixelOutputCov_;
+  PixelOutputCT pixelOutputCT_;
 
   // ROS names for output tf frames.
   std::string map_frame_;
@@ -1051,6 +1054,7 @@ class RovioNode{
 
         // Perform health check, if needed.
         if (healthMonitor_.enabled()) {
+          std::vector<float> feature_pixel_cov_area;
           // FeatureDistanceCov is only filled in if pointcloud output is active
           // by default.
           if (featureDistanceCov.empty()) {
@@ -1070,10 +1074,19 @@ class RovioNode{
 
                 featureDistanceCov.push_back(
                     static_cast<float>(featureOutputReadableCov_(3, 3)));
+
+                pixelOutputCT_.transformState(featureOutput_, pixelOutput_);
+                pixelOutputCT_.transformCovMat(
+                    featureOutput_, featureOutputCov_, pixelOutputCov_);
+                featureOutput_.c().setPixelCov(pixelOutputCov_);
+
+                feature_pixel_cov_area.push_back(M_PI *
+                                               featureOutput_.c().sigma1_ *
+                                               featureOutput_.c().sigma2_);
               }
             }
           }
-          if (healthMonitor_.shouldResetEstimator(featureDistanceCov,
+          if (healthMonitor_.shouldResetEstimator(feature_pixel_cov_area,
                                                   imuOutput_)) {
             if (!init_state_.isInitialized()) {
               std::cout << "Reinitialization already triggered. Ignoring "
