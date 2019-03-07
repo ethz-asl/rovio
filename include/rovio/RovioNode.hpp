@@ -1055,35 +1055,24 @@ class RovioNode{
         // Perform health check, if needed.
         if (healthMonitor_.enabled()) {
           std::vector<float> feature_pixel_cov_area;
-          // FeatureDistanceCov is only filled in if pointcloud output is active
-          // by default.
-          if (featureDistanceCov.empty()) {
-            for (unsigned int i = 0; i < mtState::nMax_; i++) {
-              if (filterState.fsm_.isValid_[i]) {
-                transformFeatureOutputCT_.setFeatureID(i);
-                transformFeatureOutputCT_.setOutputCameraID(
-                    filterState.fsm_.features_[i].mpCoordinates_->camID_);
-                transformFeatureOutputCT_.transformState(state, featureOutput_);
-                transformFeatureOutputCT_.transformCovMat(state, cov,
-                                                          featureOutputCov_);
-                featureOutputReadableCT_.transformState(featureOutput_,
-                                                        featureOutputReadable_);
-                featureOutputReadableCT_.transformCovMat(
-                    featureOutput_, featureOutputCov_,
-                    featureOutputReadableCov_);
+          for (unsigned int i = 0; i < mtState::nMax_; i++) {
+            if (filterState.fsm_.isValid_[i] &&
+                (filterState.fsm_.features_[i].mpCoordinates_->valid_c_ ||
+                filterState.fsm_.features_[i].mpCoordinates_->valid_nor_)) {
+              transformFeatureOutputCT_.setFeatureID(i);
+              transformFeatureOutputCT_.setOutputCameraID(
+                  filterState.fsm_.features_[i].mpCoordinates_->camID_);
+              transformFeatureOutputCT_.transformState(state, featureOutput_);
+              transformFeatureOutputCT_.transformCovMat(state, cov,
+                                                        featureOutputCov_);
+              pixelOutputCT_.transformState(featureOutput_, pixelOutput_);
+              pixelOutputCT_.transformCovMat(featureOutput_, featureOutputCov_,
+                                             pixelOutputCov_);
+              featureOutput_.c().setPixelCov(pixelOutputCov_);
 
-                featureDistanceCov.push_back(
-                    static_cast<float>(featureOutputReadableCov_(3, 3)));
-
-                pixelOutputCT_.transformState(featureOutput_, pixelOutput_);
-                pixelOutputCT_.transformCovMat(
-                    featureOutput_, featureOutputCov_, pixelOutputCov_);
-                featureOutput_.c().setPixelCov(pixelOutputCov_);
-
-                feature_pixel_cov_area.push_back(M_PI *
+              feature_pixel_cov_area.push_back(M_PI *
                                                featureOutput_.c().sigma1_ *
                                                featureOutput_.c().sigma2_);
-              }
             }
           }
           if (healthMonitor_.shouldResetEstimator(feature_pixel_cov_area,
