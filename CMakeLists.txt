@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.6)
 project(rovio)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -march=native")
 set(ROVIO_NMAXFEATURE 25 CACHE STRING "Number of features for ROVIO")
 set(ROVIO_NCAM 1 CACHE STRING "Number of enabled cameras")
 set(ROVIO_NLEVELS 4 CACHE STRING "Number of image leavels for the features")
@@ -59,7 +59,8 @@ endif()
 ##################### Install ROS stuff #####################
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
-  	kindr
+  kindr
+	monolidar_fusion
 	roscpp
 	roslib
 	cv_bridge
@@ -70,6 +71,7 @@ find_package(catkin REQUIRED COMPONENTS
 	std_msgs
 	tf
 	rosbag
+	pcl_catkin
 )
 
 add_service_files(
@@ -87,7 +89,8 @@ catkin_package(
     LIBRARIES ${PROJECT_NAME}
 	CATKIN_DEPENDS
 	lightweight_filtering
-  	kindr
+  kindr
+	monolidar_fusion
 	roscpp
 	roslib
 	cv_bridge
@@ -99,6 +102,7 @@ catkin_package(
 	tf
 	rosbag
   yaml_cpp_catkin
+	pcl_catkin
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})

@@ -47,7 +47,8 @@
 #include <std_srvs/Empty.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
-
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
 #include <rovio/SrvResetToPose.h>
 #include "rovio/RovioFilter.hpp"
 #include "rovio/CoordinateTransform/RovioOutput.hpp"
@@ -134,6 +135,7 @@ class RovioNode{
   ros::Subscriber subGroundtruth_;
   ros::Subscriber subGroundtruthOdometry_;
   ros::Subscriber subVelocity_;
+  ros::Subscriber subLidarPoints_;
   ros::ServiceServer srvResetFilter_;
   ros::ServiceServer srvResetToPoseFilter_;
   ros::Publisher pubOdometry_;
@@ -211,6 +213,7 @@ class RovioNode{
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
     subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);
+    subLidarPoints_ = nh_.subscribe("lidar_points", 1000, &RovioNode::lidarCallback, this);
 
     // Initialize ROS service servers.
     srvResetFilter_ = nh_.advertiseService("rovio/reset", &RovioNode::resetServiceCallback, this);
@@ -434,6 +437,19 @@ class RovioNode{
     }
 
     delete mpTestFilterState;
+  }
+
+
+  void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud_msg)
+  {
+    std::lock_guard<std::mutex> lock(m_filter_);
+    if(init_state_.isInitialized()) {
+      // store to a buffer
+      pcl::PointCloud<pcl::PointXYZI> points;
+      pcl::fromROSMsg(*cloud_msg, points);
+      mpFilter_->safe_.lidar_points = pcl::PointCloud<pcl::PointXYZI>::ConstPtr(new pcl::PointCloud<pcl::PointXYZI>(points));
+      mpFilter_->safe_.lidar_time_ = cloud_msg->header.stamp.toSec();
+    }
   }
 
   /** \brief Callback for IMU-Messages. Adds IMU measurements (as prediction measurements) to the filter.

@@ -1000,6 +1000,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           f.mpStatistics_->status_[camID] = TRACKED;
           f.mpStatistics_->lastPatchUpdate_ = filterState.t_;
           f.mpDistance_->p_ = medianDepthParameters[camID];
+
           const float initRelDepthCovTemp_ = initCovFeature_(0,0);
           initCovFeature_(0,0) = initRelDepthCovTemp_*pow(f.mpDistance_->getParameterDerivative()*f.mpDistance_->getDistance(),2);
           filterState.resetFeatureCovariance(*it,initCovFeature_);
@@ -1053,6 +1054,14 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         filterState.fsm_.features_[i].log_previous_ = *filterState.fsm_.features_[i].mpCoordinates_;
       }
     }
+    // todo: nico if scan available -> update the feature distance
+    // todo: nico this only covers the new candidates - make sure all features receive a distance calculation since the lidar data comes in at a lower frequency
+    // either get the distance like so:
+    //for(unsigned int i=0;i<mtState::nMax_;i++){
+    //  if(filterState.fsm_.isValid_[i]){
+    //    if(filterState.state_.dep(i).getDistance()
+    filterState.calculateDepthsFromLidar();
+
     if (doFrameVisualisation_){
       for(int i=0;i<mtState::nCam_;i++){
         drawVirtualHorizon(filterState,i);

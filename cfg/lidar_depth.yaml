@@ -1,0 +1,181 @@
+%YAML:1.0
+
+# __________ Neighbor search mode __________
+
+neighbor_search_mode: 0 # 0-> take neighbor pixels in image plane using a rectangle, 1-> use kdd tree
+
+# _____ Pixel area search _____
+
+# Parameters used for neighbor lidar point selection on the image plane.
+# A rectangle is used for the neighbor selection around a given feature point.
+
+# if a kdd-tree is used (neighbor_search_mode = 1) then this is the neighbor search radius with the given feature point in the center
+# if the neighbors are selected using a rectangle on the image plane then this parameter describes the width of the rectangle
+pixelarea_search_witdh: 6
+
+# height of the rectangle (only used for selection rect)
+pixelarea_search_height: 9
+
+# offset of the rectangle in x (only used for selection rect)
+# The feature point is centered in the middle of the rect when both offset variables are 0
+pixelarea_search_offset_x: 0
+
+# offset of the rectangle in y (only used for selection rect)
+pixelarea_search_offset_y: 0
+
+
+# _____ NN-Nearest Neighbors search _____
+
+# only used when kdd tree search is used (neighbor_search_mode = 1)
+
+# if this value is 1 then the n nearest neighbors around a feature point are selected.
+do_use_nearestNeighborSearch: 0
+
+# point count when using nearestNeighbor search mode
+nnSearch_count: 10
+
+# _____ NN-Radius search _____
+
+# only used when kdd tree search is used (neighbor_search_mode = 1)
+
+# if this value is 1 then the all neighbor points inside a given radius around the feature point are selected
+do_use_radiusSearch: 1
+
+# search radius with the feature point in the center
+radiusSearch_radius: 10
+
+# minimum point count for radius search. If less neighbors are found then the feature point is set as an outlier
+radiusSearch_count_min: 1
+
+# ____________________________________
+
+
+# _____ Histogram Segmentation _____
+
+# if 1, a histogram segmentation (by the points depth) for the selected points is used
+# the bin with the most local points (local maximum) is returned (this method is used to reduce depth gaps between multiple objects inside the point selection)
+# If no local maximum has been found, the feature is rejected as a outlier
+do_use_histogram_segmentation: 1
+# the size of a single histogram bin (in meters). A bigger bin size guarantees a higher success chance to get enough points inside a bin.
+# A Smaller bin size yields a better segmentation and smaller depth gaps
+histogram_segmentation_bin_witdh: 0.3 # in meters
+# the minimum bin value (point count inside a depth range) for a valid local maximum. 
+histogram_segmentation_min_pointcount: 3
+
+# _____ depth segmentation _____
+
+# this a a different approach for depth segmentation (in contrast to histogram segmentation). 
+# the method works the following:
+# 1.) get a selection of neighbors of the features (rect of projected lidar points around the feature point in the image plane)
+# 2.) get the nearest point from the selection to the feature in the image plane
+# 3.) the given point from 3.) describes the seed point of the first lidar row
+# 4.) get the neighbor row (seed point) from the first selected row
+# 5.) select points from both lidar rows using region growing
+do_use_depth_segmentation: 0 # takes some time, deactivate for faster runtime
+# the treshold from which the gradient value will be added to the parameters
+# value_final = value + (cur_depth - depth_segmentation_max_treshold_gradient) * value_gradient
+depth_segmentation_max_treshold_gradient: 10  # in meters
+# max distance of two consecutive lidar points (base value)
+depth_segmentation_max_neighbor_distance: 0.2 # in meters
+# gradient value 
+depth_segmentation_max_neighbor_distance_gradient: 0.02 # in meters
+# maximal distance between the seed points of the both selected lidar rows (base value)
+depth_segmentation_max_seedpoint_to_seedpoint_distance: 0.5 # in meters
+# gradient
+depth_segmentation_max_seedpoint_to_seedpoint_distance_gradient: 0.05 # in meters
+# maximal distance from a lidar point to it's seedpoint (base value)
+depth_segmentation_max_neighbor_to_seedpoint_distance: 0.5 # in meters
+# gradient
+depth_segmentation_max_neighbor_to_seedpoint_distance_gradient: 0.05 # in meters
+
+depth_segmentation_max_pointcount: 4 # -1 for unboundet
+
+# _____ Calculated Depth Global Treshold _____
+
+# if 1, the depth trshold is enabled.
+# It's a simple global treshold which checks if the calculated depth of a feature is inside given bounds
+treshold_depth_enabled: 1
+# 1 -> Sets outliner points to -1; 1 -> Sets outliner points to the threshold 
+treshold_depth_mode: 0 
+# Maximum depth value allowed (upper bound)
+treshold_depth_max: 100
+# Minimum depth value allowed (lower bound)
+treshold_depth_min: 0
+
+# _____ Calculated depth local Treshold _____ 
+
+# if 1, local treshold which checks if the calculated depth is in bounds. The bounds are dependant on the depth of the 3d lidar point selection.
+treshold_depth_local_enabled: 0
+# 0 -> Sets outliner points to -1; 1 -> Sets outliner points to the threshold 
+treshold_depth_local_mode: 0 
+# -> mode how the outer tolerance border is calculated: 0 -> absolute; 1 -> relative
+treshold_depth_local_valuetype: 1 
+# The dynamic bounds value. If 0 the bounds equals the highest/lowest depth of the selected lidar points
+treshold_depth_local_value: 0.5
+
+# _____ PCA _____
+
+# pca for local plane/patch estimation. use either PCA ('do_use_PCA') or Triangle size maximation ('do_use_triangle_size_maximation')
+do_use_PCA: 0
+pca_debug: 0.01
+pca_treshold_3_abs_min: 0.005 # minimal abs value for the first eigenvalue
+pca_treshold_3_2_rel_max: 15 # the max value for the relation how much greater the biggest eigenvalue can be related to the second one
+pca_treshold_2_1_rel_min: 1.5 # the min value how much greater the second EV must be than the smallest one (relative)
+
+# _____ Ransac Plane Estimation _____
+
+# Estimation for points on the ground plane
+do_use_ransac_plane: 0
+ransac_plane_distance_treshold: 0.3
+# ransac max itearation count
+ransac_plane_max_iterations: 10000
+# probability to get a correct estimate
+ransac_plane_probability: 0.999
+# if 1, a plane is estimated in the inlier points of ransac using least squares
+ransac_plane_use_refinement: 1
+# treshold for points in plane refinement
+ransac_plane_refinement_treshold: 10.2
+# All selected points must have a maximum distance to the ground plane  
+ransac_plane_point_distance_treshold: 0.2
+# activate to ignore points outside a corridor in front of the camera
+ransac_plane_use_camx_treshold: 0
+# width of the corridor in meters
+ransac_plane_treshold_camx: 2.0
+
+# _____ plane depth estimation _____
+
+# Local Plane/Patch calculation mode (only one can be active for plane depth estimation): 
+# The patch is created by spanning a triangle over the selected 3d lidar points of the street (the inliners of the ransac plane which estimates the ground plane)
+plane_estimator_use_triangle_maximation: 0 
+# Local Plane/Patch calculation mode (only one can be active for plane depth estimation): 
+# The local Patch is created by a least suares fit over the selected 3d lidar points of the street (the inliners of the ransac plane which estimates the ground plane)
+plane_estimator_use_leastsquares: 0
+# Local Plane/Patch calculation mode (only one can be active for plane depth estimation): 
+# The patch is created like least squares but the used points are weighted by the inverse distance to the estimated ground plane. 
+# -> best method (evaulated with kitti)
+plane_estimator_use_mestimator: 1
+# a minimum treshold factor of the pointcloudsize in cam z related to the size in cam x. It's a descriptor for flatnes.
+plane_estimator_z_x_min_relation: 0
+
+
+# _____ Misc _____
+
+# = 1 if points with z < 0 in camera cs are cut out (should be turned on)
+do_use_cut_behind_camera: 1
+# = 1 -> the local patch/plane for 3d points is created by selecting three points of the 3d lidar point selection
+# which corners describes the biggest triangle (the local plane/patch is created with these points afterwards, the biggest triangle is used for directional robustnes)
+do_use_triangle_size_maximation: 1
+# 1, to check 'triangleplanar_crossnorm_treshold'
+do_check_triangleplanar_condition: 1
+# Checks if the inner angles of the triangles have a minimum value (using the crossnorm for calculation)
+# A higher value insures a more equal length of all three triangle edges
+triangleplanar_crossnorm_treshold: 0.1
+# The higher this value, the more orthogonal the local patch is to view ray (less error prone)
+viewray_plane_orthoganality_treshold: 0.03
+
+
+# _____ Debug _____
+
+do_debug_singleFeatures: 0
+do_publish_points: 0
+do_depth_calc_statistics: 0

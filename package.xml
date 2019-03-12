@@ -16,6 +16,7 @@
   <depend>cmake_modules</depend>
   <depend>lightweight_filtering</depend>
   <depend>kindr</depend>
+  <depend>monolidar_fusion</depend>
   <depend>roscpp</depend>
   <depend>roslib</depend>
   <depend>cv_bridge</depend>
@@ -28,4 +29,5 @@
   <depend>tf</depend>
   <depend>rosbag</depend>
   <depend>yaml_cpp_catkin</depend>
+  <depend>pcl_catkin</depend>
 </package>

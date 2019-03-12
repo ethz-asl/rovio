@@ -72,6 +72,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
   typedef typename Base::mtState mtState;
   rovio::MultiCamera<mtState::nCam_> multiCamera_;
   std::string cameraCalibrationFile_[mtState::nCam_];
+  std::string depthEstimatorCalibrationFile_;
   int depthTypeInt_;
 
   /** \brief Constructor. Initializes the filter.
@@ -89,6 +90,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     subHandlers_["VelocityUpdate"] = &std::get<2>(mUpdates_);
     boolRegister_.registerScalar("Common.doVECalibration",init_.state_.aux().doVECalibration_);
     intRegister_.registerScalar("Common.depthType",depthTypeInt_);
+    stringRegister_.registerScalar("DepthEstimatorCalibrationFile", depthEstimatorCalibrationFile_);
     for(int camID=0;camID<mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
@@ -188,6 +190,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       init_.state_.dep(i).setType(depthTypeInt_);
     }
+    safe_.setDepthConfig(depthEstimatorCalibrationFile_);
   };
 
   /** \brief Destructor
@@ -229,6 +232,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     kindr::RotationMatrixD R(R_CM);
     init_.state_.aux().qCM_[camID] = QPD(R);
     init_.state_.aux().MrMC_[camID] = -init_.state_.aux().qCM_[camID].inverseRotate(CrCM);
+    // todo: nico update the depthEstimator
   }
 };
 

@@ -37,6 +37,8 @@
 #include "rovio/RobocentricFeatureElement.hpp"
 #include "rovio/FeatureManager.hpp"
 #include "rovio/MultiCamera.hpp"
+#include <monolidar_fusion/DepthEstimator.h>
+#include <pcl/point_cloud.h>
 
 namespace rovio {
 
@@ -547,11 +549,16 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   ImagePyramid<nLevels> prevPyr_[nCam]; /**<Previous image pyramid.*/
   bool plotPoseMeas_; /**<Should the pose measurement be plotted.*/
   mutable MultilevelPatch<nLevels,patchSize> mlpErrorLog_[nMax];  /**<Multilevel patch containing log of error.*/
+  std::shared_ptr<Mono_Lidar::DepthEstimator> depthEstimator_;
+  // lidar pointcloud
+  pcl::PointCloud<pcl::PointXYZI>::ConstPtr lidar_points;
+  double lidar_time_;
 
   /** \brief Constructor
    */
   FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)){
     usePredictionMerge_ = true;
+    lidar_time_ = -1;
     imgTime_ = 0.0;
     imageCounter_ = 0;
     plotPoseMeas_ = true;
@@ -559,11 +566,17 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
     fsm_.allocateMissing();
     drawPB_ = 1;
     drawPS_ = mtState::patchSize_*pow(2,mtState::nLevels_-1)+2*drawPB_;
+    lidar_points = pcl::PointCloud<pcl::PointXYZI>::ConstPtr(new pcl::PointCloud<pcl::PointXYZI>());
   }
 
   /** \brief Destructor
    */
   virtual ~FilterState(){};
+
+  bool depthAssociation(double maxTd)
+  {
+    return depthEstimator_ != nullptr && std::fabs(imgTime_ - lidar_time_) < maxTd;
+  }
 
   /** \brief Sets the multicamera pointer
    *
@@ -572,6 +585,36 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   void setCamera(MultiCamera<nCam>* mpMultiCamera){
     fsm_.setCamera(mpMultiCamera);
     transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
+  }
+
+  void setDepthConfig(const std::string& filename)
+  {
+    depthEstimator_ = std::make_shared<Mono_Lidar::DepthEstimator>();
+    depthEstimator_->InitConfig(filename, false);
+    Eigen::Quaterniond qBC(fsm_.mpMultiCamera_->qCB_[0].w(), fsm_.mpMultiCamera_->qCB_[0].x(),fsm_.mpMultiCamera_->qCB_[0].y(),fsm_.mpMultiCamera_->qCB_[0].z());
+    depthEstimator_->Initialize(fsm_.mpMultiCamera_->BrBC_[0], qBC, fsm_.mpMultiCamera_->cameras_[0].K_);
+  }
+
+  void calculateDepthsFromLidar()
+  {
+    if (depthAssociation(0.05)) {
+      std::cout << "\n Computing depth association\n";
+      Eigen::Matrix2Xd imp;
+      imp.resize(nMax, 2);
+      Eigen::VectorXd depth;
+      for (int i = 0; i < nMax; i++) {
+        if (fsm_.isValid_[i]) {
+          imp(i, 0) = fsm_.features_[i].mpCoordinates_->c_.x;
+          imp(i, 1) = fsm_.features_[i].mpCoordinates_->c_.y;
+        }
+      }
+      depthEstimator_->CalculateDepth(lidar_points, imp, depth);
+      for (int i = 0; i < nMax; i++) {
+        if (fsm_.isValid_[i] && depth[i] > 0.0) {
+          fsm_.features_[i]._mpDistance->setParameter(depth[i]);
+        }
+      }
+    }
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.
