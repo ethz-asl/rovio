@@ -57,7 +57,6 @@ endif()
 find_package(catkin REQUIRED COMPONENTS
 	lightweight_filtering
   kindr
-	monolidar_fusion
 	roscpp
 	roslib
 	cv_bridge
@@ -70,6 +69,7 @@ find_package(catkin REQUIRED COMPONENTS
 	rosbag
 	pcl_catkin
 	eigen_catkin
+	monolidar_fusion
 )
 
 add_service_files(
@@ -88,7 +88,6 @@ catkin_package(
 	CATKIN_DEPENDS
 	lightweight_filtering
   kindr
-	monolidar_fusion
 	roscpp
 	roslib
 	cv_bridge
@@ -102,6 +101,7 @@ catkin_package(
   yaml_cpp_catkin
 	pcl_catkin
 	eigen_catkin
+	monolidar_fusion
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
