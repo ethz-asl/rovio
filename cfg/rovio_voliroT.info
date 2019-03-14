@@ -5,6 +5,7 @@ Common
 	doVECalibration true;		Should the camera-IMU extrinsics be calibrated online
 	depthType 1;				Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
 	verbose false;				Is the verbose active
+	depthEstimatorCalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
 }
 Camera0
 {

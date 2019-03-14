@@ -567,6 +567,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
     drawPB_ = 1;
     drawPS_ = mtState::patchSize_*pow(2,mtState::nLevels_-1)+2*drawPB_;
     lidar_points = pcl::PointCloud<pcl::PointXYZI>::ConstPtr(new pcl::PointCloud<pcl::PointXYZI>());
+    depthEstimator_ = nullptr;
   }
 
   /** \brief Destructor
@@ -575,7 +576,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
 
   bool depthAssociation(double maxTd)
   {
-    return depthEstimator_ != nullptr && std::fabs(imgTime_ - lidar_time_) < maxTd;
+    bool b1 = depthEstimator_ != nullptr;
+    bool b2 = std::fabs(imgTime_ - lidar_time_) < maxTd;
+    std::cout << "\n nullptr: " << b1 << "\ntd true/false: " << b2 << " td" << std::fabs(imgTime_ - lidar_time_) << " \n";
+    return b1 && b2;
   }
 
   /** \brief Sets the multicamera pointer
@@ -585,33 +589,47 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   void setCamera(MultiCamera<nCam>* mpMultiCamera){
     fsm_.setCamera(mpMultiCamera);
     transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
+    setDepthConfig();
   }
 
-  void setDepthConfig(const std::string& filename)
+  void setDepthConfig()
   {
-    depthEstimator_ = std::make_shared<Mono_Lidar::DepthEstimator>();
-    depthEstimator_->InitConfig(filename, false);
-    Eigen::Quaterniond qBC(fsm_.mpMultiCamera_->qCB_[0].w(), fsm_.mpMultiCamera_->qCB_[0].x(),fsm_.mpMultiCamera_->qCB_[0].y(),fsm_.mpMultiCamera_->qCB_[0].z());
-    depthEstimator_->Initialize(fsm_.mpMultiCamera_->BrBC_[0], qBC, fsm_.mpMultiCamera_->cameras_[0].K_);
+    if (depthEstimator_ != nullptr) {
+      //Eigen::Quaterniond qBC(fsm_.mpMultiCamera_->qCB_[0].w(), fsm_.mpMultiCamera_->qCB_[0].x(),fsm_.mpMultiCamera_->qCB_[0].y(),fsm_.mpMultiCamera_->qCB_[0].z());
+      Eigen::Vector3d BrBL(-0.108, -0.043, 0.005);
+      Eigen::Quaterniond qBL(0.51, 0.490, -0.494, -0.505);
+      //std::cout << "\nqBC: " << fsm_.mpMultiCamera_->qCB_[0].x() << ", " << fsm_.mpMultiCamera_->qCB_[0].y() << ", " << fsm_.mpMultiCamera_->qCB_[0].z() << ", " << fsm_.mpMultiCamera_->qCB_[0].w() <<"\n";
+      //std::cout << "\nrBC: " << fsm_.mpMultiCamera_->BrBC_[0].x() << ", " << fsm_.mpMultiCamera_->BrBC_[0].y() << ", " << fsm_.mpMultiCamera_->BrBC_[0].z() <<"\n";
+      //depthEstimator_->Initialize(fsm_.mpMultiCamera_->BrBC_[0], qBC, fsm_.mpMultiCamera_->cameras_[0].K_);
+      Eigen::Matrix3d cammatrix = fsm_.mpMultiCamera_->cameras_[0].K_;
+      depthEstimator_->Initialize(BrBL, qBL, cammatrix);
+    }
   }
 
   void calculateDepthsFromLidar()
   {
-    if (depthAssociation(0.05)) {
-      std::cout << "\n Computing depth association\n";
-      Eigen::Matrix2Xd imp;
-      imp.resize(nMax, 2);
-      Eigen::VectorXd depth;
+    if (depthAssociation(0.1)) {
+      int nValid = std::count(fsm_.isValid_, fsm_.isValid_ + nMax, true);
+      int j = 0;
+      Eigen::Matrix2Xd imp(2, nValid);
+      Eigen::VectorXd depth(nValid);
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
-          imp(i, 0) = fsm_.features_[i].mpCoordinates_->c_.x;
-          imp(i, 1) = fsm_.features_[i].mpCoordinates_->c_.y;
+          imp(0, j) = fsm_.features_[i].mpCoordinates_->c_.x;
+          imp(1, j) = fsm_.features_[i].mpCoordinates_->c_.y;
+          j++;
         }
       }
       depthEstimator_->CalculateDepth(lidar_points, imp, depth);
+      j = 0;
       for (int i = 0; i < nMax; i++) {
-        if (fsm_.isValid_[i] && depth[i] > 0.0) {
-          fsm_.features_[i]._mpDistance->setParameter(depth[i]);
+        if (fsm_.isValid_[i]) {
+          std::cout << std::fixed << std::setprecision(4);
+          std::cout << "\nBefore  " << j <<"-depth: " << state_.dep(i).getDistance() << "\n";
+          if (depth[j] > 0)
+            state_.dep(i).setParameter(depth[j]);
+          std::cout << "After   " << j <<"-depth: " << state_.dep(i).getDistance() << "\n";
+          j++;
         }
       }
     }
