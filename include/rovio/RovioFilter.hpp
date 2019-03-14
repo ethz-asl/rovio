@@ -81,6 +81,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
    */
   RovioFilter(){
     updateToUpdateMeasOnly_ = true;
+    depthEstimator_ = std::make_shared<Mono_Lidar::DepthEstimator>();
+    init_.depthEstimator_ = depthEstimator_;
     std::get<0>(mUpdates_).setCamera(&multiCamera_);
     init_.setCamera(&multiCamera_);
     depthTypeInt_ = 1;
