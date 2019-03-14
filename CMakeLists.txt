@@ -68,8 +68,8 @@ find_package(catkin REQUIRED COMPONENTS
 	tf
 	rosbag
 	pcl_catkin
-	ceres_catkin
 	eigen_catkin
+	monolidar_fusion
 )
 
 add_service_files(
@@ -100,47 +100,18 @@ catkin_package(
 	rosbag
   yaml_cpp_catkin
 	pcl_catkin
-	ceres_catkin
 	eigen_catkin
+	monolidar_fusion
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${YamlCpp_INCLUDE_DIRS})
-
-add_library(lidar_fusion
-src/DepthCalculationStatistics.cpp
-src/DepthEstimator.cpp
-src/DepthEstimatorParameters.cpp
-src/GeometryHelper.cpp
-src/HelperLidarRowSegmentation.cpp
-src/Histogram.cpp
-src/HistogramPointDepth.cpp
-src/LinePlaneIntersectionBase.cpp
-src/LinePlaneIntersectionCeckXZTreshold.cpp
-src/LinePlaneIntersectionNormal.cpp
-src/LinePlaneIntersectionOrthogonalTreshold.cpp
-src/Logger.cpp
-src/NeighborFinderBase.cpp
-src/NeighborFinderPixel.cpp
-src/PCA.cpp
-src/PlaneEstimationCalcMaxSpanningTriangle.cpp
-src/PlaneEstimationCheckPlanar.cpp
-src/PlaneEstimationLeastSquares.cpp
-src/PlaneEstimationMEstimator.cpp
-src/RansacPlane.cpp
-src/RoadDepthEstimatorBase.cpp
-src/RoadDepthEstimatorLeastSquares.cpp
-src/RoadDepthEstimatorMaxSpanningTriangle.cpp
-src/RoadDepthEstimatorMEstimator.cpp
-src/TresholdDepthGlobal.cpp
-src/TresholdDepthLocal.cpp)
-target_link_libraries(lidar_fusion ${OpenCV_LIBRARIES} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES})
 
 if(MAKE_SCENE)
 	add_library(${PROJECT_NAME} src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp src/Scene.cpp)
 else()
 	add_library(${PROJECT_NAME} src/Camera.cpp src/FeatureCoordinates.cpp src/FeatureDistance.cpp)
 endif()
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} lidar_fusion ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY} ${OpenCV_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YamlCpp_LIBRARIES} ${OpenMP_EXE_LINKER_FLAGS} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${GLEW_LIBRARY} ${OpenCV_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} rovio_generate_messages_cpp)
 
 add_executable(rovio_node src/rovio_node.cpp)
