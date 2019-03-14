@@ -553,7 +553,8 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   // lidar pointcloud
   pcl::PointCloud<pcl::PointXYZI>::ConstPtr lidar_points;
   double lidar_time_;
-
+  QPD qLB_;  /**<Quaternion Array: IMU coordinates to lidar coordinates.*/
+  V3D BrBL_;  /**<Position Vector Array: Vectors pointing from Body to the lidar frame, expressed in the Body frame.*/
   /** \brief Constructor
    */
   FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)){
@@ -589,20 +590,22 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   void setCamera(MultiCamera<nCam>* mpMultiCamera){
     fsm_.setCamera(mpMultiCamera);
     transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
-    setDepthConfig();
   }
 
-  void setDepthConfig()
+  void setDepthConfig(const QPD& qCB, const V3D& BrBC)
   {
     if (depthEstimator_ != nullptr) {
       //Eigen::Quaterniond qBC(fsm_.mpMultiCamera_->qCB_[0].w(), fsm_.mpMultiCamera_->qCB_[0].x(),fsm_.mpMultiCamera_->qCB_[0].y(),fsm_.mpMultiCamera_->qCB_[0].z());
-      Eigen::Vector3d BrBL(-0.108, -0.043, 0.005);
-      Eigen::Quaterniond qBL(0.51, 0.490, -0.494, -0.505);
+      //Eigen::Vector3d BrBL(-0.108, -0.043, 0.005);
+      //Eigen::Quaterniond qBL(0.51, 0.490, -0.494, -0.505);
       //std::cout << "\nqBC: " << fsm_.mpMultiCamera_->qCB_[0].x() << ", " << fsm_.mpMultiCamera_->qCB_[0].y() << ", " << fsm_.mpMultiCamera_->qCB_[0].z() << ", " << fsm_.mpMultiCamera_->qCB_[0].w() <<"\n";
       //std::cout << "\nrBC: " << fsm_.mpMultiCamera_->BrBC_[0].x() << ", " << fsm_.mpMultiCamera_->BrBC_[0].y() << ", " << fsm_.mpMultiCamera_->BrBC_[0].z() <<"\n";
       //depthEstimator_->Initialize(fsm_.mpMultiCamera_->BrBC_[0], qBC, fsm_.mpMultiCamera_->cameras_[0].K_);
+      QPD qLC = qLB_ * qCB.conjugated();
+      V3D BrLC = BrBL_+ BrBC;
+      Eigen::Quaterniond qLC_e(qLC.w(), qLC.x(), qLC.y(), qLC.z());
       Eigen::Matrix3d cammatrix = fsm_.mpMultiCamera_->cameras_[0].K_;
-      depthEstimator_->Initialize(BrBL, qBL, cammatrix);
+      depthEstimator_->Initialize(BrLC, qLC_e, cammatrix);
     }
   }
 
@@ -624,14 +627,17 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
       j = 0;
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
+          double d_old = state_.dep(i).getDistance();
           std::cout << std::fixed << std::setprecision(4);
-          std::cout << "\nBefore  " << j <<"-depth: " << state_.dep(i).getDistance() << "\n";
-          if (depth[j] > 0)
+          if (depth[j] > 0) {
             state_.dep(i).setParameter(depth[j]);
-          std::cout << "After   " << j <<"-depth: " << state_.dep(i).getDistance() << "\n";
+            std::cout << "\n" << fsm_.features_[i].idx_ <<" - B-depth: " << d_old << " A-depth: "
+                      << state_.dep(i).getDistance();
+          }
           j++;
         }
       }
+
     }
   }
 
