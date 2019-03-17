@@ -579,7 +579,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   {
     bool b1 = depthEstimator_ != nullptr;
     bool b2 = std::fabs(imgTime_ - lidar_time_) < maxTd;
-    std::cout << "\n nullptr: " << b1 << "\ntd true/false: " << b2 << " td" << std::fabs(imgTime_ - lidar_time_) << " \n";
+    std::cout << "\ntd" << std::fabs(imgTime_ - lidar_time_) << " \n";
     return b1 && b2;
   }
 
@@ -604,17 +604,18 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
       QPD qLC = qLB_ * qCB.conjugated();
       V3D BrLC = BrBL_+ BrBC;
       Eigen::Quaterniond qLC_e(qLC.w(), qLC.x(), qLC.y(), qLC.z());
+      std::cout << "\nqLC: " << qLC.x() << ", " << qLC.y() << ", " << qLC.z() << ", " << qLC.w();
+      std::cout << "\nBrLC: " << BrLC.x() << ", " << BrLC.y() << ", " << BrLC.z() <<"\n";
       Eigen::Matrix3d cammatrix = fsm_.mpMultiCamera_->cameras_[0].K_;
       depthEstimator_->Initialize(BrLC, qLC_e, cammatrix);
     }
   }
 
-  void calculateDepthsFromLidar()
+  bool calculateDepthsFromLidar(Eigen::Matrix2Xd& imp)
   {
-    if (depthAssociation(0.1)) {
+    if (depthAssociation(0.05)) {
       int nValid = std::count(fsm_.isValid_, fsm_.isValid_ + nMax, true);
       int j = 0;
-      Eigen::Matrix2Xd imp(2, nValid);
       Eigen::VectorXd depth(nValid);
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
@@ -637,8 +638,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
           j++;
         }
       }
-
+      return true;
     }
+    return false;
   }
 
   /** \brief Initializes the FilterState \ref Base::state_ with the IMU-Pose.

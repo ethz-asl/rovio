@@ -880,8 +880,16 @@ class RovioNode{
           pubImuBias_.publish(imuBiasMsg_);
         }
 
+        // for debugging
+        pclMsg_.header.seq = msgSeq_;
+        pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr tmp(new pcl::PointCloud<pcl::PointXYZI>());
+        filterState.depthEstimator_->getCloudCameraCs(tmp);
+        pcl::toROSMsg(*tmp, pclMsg_);
+        pclMsg_.header.frame_id = camera_frame_ + "0";
+        pubPcl_.publish(pclMsg_);
         // PointCloud message.
-        if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
+        /*if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
           pclMsg_.header.seq = msgSeq_;
           pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           markerMsg_.header.seq = msgSeq_;
@@ -987,7 +995,7 @@ class RovioNode{
           }
           pubPcl_.publish(pclMsg_);
           pubMarkers_.publish(markerMsg_);
-        }
+        }*/
         if(pubPatch_.getNumSubscribers() > 0 || forcePatchPublishing_){
           patchMsg_.header.seq = msgSeq_;
           patchMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);

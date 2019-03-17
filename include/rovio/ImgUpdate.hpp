@@ -29,6 +29,7 @@
 #ifndef ROVIO_IMGUPDATE_HPP_
 #define ROVIO_IMGUPDATE_HPP_
 
+#include <opencv-3.3.1-dev/opencv2/core/types.hpp>
 #include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
@@ -1054,13 +1055,42 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         filterState.fsm_.features_[i].log_previous_ = *filterState.fsm_.features_[i].mpCoordinates_;
       }
     }
-    // todo: nico if scan available -> update the feature distance
-    // todo: nico this only covers the new candidates - make sure all features receive a distance calculation since the lidar data comes in at a lower frequency
-    // either get the distance like so:
-    //for(unsigned int i=0;i<mtState::nMax_;i++){
-    //  if(filterState.fsm_.isValid_[i]){
-    //    if(filterState.state_.dep(i).getDistance()
-    filterState.calculateDepthsFromLidar();
+    int nValid = filterState.fsm_.getValidCount();
+    Eigen::Matrix2Xd imp(2, nValid);
+    if (filterState.calculateDepthsFromLidar(imp)) {
+      // debugging: draw all visible lidar points
+      Eigen::Matrix2Xd visiblePoints;
+      std::vector<double> depths;
+      filterState.depthEstimator_->getPointsCloudImageCs(visiblePoints, depths);
+      for (int i=0;i < depths.size();i++)
+      {
+        int intensity = static_cast<int>(2.0*depths[i]);
+        cv::Point2f pt;
+        pt.x = static_cast<float>(visiblePoints(0,i));
+        pt.y = static_cast<float>(visiblePoints(1,i));
+        cv::ellipse(filterState.img_[0], pt, cv::Size(2,2), 0, 0, 360, cv::Scalar(0,50,intensity), -1, 8, 0);
+      }
+      // debugging: draw the feature points in pink
+      for (int i=0;i < nValid;i++)
+      {
+        cv::Scalar intensity = cv::Scalar(153,50,255);
+        cv::Point2f pt;
+        pt.x = static_cast<float>(imp(0,i));
+        pt.y = static_cast<float>(imp(1,i));
+        cv::ellipse(filterState.img_[0], pt, cv::Size(3,3), 0, 0, 360, intensity, -1, 8, 0);
+      }
+      // debugging: draw the neighborhood findings in blue
+      std::vector<Eigen::Vector2d> neighbors;
+      filterState.depthEstimator_->getCloudNeighbors(neighbors);
+      for (int i=0;i < neighbors.size();i++)
+      {
+        cv::Scalar intensity = cv::Scalar(204,50,0);
+        cv::Point2f pt;
+        pt.x = static_cast<float>(neighbors[i][0]);
+        pt.y = static_cast<float>(neighbors[i][1]);
+        cv::ellipse(filterState.img_[0], pt, cv::Size(2,2), 0, 0, 360, intensity, -1, 8, 0);
+      }
+    }
 
     if (doFrameVisualisation_){
       for(int i=0;i<mtState::nCam_;i++){
