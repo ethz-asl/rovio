@@ -1059,16 +1059,13 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     Eigen::Matrix2Xd imp(2, nValid);
     if (filterState.calculateDepthsFromLidar(imp)) {
       // debugging: draw all visible lidar points
-      Eigen::Matrix2Xd visiblePoints;
+      std::vector<cv::Point2f> pts;
       std::vector<double> depths;
-      filterState.depthEstimator_->getPointsCloudImageCs(visiblePoints, depths);
+      filterState.depthEstimator_->getPointsCloudImageCs(pts, depths);
       for (int i=0;i < depths.size();i++)
       {
         int intensity = static_cast<int>(2.0*depths[i]);
-        cv::Point2f pt;
-        pt.x = static_cast<float>(visiblePoints(0,i));
-        pt.y = static_cast<float>(visiblePoints(1,i));
-        cv::ellipse(filterState.img_[0], pt, cv::Size(2,2), 0, 0, 360, cv::Scalar(0,50,intensity), -1, 8, 0);
+        cv::ellipse(filterState.img_[0], pts[i], cv::Size(2,2), 0, 0, 360, cv::Scalar(0,50,intensity), -1, 8, 0);
       }
       // debugging: draw the feature points in pink
       for (int i=0;i < nValid;i++)
