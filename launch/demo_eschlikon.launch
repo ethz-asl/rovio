@@ -1,0 +1,101 @@
+<launch>
+    <!-- 6DOF stereo demo: download a bag example from http://projects.csail.mit.edu/stata/downloads.php.
+    You will need to remove the transform /combined_odometry from the /tf messages:
+    $ rosbag filter 2011-01-20-07-18-45.bag out.bag 'topic != "/tf" or topic == "/tf" and m.transforms[0].header.frame_id != "/odom_combined"'
+    Run the example:
+    $ roslaunch rtabmap demo_stereo.launch
+    $ rosbag play -.-clock out.bag        (replace -.- by double-dashes)
+    -->
+
+	<param name="use_sim_time" type="bool" value="True"/>
+	<arg name="use_rovio" default="false"/>
+
+	<group if="$(arg use_rovio)" ns="/jay">
+		<node pkg="rovio" type="rovio_node" name="rovio" output="screen">
+			<param name="filter_config" value="$(find rovio)/cfg/rovio_filter_adis_p23022.info"/>
+			<!--<param name="filter_config" value="$(find rovio)/cfg/rovio_filter_adis_LidarAligned.info"/>-->
+			<param name="camera0_config" value="$(find rovio)/cfg/rovio_equidist_cam0_p23022.yaml"/>
+			<!--<param name="camera1_config" value="$(find rovio)/cfg/rovio_equidist_cam1_p23022.yaml"/>-->
+			<param name="imu_topic_name" value="imu0"/>
+			<param name="cam0_topic_name" value="cam0/image_raw"/>
+			<param name="world_frame" value="odom"/>
+			<param name="camera_frame" value="cam"/>
+			<param name="imu_frame" value="base_link"/>
+			<!--<param name="cam1_topic_name" value="cam1/image_raw"/>
+			<remap from="lidar_points" to="/jay/os1_points_filtered"/>-->
+		</node>
+	</group>
+
+	<node pkg="nodelet" type="nodelet" name="stereo_nodelet"  args="manager"/>
+
+  <node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc">
+     <remap from="left/image_raw"    to="/jay/cam0/image_raw"/>
+     <remap from="left/camera_info"  to="/jay/cam0/camera_info"/>
+     <remap from="right/image_raw"   to="/jay/cam1/image_raw"/>
+     <remap from="right/camera_info" to="/jay/cam1/camera_info"/>
+     <param name="disparity_range" value="128"/>
+  </node>
+
+  <group ns="rtabmap">
+		<node unless="$(arg use_rovio)" name="icpodom" pkg="rtabmap_ros" type="icp_odometry" >
+			<remap from="scan_cloud" to="/os1_cloud_node/points"/>
+		</node>
+    <!-- Visual SLAM (robot side) -->
+    <!-- args: "delete_db_on_start" and "udebug" -->
+    <node name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="--delete_db_on_start">
+			<param name="approx_sync" type="bool" value="true"/>
+
+			<param name="visual_odometry" value="false" />
+			<remap if="$(arg use_rovio)" from="odom" to="/jay/rovio/odometry" />
+			<param name="subscribe_stereo" type="bool" value="true"/>
+			<remap from="left/image_rect" to="/left/image_rect"/>
+      <remap from="left/camera_info" to="/jay/cam0/camera_info"/>
+			<remap from="right/image_rect" to="/right/image_rect"/>
+      <remap from="right/camera_info" to="/jay/cam1/camera_info"/>
+			<param name="subscribe_depth" value="false"/>
+			<param name="subscribe_scan_cloud" type="bool" value="true"/>
+			<param name="scan_cloud_topic" value="/os1_cloud_node/points"/>
+      <!--<remap from="scan_cloud" to="/os1_cloud_node/points"/>-->
+			<param name="Grid/FromDepth" type="string" value="false"/>
+
+      <param name="frame_id" type="string" value="base_link"/>
+      <param name="queue_size" type="int" value="30"/>
+
+      <param name="Rtabmap/TimeThr" type="string" value="700"/>
+      <param name="Rtabmap/DetectionRate" type="string" value="1"/>
+      <param name="SURF/HessianThreshold" type="string" value="600"/>
+      <param name="LccBow/MaxDepth" type="string" value="0"/>
+      <param name="LccBow/MinInliers" type="string" value="10"/>
+      <param name="LccBow/InlierDistance" type="string" value="0.05"/>
+      <param name="Kp/DetectorStrategy" type="string" value="0"/>   <!-- use SURF -->
+	  	<param name="Kp/NNStrategy" type="string" value="1"/>         <!-- kdTree -->
+
+      <!-- Uncomment to force 3dof loop closure constraint using                   -->
+      <!-- the 2d scans (set ScanMatchingSize=1 to correct odometry with laser)    -->
+      <!--
+	  <param name="LccIcp/Type" type="string" value="2"/>
+	  <param name="LccIcp2/CorrespondenceRatio" type="string" value="0.3"/>
+	  <param name="LccIcp2/MaxFitness" type="string" value="5"/>
+	  <param name="RGBD/ScanMatchingSize" type="string" value="0"/>
+	  -->
+
+    </node>
+
+    <!-- Visualisation (client side)
+    <node pkg="rtabmap_ros" type="rtabmapviz" name="rtabmapviz" args="-d $(find rtabmap_ros)/launch/config/rgbd_gui.ini" output="screen">
+			<param name="approx_sync" type="bool" value="true"/>
+      <param name="subscribe_scan_cloud" type="bool" value="true"/>
+			<remap from="scan_cloud" to="/os1_cloud_node/points"/>
+			<param name="queue_size" type="int" value="30"/>
+			<remap if="$(arg use_rovio)" from="odom" to="/jay/rovio/odometry" />
+			<param name="subscribe_stereo" type="bool" value="false"/>
+			<remap from="left/image_rect" to="/jay/cam0/image_raw"/>
+      <remap from="left/camera_info" to="/jay/cam0/camera_info"/>
+			<remap from="right/image_rect" to="/jay/cam1/image_raw"/>
+      <remap from="right/camera_info" to="/jay/cam1/camera_info"/>
+
+
+    </node>-->
+  </group>
+
+</launch>

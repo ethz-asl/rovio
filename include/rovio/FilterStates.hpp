@@ -579,7 +579,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   {
     bool b1 = depthEstimator_ != nullptr;
     bool b2 = std::fabs(imgTime_ - lidar_time_) < maxTd;
-    std::cout << "\ntd" << std::fabs(imgTime_ - lidar_time_) << " \n";
+    //std::cout << "\ntd" << std::fabs(imgTime_ - lidar_time_) << " \n";
     return b1 && b2;
   }
 
@@ -621,8 +621,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
           std::cout << std::fixed << std::setprecision(4);
           if (depth[j] > 0) {
             state_.dep(i).setParameter(depth[j]);
-            std::cout << "\n" << fsm_.features_[i].idx_ <<" - B-depth: " << d_old << " A-depth: "
-                      << state_.dep(i).getDistance();
+            // update its depth covariance value as well
+            // cov_(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = 0.1;
+            /*std::cout << "\n" << fsm_.features_[i].idx_ <<" - B-depth: " << d_old << " A-depth: "
+                      << state_.dep(i).getDistance();*/
           }
           j++;
         }

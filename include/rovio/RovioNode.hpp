@@ -115,6 +115,7 @@ class RovioNode{
   };
   FilterInitializationState init_state_;
 
+  bool noLidarData_;
   bool forceOdometryPublishing_;
   bool forcePoseWithCovariancePublishing_;
   bool forceTransformPublishing_;
@@ -205,6 +206,7 @@ class RovioNode{
     forceMarkersPublishing_ = false;
     forcePatchPublishing_ = false;
     gotFirstMessages_ = false;
+    noLidarData_ = true;
 
     // Subscribe topics
     subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
@@ -444,6 +446,7 @@ class RovioNode{
   {
     std::lock_guard<std::mutex> lock(m_filter_);
     if(init_state_.isInitialized()) {
+      noLidarData_ = false;
       // store to a buffer
       pcl::PointCloud<pcl::PointXYZI> points;
       pcl::fromROSMsg(*cloud_msg, points);
@@ -668,7 +671,7 @@ class RovioNode{
       }
       if(mpFilter_->safe_.t_ > oldSafeTime){ // Publish only if something changed
         for(int i=0;i<mtState::nCam_;i++){
-          if(!mpFilter_->safe_.img_[i].empty() && mpImgUpdate_->doFrameVisualisation_){
+          if(!mpFilter_->safe_.img_[i].empty() && mpImgUpdate_->doFrameVisualisation_ && (noLidarData_ || mpFilter_->safe_.depthAssociation(0.05))){
             cv::imshow("Tracker" + std::to_string(i), mpFilter_->safe_.img_[i]);
             cv::waitKey(3);
           }

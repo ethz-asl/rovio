@@ -20,13 +20,13 @@ DepthEstimator
 Camera0
 {
   CalibrationFile  ;            Camera-Calibration file for intrinsics
-  qCM_x  0.000165602436682;                               X-entry of IMU to Camera quaterion (Hamilton)
-  qCM_y  0.0030265501512;                               Y-entry of IMU to Camera quaterion (Hamilton)
-  qCM_z  -0.00090135741849;                               Z-entry of IMU to Camera quaterion (Hamilton)
-  qCM_w  0.99999500005;                               W-entry of IMU to Camera quaterion (Hamilton)
-  MrMC_x 0.0320636599239;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_y -0.0057043408936;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_z 0.0219601108622;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  qCM_x 0.006904794399557724;                               X-entry of IMU to Camera quaterion (Hamilton)
+  qCM_y 0.008429068063386835;                               Y-entry of IMU to Camera quaterion (Hamilton)
+  qCM_z -0.7017461327507543;                               Z-entry of IMU to Camera quaterion (Hamilton)
+  qCM_w 0.7123437651831056;                               W-entry of IMU to Camera quaterion (Hamilton)
+  MrMC_x 0.06848069;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_y -0.0161674;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_z -0.0025806;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 
 Init
@@ -76,7 +76,7 @@ ImgUpdate
   updateVecNormTermination 1e-4;
   maxNumIteration 20;
     doPatchWarping true;                    Should the patches be warped
-    doFrameVisualisation false;                 Should the frames be visualized
+    doFrameVisualisation true;                 Should the frames be visualized
     visualizePatches false;                   Should the patches be visualized
     useDirectMethod true;                   Should the EKF-innovation be based on direct intensity error (o.w. reprojection error)
     startLevel 2;                       Highest patch level which is being employed (must be smaller than the hardcoded template parameter)

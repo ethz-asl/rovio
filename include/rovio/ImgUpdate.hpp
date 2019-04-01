@@ -1057,7 +1057,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     }
     int nValid = filterState.fsm_.getValidCount();
     Eigen::Matrix2Xd imp(2, nValid);
-    if (filterState.calculateDepthsFromLidar(imp)) {
+    if (filterState.calculateDepthsFromLidar(imp) && doFrameVisualisation_) {
       // debugging: draw all visible lidar points
       std::vector<cv::Point2f> pts;
       std::vector<double> depths;
@@ -1077,15 +1077,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
         cv::ellipse(filterState.img_[0], pt, cv::Size(3,3), 0, 0, 360, intensity, -1, 8, 0);
       }
       // debugging: draw the neighborhood findings in blue
-      std::vector<Eigen::Vector2d> neighbors;
+      std::vector<cv::Point2f> neighbors;
       filterState.depthEstimator_->getCloudNeighbors(neighbors);
       for (int i=0;i < neighbors.size();i++)
       {
         cv::Scalar intensity = cv::Scalar(204,50,0);
-        cv::Point2f pt;
-        pt.x = static_cast<float>(neighbors[i][0]);
-        pt.y = static_cast<float>(neighbors[i][1]);
-        cv::ellipse(filterState.img_[0], pt, cv::Size(2,2), 0, 0, 360, intensity, -1, 8, 0);
+        cv::ellipse(filterState.img_[0], neighbors[i], cv::Size(2,2), 0, 0, 360, intensity, -1, 8, 0);
       }
     }
 
