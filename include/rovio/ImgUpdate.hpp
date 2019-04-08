@@ -197,6 +197,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   double penaltyDistance_;
   double zeroDistancePenalty_;
   double trackingUpperBound_,trackingLowerBound_;
+  double trackingMaxDistance_;
   double minTrackedAndFreeFeatures_;
   double minRelativeSTScore_;
   double minAbsoluteSTScore_;
@@ -318,6 +319,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     doubleRegister_.registerScalar("zeroDistancePenalty",zeroDistancePenalty_);
     doubleRegister_.registerScalar("trackingUpperBound",trackingUpperBound_);
     doubleRegister_.registerScalar("trackingLowerBound",trackingLowerBound_);
+    doubleRegister_.registerScalar("trackingMaxDistance",trackingMaxDistance_);
     doubleRegister_.registerScalar("minTrackedAndFreeFeatures",minTrackedAndFreeFeatures_);
     doubleRegister_.registerScalar("minRelativeSTScore",minRelativeSTScore_);
     doubleRegister_.registerScalar("minAbsoluteSTScore",minAbsoluteSTScore_);
@@ -796,8 +798,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
           if(filterState.fsm_.isValid_[i]){
             if(filterState.state_.dep(i).getDistance() < 1e-8){
               if(verbose_) std::cout << "    \033[33mRemoved feature " << filterState.fsm_.features_[i].idx_ << " with invalid distance parameter " << filterState.state_.dep(i).p_ << "!\033[0m" << std::endl;
-              filterState.fsm_.isValid_[i] = false;
-              filterState.resetFeatureCovariance(i,Eigen::Matrix3d::Identity());
+              filterState.removeFeature(i);
             }
           }
         }
@@ -936,6 +937,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
 
+    // todo nico: remove features with large covariances and/or ST scores. also any features with distances > threshold
+
     // Remove bad feature.
     float averageScore = filterState.fsm_.getAverageScore(); // TODO: make the following dependent on the ST-score
     if(verbose_) std::cout << "Removing features: ";
@@ -943,9 +946,13 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       if(filterState.fsm_.isValid_[i]){
         FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[i];
         if(!f.mpStatistics_->isGoodFeature(trackingUpperBound_,trackingLowerBound_)){
-          if(verbose_) std::cout << filterState.fsm_.features_[i].idx_ << ", ";
-          filterState.fsm_.isValid_[i] = false;
-          filterState.resetFeatureCovariance(i,Eigen::Matrix3d::Identity());
+          if(verbose_) std::cout << f.idx_ << ", ";
+          filterState.removeFeature(i);
+        }
+        else if (f._mpDistance != NULL && f._mpDistance->getDistance() > trackingMaxDistance_)
+        {
+          if(verbose_) std::cout << f.idx_ << ", ";
+          filterState.removeFeature(i);
         }
       }
     }
@@ -958,9 +965,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       if(filterState.fsm_.isValid_[featureIndex]){
         FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[featureIndex];
         if(!f.mpStatistics_->trackedInSomeFrame() && !f.mpStatistics_->isGoodFeature(trackingUpperBound_*factor,trackingLowerBound_*factor)){
-          if(verbose_) std::cout << filterState.fsm_.features_[featureIndex].idx_ << ", ";
-          filterState.fsm_.isValid_[featureIndex] = false;
-          filterState.resetFeatureCovariance(featureIndex,Eigen::Matrix3d::Identity());
+          if(verbose_) std::cout << f.idx_ << ", ";
+          filterState.removeFeature(featureIndex);
         }
       }
       featureIndex++;
@@ -971,6 +977,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     }
     if(verbose_) std::cout << std::endl;
 
+    // todo nico: if lidar is used, "encourage" features closer to the area that is covered by the lidar depth association
     // Get new features
     if(filterState.fsm_.getValidCount() < startDetectionTh_*mtState::nMax_){
       // Compute the median depth parameters for each camera, using the state features.

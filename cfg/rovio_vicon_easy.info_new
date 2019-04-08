@@ -2,7 +2,6 @@ Common
 {
     doVECalibration true
     verbose false
-    healthCheck false
     depthType 1
 }
 PoseUpdate
@@ -60,6 +59,17 @@ Camera0
     MrMC_x 0
     MrMC_y 0
     MrMC_z 0
+    CalibrationFile ""
+}
+DepthEstimator
+{
+    qLB_x 0
+    qLB_y 0
+    qLB_z 0
+    qLB_w 1
+    BrBL_x 0
+    BrBL_y 0
+    BrBL_z 0
     CalibrationFile ""
 }
 VelocityUpdate
@@ -121,13 +131,10 @@ ImgUpdate
     }
     useDirectMethod true
     doFrameVisualisation true
-    showCandidates false
     visualizePatches false
     removeNegativeFeatureAfterUpdate true
     useCrossCameraMeasurements true
     doStereoInitialization true
-    addGlobalBest false
-    histogramEqualize false
     useIntensityOffsetForAlignment true
     useIntensitySqewForAlignment true
     statLocalQualityRange 10
@@ -139,7 +146,6 @@ ImgUpdate
     nDetectionBuckets 100
     fastDetectionThreshold 10
     alignMaxUniSample 5
-    hmMaxSubsequentUnhealthyUpdates 1
     updateVecNormTermination 9.9999999999999995e-07
     MahalanobisTh 5.8858356000000001
     initCovFeature_0 1
@@ -152,6 +158,7 @@ ImgUpdate
     zeroDistancePenalty 100
     trackingUpperBound 0.90000000000000002
     trackingLowerBound 0.10000000000000001
+    trackingMaxDistance 0
     minTrackedAndFreeFeatures 0.5
     minRelativeSTScore 0.20000000000000001
     minAbsoluteSTScore 0.20000000000000001
@@ -172,11 +179,6 @@ ImgUpdate
     alignmentGradientExponent 0
     discriminativeSamplingDistance 0
     discriminativeSamplingGain 0
-    hmVelocityToConsiderStatic 0.10000000000000001
-    hmHealthyFeatureDistanceCov 0.5
-    hmHealthyFeatureDistanceCovIncrement 0.29999999999999999
-    hmUnhealthyFeatureDistanceCov 1
-    hmUnhealthyVelocity 5
     ZeroVelocityUpdate
     {
         isEnabled false

@@ -714,6 +714,13 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
       }
     }
   }
+
+  void removeFeature(const unsigned int index)
+  {
+    fsm_.isValid_[index] = false;
+    resetFeatureCovariance(index, Eigen::Matrix3d::Identity());
+  }
+
 };
 
 }
