@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<launch>
+  <param name="use_sim_time" value="true" />
+
+  <node pkg="rosbag" type="play" name="player" args="--clock --pause /home/nico/datasets/2018-12-03-vicon/easy-2018-12-03-17-49-09.bag"/>
+
+  <!--To set the initial camera coordinate system w.r.t. the GT provided by the vicon-->
+  <node pkg="tf" type="static_transform_publisher" name="world_vi" args="0 0 0 0 0 0 world vicon 100" />
+  <node pkg="tf" type="static_transform_publisher" name="odom_lidar_broadcaster" args="-0.0624284 -0.0806119 0.277212 0 0 0 1 imu os1 100" />
+
+  <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
+    <param name="filter_config" value="$(find rovio)/cfg/rovio_vicon_easy.info"/>
+    <param name="camera0_config" value="$(find rovio)/cfg/vicon_cam0.yaml"/>
+    <param name="imu_topic_name" value="/imu0"/>
+    <param name="cam0_topic_name" value="/cam0/image_raw"/>
+  </node>
+</launch>

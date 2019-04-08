@@ -28,6 +28,17 @@ Camera1
 	MrMC_y 0.0540646643676;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_z 0.0190387660614;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
+DepthEstimator
+{
+    qLB_x 0;
+    qLB_y 0;
+    qLB_z 0;
+    qLB_w 1;
+    BrBL_x 0;
+    BrBL_y 0;
+    BrBL_z 0;
+    CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
+}
 Init
 {
     State

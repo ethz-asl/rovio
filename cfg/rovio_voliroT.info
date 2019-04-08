@@ -18,6 +18,17 @@ Camera0
 	MrMC_y  0.007667020773169716;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
 	MrMC_z -0.0018120057039636712;											Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
+DepthEstimator
+{
+    qLB_x 0;
+    qLB_y 0;
+    qLB_z 0;
+    qLB_w 1;
+    BrBL_x 0;
+    BrBL_y 0;
+    BrBL_z 0;
+    CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
+}
 Init
 {
     State
@@ -33,7 +44,7 @@ Init
         acb_2 0;			Z-entry of accelerometer bias [m/s^2]
         gyb_0 0;			X-entry of gyroscope bias [rad/s]
         gyb_1 0;			Y-entry of gyroscope bias [rad/s]
-        gyb_2 0;			Z-entry of gyroscope bias [rad/s]				
+        gyb_2 0;			Z-entry of gyroscope bias [rad/s]
         att_x 0.875;			X-entry of initial attitude (IMU to world, Hamilton)
         att_y -0.032;			Y-entry of initial attitude (IMU to world, Hamilton)
         att_z -0.007;			Z-entry of initial attitude (IMU to world, Hamilton)

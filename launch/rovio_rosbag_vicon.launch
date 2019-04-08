@@ -3,7 +3,7 @@
   <node pkg="rovio" type="rovio_rosbag_loader" name="rovio" output="screen">
   <param name="filter_config" value="$(find rovio)/cfg/rovio_vicon_easy.info"/>
   <param name="camera0_config" value="$(find rovio)/cfg/vicon_cam0.yaml"/>
-  <param name="rosbag_filename" value="/home/nico/2018-12-03/easy-2018-12-03-17-49-09.bag"/>
+  <param name="rosbag_filename" value="/home/nico/datasets/2018-12-03-vicon/easy-2018-12-03-17-49-09.bag"/>
   <param name="imu_topic_name" value="/imu0"/>
   <param name="cam0_topic_name" value="/cam0/image_raw"/>
   <param name="record_odometry" value="true"/>
