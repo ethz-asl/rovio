@@ -101,6 +101,7 @@ ImgUpdate
     statMinGlobalQualityRange 100;                              Minimum number of frames for obtaining maximal global quality
     trackingUpperBound 0.9;                                     Threshold for local quality for min overall global quality
     trackingLowerBound 0.8;                                     Threshold for local quality for max overall global quality
+    trackingMaxDistance 100;                                    Maximum feature distance [m].
     maxFeatureFrames 10000;                      Maximum number of frames a feature can be tracked for before it is automatically rejected
     minTrackedAndFreeFeatures 0.95;                             Minimum of amount of feature which are either tracked or free
     removalFactor 1.1;                                          Factor for enforcing feature removal if not enough free
