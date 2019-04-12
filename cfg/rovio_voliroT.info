@@ -2,7 +2,7 @@
 ; #include "/home/user/workspace/rovio/cfg/rovio_custom.info"
 Common
 {
-	doVECalibration true;		Should the camera-IMU extrinsics be calibrated online
+	doVECalibration false;		Should the camera-IMU extrinsics be calibrated online
 	depthType 1;				Type of depth parametrization (0: normal, 1: inverse depth, 2: log, 3: hyperbolic)
 	verbose false;				Is the verbose active
 	depthEstimatorCalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
@@ -20,14 +20,15 @@ Camera0
 }
 DepthEstimator
 {
-    qLB_x 0;
-    qLB_y 0;
-    qLB_z 0;
-    qLB_w 1;
-    BrBL_x 0;
-    BrBL_y 0;
-    BrBL_z 0;
+    qBL_x -0.5;
+    qBL_y 0.537;
+    qBL_z 0.477;
+    qBL_w 0.484;
+    BrBL_x -0.04;
+    BrBL_y 0.165;
+    BrBL_z -0.096;
     CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
+    maxTd 0.09;
 }
 Init
 {

@@ -9,13 +9,14 @@ Common
 DepthEstimator
 {
   CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
-  qLB_x -0.492;                 Obtained using rosrun tf tf_echo imu os1_lidar
-  qLB_y 0.493;
-  qLB_z 0.503;
-  qLB_w 0.512;
+  qBL_x -0.492;                 Obtained using rosrun tf tf_echo imu os1_lidar
+  qBL_y 0.493;
+  qBL_z 0.503;
+  qBL_w 0.512;
   BrBL_x -0.011;
   BrBL_y -0.007;
   BrBL_z -0.086;
+  maxTd 0.10;
 }
 Camera0
 {

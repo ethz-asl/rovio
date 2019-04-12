@@ -190,6 +190,13 @@ class Camera{
    */
   bool pixelToBearing(const cv::Point2f& c,LWF::NormalVectorElement& n) const;
 
+  /** \brief Get the distortion coefficients in vector form.
+  * If equidistant k1, k2, k3, k4
+  * If radtan k1, k2, p1, p2, k3
+  *  @param distortion_coefficients - vector to store the coefficients in.
+  */
+  void getDistortionCoefficients(Eigen::VectorXd& distortion_coefficients) const;
+
   /** \brief Function testing the camera model by randomly mapping bearing vectors to pixel coordinates and vice versa.
    */
   void testCameraModel();

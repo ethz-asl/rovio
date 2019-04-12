@@ -96,7 +96,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     intRegister_.registerScalar("Common.depthType",depthTypeInt_);
     stringRegister_.registerScalar("DepthEstimator.CalibrationFile", depthEstimatorCalibrationFile_);
     doubleRegister_.registerVector("DepthEstimator.BrBL",init_.BrBL_);
-    doubleRegister_.registerQuaternion("DepthEstimator.qLB",init_.qLB_);
+    doubleRegister_.registerQuaternion("DepthEstimator.qBL",init_.qBL_);
+    doubleRegister_.registerScalar("DepthEstimator.maxTd", init_.depthEstimatorMaxTd_);
     for(int camID=0;camID<mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);
@@ -196,8 +197,8 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     for(int i=0;i<FILTERSTATE::mtState::nMax_;i++){
       init_.state_.dep(i).setType(depthTypeInt_);
     }
-    init_.setDepthConfig(multiCamera_.qCB_[0], multiCamera_.BrBC_[0]);
     depthEstimator_->InitConfig(depthEstimatorCalibrationFile_, false);
+    init_.setDepthEstimatorCameraData();
   };
 
   /** \brief Destructor

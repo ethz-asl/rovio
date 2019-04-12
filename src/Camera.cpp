@@ -266,6 +266,24 @@ namespace rovio{
     return success;
   }
 
+  void Camera::getDistortionCoefficients(Eigen::VectorXd& distortion_coefficients) const
+  {
+    switch(type_){
+      case RADTAN:
+        distortion_coefficients = Eigen::VectorXd(5,1);
+        distortion_coefficients << k1_, k2_, p1_, p2_, k3_;
+        break;
+      case EQUIDIST:
+        distortion_coefficients = Eigen::VectorXd(4,1);
+        distortion_coefficients << k1_, k2_, k3_, k4_;
+        break;
+      default:
+        distortion_coefficients = Eigen::VectorXd(5,1);
+        distortion_coefficients << k1_, k2_, p1_, p2_, k3_;
+        break;
+    }
+  }
+
   void Camera::testCameraModel(){
     double d = 1e-4;
     LWF::NormalVectorElement b_s;

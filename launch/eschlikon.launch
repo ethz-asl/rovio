@@ -2,11 +2,11 @@
 <launch>
   <arg name="visualize_features" default="true"/>
   <arg name="rviz" default="false"/>
-  <arg name="lidar" default="false"/>
+  <arg name="lidar" default="true"/>
 
   <param name="use_sim_time" value="true" />
 
-  <node pkg="rosbag" type="play" name="player" output="screen" args="--clock --pause /home/nico/datasets/eschlikon/eschlikon_interesting_times.bag"/>
+  <node pkg="rosbag" type="play" name="player" output="screen" args="--clock --pause /home/nico/datasets/eschlikon/eschlikon-lidar-aligned.bag"/>
 <!--/home/nico/datasets/eschlikon/eschlikon-lidar-aligned.bag"-->
   <node pkg="tf" type="static_transform_publisher" name="imucam" args="-0.043 -0.001 -0.108 -0.490 0.494 0.505 0.511 camera0 os1_lidar 10"/>
 
@@ -18,7 +18,7 @@
       <!--<param name="camera1_config" value="$(find rovio)/cfg/rovio_equidist_cam1_p23022.yaml"/>-->
       <param name="imu_topic_name" value="imu0"/>
       <param name="cam0_topic_name" value="cam0/image_raw"/>
-      <remap if="$(arg lidar)" from="lidar_points" to="/jay/os1_points_filtered"/>
+      <remap if="$(arg lidar)" from="lidar_points" to="/os1_cloud_node/points"/>
       <param name="health_monitor_enabled" value="false"/>
       <param name="unhealthy_velocity" value="6.0"/>
     </node>

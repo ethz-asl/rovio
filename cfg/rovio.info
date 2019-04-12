@@ -30,14 +30,15 @@ Camera1
 }
 DepthEstimator
 {
-    qLB_x 0;
-    qLB_y 0;
-    qLB_z 0;
-    qLB_w 1;
+    qBL_x 0;
+    qBL_y 0;
+    qBL_z 0;
+    qBL_w 1;
     BrBL_x 0;
     BrBL_y 0;
     BrBL_z 0;
     CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
+    maxTd 0.09;
 }
 Init
 {

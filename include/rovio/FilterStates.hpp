@@ -553,8 +553,9 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   // lidar pointcloud
   pcl::PointCloud<pcl::PointXYZI>::ConstPtr lidar_points;
   double lidar_time_;
-  QPD qLB_;  /**<Quaternion Array: IMU coordinates to lidar coordinates.*/
+  QPD qBL_;  /**<Quaternion Array: IMU coordinates to lidar coordinates.*/
   V3D BrBL_;  /**<Position Vector Array: Vectors pointing from Body to the lidar frame, expressed in the Body frame.*/
+  double depthEstimatorMaxTd_; /** Maximum time difference between the currently available image and lidar scan to still perform depth association */
   /** \brief Constructor
    */
   FilterState():fsm_(nullptr), transformFeatureOutputCT_(nullptr), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)){
@@ -575,12 +576,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
    */
   virtual ~FilterState(){};
 
-  bool depthAssociation(double maxTd)
+  bool doDepthAssociation()
   {
-    bool b1 = depthEstimator_ != nullptr;
-    bool b2 = std::fabs(imgTime_ - lidar_time_) < maxTd;
-    //std::cout << "\ntd" << std::fabs(imgTime_ - lidar_time_) << " \n";
-    return b1 && b2;
+    std::cout << "\ntd: " << std::fabs(imgTime_ - lidar_time_) << "\n";
+    return depthEstimator_ != nullptr && std::fabs(imgTime_ - lidar_time_) < depthEstimatorMaxTd_;
   }
 
   /** \brief Sets the multicamera pointer
@@ -592,17 +591,33 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
     transformFeatureOutputCT_.mpMultiCamera_ = mpMultiCamera;
   }
 
-  void setDepthConfig(const QPD& qCB, const V3D& BrBC)
+  void setDepthEstimatorCameraData()
   {
     if (depthEstimator_ != nullptr) {
       Eigen::Matrix3d cammatrix = fsm_.mpMultiCamera_->cameras_[0].K_;
-      depthEstimator_->Initialize(cammatrix);
+      Eigen::VectorXd distortion;
+      fsm_.mpMultiCamera_->cameras_[0].getDistortionCoefficients(distortion);
+      depthEstimator_->Initialize(cammatrix, distortion);
     }
+  }
+
+  void updateLidarPoints()
+  {
+    // there is new data - so we use it
+    // update q,r
+    auto qCL = state_.qCM() * qBL_;
+    auto rCL = BrBL_ - state_.MrMC();
+    //std::cout << std::endl << "r_BC: " << state_.MrMC();
+    //std::cout << std::endl << "q_CB [xyzw]: " << state_.qCM().x() << ", " << state_.qCM().y() << ", " << state_.qCM().z() << ", " << state_.qCM().w();
+    //std::cout << std::endl << "q_CL [xyzw]: " << qCL.x() << ", " << qCL.y() << ", " << qCL.z() << ", " << qCL.w();
+    //std::cout << std::endl << "r_CL: " << rCL << std::endl;
+    Eigen::Vector4d qCLe = qCL.vector();
+    depthEstimator_->setInputCloud(lidar_points, qCLe, rCL);
   }
 
   bool calculateDepthsFromLidar(Eigen::Matrix2Xd& imp)
   {
-    if (depthAssociation(0.05)) {
+    if (doDepthAssociation()) {
       int nValid = std::count(fsm_.isValid_, fsm_.isValid_ + nMax, true);
       int j = 0;
       Eigen::VectorXd depth(nValid);
@@ -613,12 +628,12 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
           j++;
         }
       }
-      depthEstimator_->CalculateDepth(lidar_points, imp, depth);
+      depthEstimator_->CalculateDepth(imp, depth);
       j = 0;
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
           double d_old = state_.dep(i).getDistance();
-          std::cout << std::fixed << std::setprecision(4);
+          //std::cout << std::fixed << std::setprecision(4);
           if (depth[j] > 0) {
             state_.dep(i).setParameter(depth[j]);
             // update its depth covariance value as well
