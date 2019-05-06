@@ -623,8 +623,10 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
       Eigen::VectorXd depth(nValid);
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
-          imp(0, j) = fsm_.features_[i].mpCoordinates_->c_.x;
-          imp(1, j) = fsm_.features_[i].mpCoordinates_->c_.y;
+          transformFeatureOutputCT_.setFeatureID(i);
+          transformFeatureOutputCT_.transformState(state_, featureOutput_);
+          imp(0, j) = featureOutput_.c().get_c().x;
+          imp(1, j) = featureOutput_.c().get_c().y;
           j++;
         }
       }

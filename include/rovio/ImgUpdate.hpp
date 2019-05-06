@@ -29,7 +29,7 @@
 #ifndef ROVIO_IMGUPDATE_HPP_
 #define ROVIO_IMGUPDATE_HPP_
 
-#include <opencv-3.3.1-dev/opencv2/core/types.hpp>
+#include <opencv2/core/types.hpp>
 #include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
