@@ -578,7 +578,6 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
 
   bool doDepthAssociation()
   {
-    std::cout << "\ntd: " << std::fabs(imgTime_ - lidar_time_) << "\n";
     return depthEstimator_ != nullptr && std::fabs(imgTime_ - lidar_time_) < depthEstimatorMaxTd_;
   }
 

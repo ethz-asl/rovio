@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<launch>
+  <param name="use_sim_time" value="true" />
+
+  <arg name="lidar" default="false"/>
+  <node pkg="rosbag" type="play" name="player" output="screen" args="--clock --pause /home/nico/datasets/long-walk-2019-01-10/2019-01-10-14-24-long-flight.bag"/>
+
+
+  <include if="$(arg lidar)" file="$(find ouster_ros)/os1_points.launch">
+  </include>
+  <!--node if="$(arg lidar)" pkg="tf" type="static_transform_publisher" name="c_s" args="-0.056028336799999995 0.1291542 -0.0913737748 0.526637856695111 0.5061155357097586 0.4831075105838945 -0.4828113147247448 camera0 os1_sensor 100" /-->
+
+  <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
+    <param name="filter_config" value="$(find rovio)/cfg/rovio_longwalk_xsens.info"/>
+    <param name="camera0_config" value="$(find rovio)/cfg/rovio_longwalk_cam0.yaml"/>
+    <remap from="imu0" to="/xsensmt_node/rawImu"/>
+    <remap from="cam0/image_raw" to="/pointgrey_spinnaker_node/image_raw"/>
+  </node>
+</launch>
