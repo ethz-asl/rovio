@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<launch>
+  <arg name="visualize_features" default="false"/>
+  <arg name="rviz" default="true"/>
+  <arg name="lidar" default="false"/>
+  <param name="use_sim_time" value="true" />
+
+  <node pkg="rosbag" type="play" name="player" output="screen" args="--clock --pause /home/nico/datasets/arche-2019-04-15/2019-04-15-13-35-53.bag"/>
+  <node pkg="tf" type="static_transform_publisher" name="enustuff" args="-1.077391565789617 0.020590230178450 -0.126814118170949 -0.0036893 0.0018447 0.948675 -0.3162259 enu world 10"/>
+  <node pkg="tf" type="static_transform_publisher" name="imucam" args="-0.006 -0.011 0.133 -0.002 0.067 0.010 0.998 imu os1 10"/>
+  <group ns="/penguin">
+    <node pkg="rovio" type="rovio_node" name="rovio" output="screen">
+      <param if="$(arg visualize_features)" name="filter_config" value="/home/nico/datasets/arche-2019-04-15/rovio_filter_blackfly.info"/>
+      <param unless="$(arg visualize_features)" name="filter_config" value="/home/nico/datasets/arche-2019-04-15/rovio_filter_blackfly.info"/>
+      <param name="camera0_config" value="/home/nico/datasets/arche-2019-04-15/rovio_equidist_cam0.yaml"/>
+      <remap from="imu0" to="mavros/imu/data_raw"/>
+      <remap from="cam0/image_raw" to="image_raw"/>
+      <remap if="$(arg lidar)" from="lidar_points" to="/penguin/os1_node/points"/>
+      <param name="health_monitor_enabled" value="false"/>
+      <param name="unhealthy_velocity" value="6.0"/>
+    </node>
+  </group>
+  <node if="$(arg rviz)" launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d /home/nico/datasets/arche-2019-04-15/arche.rviz" />
+</launch>
