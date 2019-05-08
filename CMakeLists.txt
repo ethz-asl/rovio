@@ -22,6 +22,7 @@ if(0)
 endif()
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
+add_definitions(-DEIGEN_DONT_ALIGN_STATICALLY)
 
 find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc features2d)
 
