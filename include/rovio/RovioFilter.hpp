@@ -98,6 +98,7 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
     doubleRegister_.registerVector("DepthEstimator.BrBL",init_.BrBL_);
     doubleRegister_.registerQuaternion("DepthEstimator.qBL",init_.qBL_);
     doubleRegister_.registerScalar("DepthEstimator.maxTd", init_.depthEstimatorMaxTd_);
+    doubleRegister_.registerScalar("DepthEstimator.lidarTimeOffset", init_.lidarTimeOffset_);
     for(int camID=0;camID<mtState::nCam_;camID++){
       cameraCalibrationFile_[camID] = "";
       stringRegister_.registerScalar("Camera" + std::to_string(camID) + ".CalibrationFile",cameraCalibrationFile_[camID]);

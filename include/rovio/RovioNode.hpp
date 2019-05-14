@@ -462,7 +462,7 @@ class RovioNode{
       pcl::PointCloud<pcl::PointXYZI> points;
       pcl::fromROSMsg(*cloud_msg, points);
       mpFilter_->safe_.lidar_points = pcl::PointCloud<pcl::PointXYZI>::ConstPtr(new pcl::PointCloud<pcl::PointXYZI>(points));
-      mpFilter_->safe_.lidar_time_ = cloud_msg->header.stamp.toSec();
+      mpFilter_->safe_.lidar_time_ = cloud_msg->header.stamp.toSec() + mpFilter_->safe_.lidarTimeOffset_;
       mpFilter_->safe_.updateLidarPoints();
     }
   }

@@ -37,8 +37,9 @@ DepthEstimator
     BrBL_x 0;
     BrBL_y 0;
     BrBL_z 0;
-    CalibrationFile /home/nico/catkin_ws/src/mono_lidar_depth/monolidar_fusion/parameters.yaml;
+    CalibrationFile ;
     maxTd 0.09;
+		lidarTimeOffset 0;
 }
 Init
 {

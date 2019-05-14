@@ -73,6 +73,9 @@ class RovioHealthMonitor {
                       unhealthy_feature_pixel_cov_area_);
     nh_private_.param("unhealthy_velocity", unhealthy_velocity_,
                       unhealthy_velocity_);
+    nh_private_.param("covariance_median_starting_value",
+    last_safe_pose_.feature_pixel_cov_area_median,
+    last_safe_pose_.feature_pixel_cov_area_median);
   }
 
   // Access settings programmatically.
@@ -103,11 +106,11 @@ class RovioHealthMonitor {
 
       if (num_subsequent_unhealthy_updates_ >
           max_subsequent_unhealthy_updates_) {
-        std::cout << "Will reset ROVIOLI. Velocity norm: " << BvB_norm
+        std::cout << "\033[31m\nWill reset ROVIOLI. Velocity norm: " << BvB_norm
                   << " (limit: " << unhealthy_velocity_
                   << "), median of feature pixel covariance ellipse areas: "
                   << feature_pixel_cov_area_median
-                  << " (limit: " << unhealthy_feature_pixel_cov_area_ << ").";
+                  << " (limit: " << unhealthy_feature_pixel_cov_area_ << ").\n\033[0m";
         return true;
       }
     } else {

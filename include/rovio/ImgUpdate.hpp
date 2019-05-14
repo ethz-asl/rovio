@@ -1073,7 +1073,7 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       }
     }
     int nValid = filterState.fsm_.getValidCount();
-    Eigen::Matrix2Xd imp(2, nValid);
+    Eigen::Matrix2Xd imp = Eigen::Matrix2Xd::Zero(2, nValid);
     if (filterState.calculateDepthsFromLidar(imp) && doFrameVisualisation_) {
       // debugging: draw all visible lidar points
       std::vector<cv::Point2f> pts;
@@ -1083,15 +1083,6 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
       {
         int intensity = static_cast<int>(2.0*depths[i]);
         cv::ellipse(filterState.img_[0], pts[i], cv::Size(2,2), 0, 0, 360, cv::Scalar(0,50,intensity), -1, 8, 0);
-      }
-      // debugging: draw the feature points in pink
-      for (int i=0;i < nValid;i++)
-      {
-        cv::Scalar intensity = cv::Scalar(153,50,255);
-        cv::Point2f pt;
-        pt.x = static_cast<float>(imp(0,i));
-        pt.y = static_cast<float>(imp(1,i));
-        cv::ellipse(filterState.img_[0], pt, cv::Size(3,3), 0, 0, 360, intensity, -1, 8, 0);
       }
       // debugging: draw the neighborhood findings in blue
       std::vector<cv::Point2f> neighbors;

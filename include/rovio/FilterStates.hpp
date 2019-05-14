@@ -552,7 +552,7 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   std::shared_ptr<Mono_Lidar::DepthEstimator> depthEstimator_;
   // lidar pointcloud
   pcl::PointCloud<pcl::PointXYZI>::ConstPtr lidar_points;
-  double lidar_time_;
+  double lidar_time_, lidarTimeOffset_;
   QPD qBL_;  /**<Quaternion Array: IMU coordinates to lidar coordinates.*/
   V3D BrBL_;  /**<Position Vector Array: Vectors pointing from Body to the lidar frame, expressed in the Body frame.*/
   double depthEstimatorMaxTd_; /** Maximum time difference between the currently available image and lidar scan to still perform depth association */
@@ -624,8 +624,11 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
         if (fsm_.isValid_[i]) {
           transformFeatureOutputCT_.setFeatureID(i);
           transformFeatureOutputCT_.transformState(state_, featureOutput_);
-          imp(0, j) = featureOutput_.c().get_c().x;
-          imp(1, j) = featureOutput_.c().get_c().y;
+          if (featureOutput_.c().com_c())
+          {
+            imp(0, j) = featureOutput_.c().get_c().x;
+            imp(1, j) = featureOutput_.c().get_c().y;
+          }
           j++;
         }
       }
@@ -633,10 +636,15 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
       j = 0;
       for (int i = 0; i < nMax; i++) {
         if (fsm_.isValid_[i]) {
-          double d_old = state_.dep(i).getDistance();
+          //double d_old = state_.dep(i).getDistance();
           //std::cout << std::fixed << std::setprecision(4);
           if (depth[j] > 0) {
             state_.dep(i).setParameter(depth[j]);
+            cv::Scalar intensity = cv::Scalar(153,50,255);
+            cv::Point2f pt;
+            pt.x = static_cast<float>(imp(0,i));
+            pt.y = static_cast<float>(imp(1,i));
+            cv::ellipse(img_[0], pt, cv::Size(3,3), 0, 0, 360, intensity, -1, 8, 0);
             // update its depth covariance value as well
             // cov_(mtState::template getId<mtState::_fea>(i)+2,mtState::template getId<mtState::_fea>(i)+2) = 0.1;
             /*std::cout << "\n" << fsm_.features_[i].idx_ <<" - B-depth: " << d_old << " A-depth: "
