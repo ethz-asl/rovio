@@ -10,13 +10,13 @@ Common
 Camera0
 {
   CalibrationFile  ;            Camera-Calibration file for intrinsics
-  qCM_x  0.627537177267;                               X-entry of IMU to Camera quaterion (Hamilton)
-  qCM_y  -0.610949451941;                               Y-entry of IMU to Camera quaterion (Hamilton)
-  qCM_z  0.336575956656;                               Z-entry of IMU to Camera quaterion (Hamilton)
-  qCM_w  0.345911092222;                               W-entry of IMU to Camera quaterion (Hamilton)
-  MrMC_x 0.163823572701;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_y 0.0012319733995;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
-  MrMC_z -0.0619473034565;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  qCM_x  -0.0061738;                               X-entry of IMU to Camera quaterion (Hamilton)
+  qCM_y  0.7065512;                               Y-entry of IMU to Camera quaterion (Hamilton)
+  qCM_z  0.707635;                               Z-entry of IMU to Camera quaterion (Hamilton)
+  qCM_w  0.0001033;                               W-entry of IMU to Camera quaterion (Hamilton)
+  MrMC_x -0.03422715855358821;                               X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_y 0.05631226626235311;                               Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+  MrMC_z 0.05622655837534756;                               Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
 }
 
 Init
@@ -141,9 +141,9 @@ Prediction
         pos_0 1e-4;                             X-covariance parameter of position prediction [m^2/s]
         pos_1 1e-4;                             Y-covariance parameter of position prediction [m^2/s]
         pos_2 1e-4;                             Z-covariance parameter of position prediction [m^2/s]
-        vel_0 8e-4; 4e-6                        X-covariance parameter of velocity prediction [m^2/s^3]
-        vel_1 8e-4;                             Y-covariance parameter of velocity prediction [m^2/s^3]
-        vel_2 8e-4;                             Z-covariance parameter of velocity prediction [m^2/s^3]
+        vel_0 2e-6; 4e-6                        X-covariance parameter of velocity prediction [m^2/s^3]
+        vel_1 8e-6;                             Y-covariance parameter of velocity prediction [m^2/s^3]
+        vel_2 8e-6;                             Z-covariance parameter of velocity prediction [m^2/s^3]
         acb_0 5e-6;                             X-covariance parameter of accelerometer bias prediction [m^2/s^5]
         acb_1 5e-6;                             Y-covariance parameter of accelerometer bias prediction [m^2/s^5]
         acb_2 5e-6;                             Z-covariance parameter of accelerometer bias prediction [m^2/s^5]
