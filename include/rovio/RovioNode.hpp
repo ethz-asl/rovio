@@ -516,11 +516,15 @@ class RovioNode{
       if (img->encoding == sensor_msgs::image_encodings::TYPE_8UC1) {
         cv_ptr = cv_bridge::toCvCopy(
             img, sensor_msgs::image_encodings::TYPE_8UC1);
-      } else if (img->encoding == sensor_msgs::image_encodings::BGR8) {
+      } 
+      /*
+      else if (img->encoding == sensor_msgs::image_encodings::BGR8) {
         cv_ptr = cv_bridge::toCvCopy(
             img, sensor_msgs::image_encodings::BGR8);
         cv::cvtColor(img, img, CV_BGR2GRAY);
-      } else {
+      } 
+      */
+      else {
         cv_ptr = cv_bridge::toCvCopy(
             img, sensor_msgs::image_encodings::MONO8);
       }
