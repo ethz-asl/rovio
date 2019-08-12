@@ -56,7 +56,8 @@ class ImuPrediction: public LWF::Prediction<FILTERSTATE>{
   mutable FeatureCoordinates oldC_;
   mutable FeatureDistance oldD_;
   mutable Eigen::Matrix2d bearingVectorJac_;
-  ImuPrediction():g_(0,0,-9.81){
+  // ImuPrediction():g_(0,0,-9.81){
+  ImuPrediction():g_(0,0,-9.761){  // Average z acc recorded in the US for 20min
     int ind;
     inertialMotionRorTh_ = 0.1;
     inertialMotionAccTh_ = 0.1;
