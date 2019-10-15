@@ -175,7 +175,7 @@ namespace rovio{
       const double d1 = std::sqrt(x2 + y2 + 1.0);
       const double d2 = std::sqrt(x2 + y2 + (k1_*d1 + 1.0)*(k1_*d1 + 1.0));
       const double scaling = 1.0f/(k2_*d2 + (1-k2_)*(k1_*d1+1.0));
-      
+
       out(0) = in(0) * scaling;
       out(1) = in(1) * scaling;
   }
@@ -194,14 +194,14 @@ namespace rovio{
     const double d1 = std::sqrt(x2 + y2 + 1.0);
     const double d2 = std::sqrt(x2 + y2 + (k1_*d1 + 1.0)*(k1_*d1 + 1.0));
     const double s = 1.0f/(k2_*d2 + (1-k2_)*(k1_*d1+1.0));
-    
+
     out(0) = in(0) * s;
     out(1) = in(1) * s;
 
     const double d1dx = in(0)/d1;
     const double d1dy = in(1)/d1;
-    const double d2dx = (2.0*in(0) + 2.0*d1dx*k1_*(d1*k1_ + 1.0))/(2.0*d2);
-    const double d2dy = (2.0*in(1) + 2.0*d1dy*k1_*(d1*k1_ + 1.0))/(2.0*d2);
+    const double d2dx = (in(0) + d1dx*k1_*(d1*k1_ + 1.0))/(d2);
+    const double d2dy = (in(1) + d1dy*k1_*(d1*k1_ + 1.0))/(d2);
 
     J(0,0) = -in(0)*(d2dx*k2_ - d1dx*k1_*(k2_ - 1.0))*s*s + s;
     J(0,1) = -s*s*in(0)*(d2dy*k2_ - d1dy*k1_*(k2_ - 1.0));
