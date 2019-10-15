@@ -230,6 +230,13 @@ class RovioNode{
     }
     pubImuBias_ = nh_.advertise<sensor_msgs::Imu>("rovio/imu_biases", 1 );
 
+    // Set up image mask, if necessary.
+    std::string image_mask_path;
+    nh_private_.param("image_mask_path", image_mask_path, image_mask_path);
+    if (!image_mask_path.empty()) {
+      mpImgUpdate_->setImageMask(image_mask_path);
+    }
+
     // Handle coordinate frame naming
     map_frame_ = "/map";
     world_frame_ = "/world";
