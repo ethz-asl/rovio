@@ -538,11 +538,8 @@ class RovioNode{
       poseUpdateMeas_.pos() = JrJV;
       QPD qJV(transform->transform.rotation.w,transform->transform.rotation.x,transform->transform.rotation.y,transform->transform.rotation.z);
       poseUpdateMeas_.att() = qJV.inverted();
-      std::cout << "calling addupdatemeas " << std::endl;
       mpFilter_->template addUpdateMeas<1>(poseUpdateMeas_,transform->header.stamp.toSec()+mpPoseUpdate_->timeOffset_);
-      std::cout << "calling update " << std::endl;
       updateAndPublish();
-      std::cout << "calling update done. " << std::endl;
     }
   }
 
