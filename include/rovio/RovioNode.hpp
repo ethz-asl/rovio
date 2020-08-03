@@ -476,6 +476,7 @@ class RovioNode{
    * @todo generalize
    */
   void imgCallback0(const sensor_msgs::ImageConstPtr & img){
+    if(img->header.seq%3) return;
     std::lock_guard<std::mutex> lock(m_filter_);
     imgCallback(img,0);
   }
