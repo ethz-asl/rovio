@@ -185,7 +185,7 @@ class RovioNode{
 
   /** \brief Constructor
    */
-  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter)
+  RovioNode(ros::NodeHandle& nh, ros::NodeHandle& nh_private, std::shared_ptr<mtFilter> mpFilter, std::string imu_topic, std::string cam0_topic, std::string cam1_topic)
       : nh_(nh), nh_private_(nh_private), mpFilter_(mpFilter), transformFeatureOutputCT_(&mpFilter->multiCamera_), landmarkOutputImuCT_(&mpFilter->multiCamera_),
         cameraOutputCov_((int)(mtOutput::D_),(int)(mtOutput::D_)), featureOutputCov_((int)(FeatureOutput::D_),(int)(FeatureOutput::D_)), landmarkOutputCov_(3,3),
         featureOutputReadableCov_((int)(FeatureOutputReadable::D_),(int)(FeatureOutputReadable::D_)){
@@ -205,9 +205,9 @@ class RovioNode{
     gotFirstMessages_ = false;
 
     // Subscribe topics
-    subImu_ = nh_.subscribe("imu0", 1000, &RovioNode::imuCallback,this);
-    subImg0_ = nh_.subscribe("cam0/image_raw", 1000, &RovioNode::imgCallback0,this);
-    subImg1_ = nh_.subscribe("cam1/image_raw", 1000, &RovioNode::imgCallback1,this);
+    subImu_ = nh_.subscribe(imu_topic, 1000, &RovioNode::imuCallback,this);
+    subImg0_ = nh_.subscribe(cam0_topic, 1000, &RovioNode::imgCallback0,this);
+    subImg1_ = nh_.subscribe(cam1_topic, 1000, &RovioNode::imgCallback1,this);
     subGroundtruth_ = nh_.subscribe("pose", 1000, &RovioNode::groundtruthCallback,this);
     subGroundtruthOdometry_ = nh_.subscribe("odometry", 1000, &RovioNode::groundtruthOdometryCallback, this);
     subVelocity_ = nh_.subscribe("abss/twist", 1000, &RovioNode::velocityCallback,this);

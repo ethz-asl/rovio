@@ -97,8 +97,15 @@ int main(int argc, char** argv){
   }
   mpFilter->refreshProperties();
 
+  std::string imu_topic_name = "/imu0";
+  nh_private.param("imu_topic_name", imu_topic_name, imu_topic_name);
+  std::string cam0_topic_name = "/cam0/image_raw";
+  nh_private.param("cam0_topic_name", cam0_topic_name, cam0_topic_name);
+  std::string cam1_topic_name = "/cam1/image_raw";
+  nh_private.param("cam1_topic_name", cam1_topic_name, cam1_topic_name);
+
   // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
+  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter, imu_topic_name, cam0_topic_name, cam1_topic_name);
   rovioNode.makeTest();
   double resetTrigger = 0.0;
   nh_private.param("record_odometry", rovioNode.forceOdometryPublishing_, rovioNode.forceOdometryPublishing_);
@@ -153,12 +160,7 @@ int main(int argc, char** argv){
   dst << src.rdbuf();
 
   std::vector<std::string> topics;
-  std::string imu_topic_name = "/imu0";
-  nh_private.param("imu_topic_name", imu_topic_name, imu_topic_name);
-  std::string cam0_topic_name = "/cam0/image_raw";
-  nh_private.param("cam0_topic_name", cam0_topic_name, cam0_topic_name);
-  std::string cam1_topic_name = "/cam1/image_raw";
-  nh_private.param("cam1_topic_name", cam1_topic_name, cam1_topic_name);
+
   std::string odometry_topic_name = rovioNode.pubOdometry_.getTopic();
   std::string transform_topic_name = rovioNode.pubTransform_.getTopic();
   std::string extrinsics_topic_name[mtFilter::mtState::nCam_];
