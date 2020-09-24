@@ -12,7 +12,8 @@ add_definitions(-DROVIO_NLEVELS=${ROVIO_NLEVELS})
 add_definitions(-DROVIO_PATCHSIZE=${ROVIO_PATCHSIZE})
 add_definitions(-DROVIO_NPOSE=${ROVIO_NPOSE})
 
-add_subdirectory(lightweight_filtering)
+# use EXCLUDE_FROM_ALL to avoid lightweight_filtering installing in root directories
+add_subdirectory(lightweight_filtering EXCLUDE_FROM_ALL)
 
 ##################### Find, include, and compile library #####################
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
@@ -120,6 +121,20 @@ add_dependencies(rovio_rosbag_loader ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catki
 add_executable(feature_tracker_node src/feature_tracker_node.cpp)
 target_link_libraries(feature_tracker_node ${PROJECT_NAME})
 add_dependencies(feature_tracker_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+# catkin install targets
+install(TARGETS rovio_node rovio_rosbag_loader feature_tracker_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+install(TARGETS ${PROJECT_NAME}
+	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+)
+
+install(DIRECTORY launch cfg
+	DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
+# Tests
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/")
 	message(STATUS "Building GTests!")
