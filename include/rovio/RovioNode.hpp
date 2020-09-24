@@ -312,7 +312,7 @@ class RovioNode{
     patchMsg_.is_dense = false;
 
     // Marker message (vizualization of uncertainty)
-    markerMsg_.header.frame_id = imu_frame_;
+    markerMsg_.header.frame_id = camera_frame_ + std::to_string(0);
     markerMsg_.id = 0;
     markerMsg_.type = visualization_msgs::Marker::LINE_LIST;
     markerMsg_.action = visualization_msgs::Marker::ADD;
@@ -868,9 +868,8 @@ class RovioNode{
         if(pubPcl_.getNumSubscribers() > 0 || pubMarkers_.getNumSubscribers() > 0 || forcePclPublishing_ || forceMarkersPublishing_){
           pclMsg_.header.seq = msgSeq_;
           pclMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-          markerMsg_.header.seq = msgSeq_;
           markerMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
-          markerMsg_.points.clear();
+          std::map<int, visualization_msgs::Marker::_points_type> points_per_cam;
           float badPoint = std::numeric_limits<float>::quiet_NaN();  // Invalid point.
           int offset = 0;
 
@@ -957,8 +956,8 @@ class RovioNode{
               point_far_msg.x = float(CrCPm[0]);
               point_far_msg.y = float(CrCPm[1]);
               point_far_msg.z = float(CrCPm[2]);
-              markerMsg_.points.push_back(point_near_msg);
-              markerMsg_.points.push_back(point_far_msg);
+              points_per_cam[camID].push_back(point_near_msg);
+              points_per_cam[camID].push_back(point_far_msg);
             }
             else {
               // If current feature is not valid copy NaN
@@ -970,7 +969,13 @@ class RovioNode{
             }
           }
           pubPcl_.publish(pclMsg_);
-          pubMarkers_.publish(markerMsg_);
+          for (auto points : points_per_cam)
+          {
+            markerMsg_.header.frame_id = camera_frame_ + std::to_string(points.first);
+            markerMsg_.id = points.first;
+            markerMsg_.points = points.second;
+            pubMarkers_.publish(markerMsg_);
+          }
         }
         if(pubPatch_.getNumSubscribers() > 0 || forcePatchPublishing_){
           patchMsg_.header.seq = msgSeq_;
