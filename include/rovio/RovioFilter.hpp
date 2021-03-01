@@ -128,10 +128,14 @@ class RovioFilter:public LWF::FilterBase<ImuPrediction<FILTERSTATE>,
       std::get<1>(mUpdates_).doubleRegister_.registerQuaternion("qWI",init_.state_.poseRot(std::get<1>(mUpdates_).inertialPoseIndex_));
       for(int j=0;j<3;j++){
         std::get<1>(mUpdates_).doubleRegister_.registerScalar("init_cov_IrIW",init_.cov_(mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).inertialPoseIndex_)+j,mtState::template getId<mtState::_pop>(std::get<1>(mUpdates_).inertialPoseIndex_)+j));
-        std::get<1>(mUpdates_).doubleRegister_.registerScalar("init_cov_qWI",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+j,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+j));
         std::get<1>(mUpdates_).doubleRegister_.registerScalar("pre_cov_IrIW",mPrediction_.prenoiP_(mtPrediction::mtNoise::template getId<mtPrediction::mtNoise::_pop>(std::get<1>(mUpdates_).inertialPoseIndex_)+j,mtPrediction::mtNoise::template getId<mtPrediction::mtNoise::_pop>(std::get<1>(mUpdates_).inertialPoseIndex_)+j));
         std::get<1>(mUpdates_).doubleRegister_.registerScalar("pre_cov_qWI",mPrediction_.prenoiP_(mtPrediction::mtNoise::template getId<mtPrediction::mtNoise::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+j,mtPrediction::mtNoise::template getId<mtPrediction::mtNoise::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+j));
       }
+      std::get<1>(mUpdates_).doubleRegister_.registerScalar("init_cov_qWI",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+0,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+0));
+      std::get<1>(mUpdates_).doubleRegister_.registerScalar("init_cov_qWI",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+1,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+1));
+
+      std::get<1>(mUpdates_).doubleRegister_.registerScalar("init_cov_qWI_x",init_.cov_(mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+2,mtState::template getId<mtState::_poa>(std::get<1>(mUpdates_).inertialPoseIndex_)+2));
+
     }
     if(std::get<1>(mUpdates_).bodyPoseIndex_>=0){
       std::get<1>(mUpdates_).doubleRegister_.registerVector("MrMV",init_.state_.poseLin(std::get<1>(mUpdates_).bodyPoseIndex_));

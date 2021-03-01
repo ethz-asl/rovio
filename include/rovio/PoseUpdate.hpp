@@ -239,6 +239,10 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
       QPD attNoise = attNoise.exponentialMap(noise.att());
       y.att() = attNoise;
     }
+      std::cout << "Innovation Position: " << y.pos() <<std::endl;
+      std::cout << "Innovation Attitude: " << y.att() <<std::endl;
+      std::cout << "IrIV: " << get_IrIW(state) + get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))) - meas_.pos() <<std::endl;
+      std::cout << "q_VI: " << get_qVM(state)*state.qWM().inverted()*get_qWI(state)*meas_.att().inverted() <<std::endl;
   }
   void jacState(MXD& F, const mtState& state) const{
     F.setZero();
@@ -266,14 +270,15 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
             -MPD(get_qVM(state)*state.qWM().inverted()).matrix();
       }
       if(inertialPoseIndex_ >= 0){
-        F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(inertialPoseIndex_)) =
-            MPD(get_qVM(state)*state.qWM().inverted()).matrix();
+       F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(inertialPoseIndex_)) =
+           -MPD(get_qVM(state)*state.qWM().inverted()).matrix();
       }
       if(bodyPoseIndex_ >= 0){
         F.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(),mtState::template getId<mtState::_poa>(bodyPoseIndex_)) =
             M3D::Identity();
       }
     }
+    std::cout << F << std::endl;
   }
   void jacNoise(MXD& G, const mtState& state) const{
     G.setZero();
@@ -286,6 +291,7 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     if(!didAlignment_ && doInertialAlignmentAtStart_){
       // qWI = qWM*qVM^T*qVI;
       qWI_ = state.qWM()*get_qVM(state).inverted()*meas.att();
+
       if(inertialPoseIndex_ >= 0){
         state.poseRot(inertialPoseIndex_) = qWI_;
       }
@@ -304,22 +310,24 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
 
       // When either position or attitude are disabled, we need to make sure that the covariance matrix is block-diagonal,
       // otherwise the unused covariance block would affect the used one when inverting later on.
-      if (enablePosition_ != enableAttitude_) {
+      //if (enablePosition_ != enableAttitude_) {
         updnoiP_.template block<3,3>(mtInnovation::template getId<mtInnovation::_att>(), mtInnovation::template getId<mtInnovation::_pos>()).setZero();
         updnoiP_.template block<3,3>(mtInnovation::template getId<mtInnovation::_pos>(), mtInnovation::template getId<mtInnovation::_att>()).setZero();
-      }
+      //}
     } else {
       updnoiP_ = defaultUpdnoiP_;
     }
-    /* std::cout << "Default\n" << defaultUpdnoiP_ << "\n\n"
+     std::cout << "Default\n" << defaultUpdnoiP_ << "\n\n"
               << "Meas\n" << meas.measuredCov() << "\n\n"
-              << "Scaled (" << useOdometryCov_ << ")\n" << updnoiP_ << "\n\n"; */
+              << "Scaled (" << useOdometryCov_ << ")\n" << updnoiP_ << "\n\n";
+
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     mtState& state = filterstate.state_;
     isFinished = true;
     // WrWC = qWI*(IrIV - qWI^T*qWM*MrMV -IrIW) +qWM*MrMC
     state.aux().poseMeasLin_ = get_qWI(state).rotate(V3D(meas.pos()-(get_qWI(state).inverted()*state.qWM()).rotate(get_MrMV(state))-get_IrIW(state)))+state.template get<mtState::_att>().rotate(state.MrMC(0));
+
     // qCW = qCM*qVM^T*qVI*qWI^T;
     state.aux().poseMeasRot_ = state.qCM(0)*get_qVM(state).inverted()*meas.att()*get_qWI(state).inverted();
   }
