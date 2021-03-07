@@ -140,6 +140,7 @@ class RovioNode{
   ros::Publisher pubTransform_;
   ros::Publisher pubPoseWithCovStamped_;
   ros::Publisher pub_T_J_W_transform;
+  ros::Publisher pub_T_J_W_transform_cov_;
   tf::TransformBroadcaster tb_;
   ros::Publisher pubPcl_;            /**<Publisher: Ros point cloud, visualizing the landmarks.*/
   ros::Publisher pubPatch_;            /**<Publisher: Patch data.*/
@@ -225,6 +226,8 @@ class RovioNode{
     pubMarkers_ = nh_.advertise<visualization_msgs::Marker>("rovio/markers", 1 );
 
     pub_T_J_W_transform = nh_.advertise<geometry_msgs::TransformStamped>("rovio/T_G_W", 1);
+    pub_T_J_W_transform_cov_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/T_G_W_cov", 1);
+
     for(int camID=0;camID<mtState::nCam_;camID++){
       pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
     }
@@ -694,6 +697,30 @@ class RovioNode{
           tf_transform_WI.setOrigin(tf::Vector3(IrIW(0),IrIW(1),IrIW(2)));
           tf_transform_WI.setRotation(tf::Quaternion(qWI.x(),qWI.y(),qWI.z(),-qWI.w()));
           tb_.sendTransform(tf_transform_WI);
+
+          // also output als pose with covariance
+          geometry_msgs::PoseWithCovarianceStamped pose_WI;
+          pose_WI.header.frame_id= map_frame_;
+          pose_WI.header.stamp = ros::Time(mpFilter_->safe_.t_);;
+          pose_WI.pose.pose.position.x = IrIW(0);
+          pose_WI.pose.pose.position.y = IrIW(1);
+          pose_WI.pose.pose.position.z = IrIW(2);
+          pose_WI.pose.pose.orientation.x = qWI.x();
+          pose_WI.pose.pose.orientation.y = qWI.y();
+          pose_WI.pose.pose.orientation.z = qWI.z();
+          pose_WI.pose.pose.orientation.w = -qWI.w();
+
+          for(unsigned int i=0;i<6;i++){
+            unsigned int ind1 = mtState::template getId<mtState::_pop>(mpPoseUpdate_->inertialPoseIndex_)+i;
+            if(i>=3) ind1 = mtState::template getId<mtState::_poa>(mpPoseUpdate_->inertialPoseIndex_)+i-3;
+            for(unsigned int j=0;j<6;j++){
+              unsigned int ind2 = mtState::template getId<mtState::_pop>(mpPoseUpdate_->inertialPoseIndex_)+j;
+              if(j>=3) ind2 = mtState::template getId<mtState::_poa>(mpPoseUpdate_->inertialPoseIndex_)+j-3;
+              pose_WI.pose.covariance[j+6*i] = cov(ind1,ind2);
+            }
+          }
+
+          pub_T_J_W_transform_cov_.publish(pose_WI);
         }
 
         // Send IMU pose.

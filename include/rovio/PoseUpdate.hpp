@@ -239,10 +239,10 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
       QPD attNoise = attNoise.exponentialMap(noise.att());
       y.att() = attNoise;
     }
-      std::cout << "Innovation Position: " << y.pos() <<std::endl;
+      /*std::cout << "Innovation Position: " << y.pos() <<std::endl;
       std::cout << "Innovation Attitude: " << y.att() <<std::endl;
       std::cout << "IrIV: " << get_IrIW(state) + get_qWI(state).inverseRotate(V3D(state.WrWM()+state.qWM().rotate(get_MrMV(state)))) - meas_.pos() <<std::endl;
-      std::cout << "q_VI: " << get_qVM(state)*state.qWM().inverted()*get_qWI(state)*meas_.att().inverted() <<std::endl;
+      std::cout << "q_VI: " << get_qVM(state)*state.qWM().inverted()*get_qWI(state)*meas_.att().inverted() <<std::endl;*/
   }
   void jacState(MXD& F, const mtState& state) const{
     F.setZero();
@@ -278,7 +278,6 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
             M3D::Identity();
       }
     }
-    std::cout << F << std::endl;
   }
   void jacNoise(MXD& G, const mtState& state) const{
     G.setZero();
@@ -317,10 +316,6 @@ class PoseUpdate: public LWF::Update<PoseInnovation,FILTERSTATE,PoseUpdateMeas,P
     } else {
       updnoiP_ = defaultUpdnoiP_;
     }
-     std::cout << "Default\n" << defaultUpdnoiP_ << "\n\n"
-              << "Meas\n" << meas.measuredCov() << "\n\n"
-              << "Scaled (" << useOdometryCov_ << ")\n" << updnoiP_ << "\n\n";
-
   }
   void postProcess(mtFilterState& filterstate, const mtMeas& meas, const mtOutlierDetection& outlierDetection, bool& isFinished){
     mtState& state = filterstate.state_;
