@@ -749,7 +749,7 @@ class RovioNode{
           imuOutputCT_.transformCovMat(state,cov,imuOutputCov_);
 
           odometryMsg_.header.seq = msgSeq_;
-          odometryMsg_.header.stamp = ros::Time::now(); //ros::Time(mpFilter_->safe_.t_);
+          odometryMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
           odometryMsg_.pose.pose.position.x = imuOutput_.WrWB()(0);
           odometryMsg_.pose.pose.position.y = imuOutput_.WrWB()(1);
           odometryMsg_.pose.pose.position.z = imuOutput_.WrWB()(2);
@@ -815,7 +815,7 @@ class RovioNode{
         // Send IMU pose message.
         if(pubTransform_.getNumSubscribers() > 0 || forceTransformPublishing_){
           transformMsg_.header.seq = msgSeq_;
-          transformMsg_.header.stamp = ros::Time(mpFilter_->safe_.t_);
+          transformMsg_.header.stamp = ros::Time(); //ros::Time(mpFilter_->safe_.t_);
           transformMsg_.transform.translation.x = imuOutput_.WrWB()(0);
           transformMsg_.transform.translation.y = imuOutput_.WrWB()(1);
           transformMsg_.transform.translation.z = imuOutput_.WrWB()(2);
