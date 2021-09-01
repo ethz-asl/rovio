@@ -125,7 +125,11 @@ class FeatureTrackerNode{
     pyr_.computeFromImage(img_,true);
 
     // Drawing
+    #if (CV_MAJOR_VERSION <= 3)
     cvtColor(img_, draw_image_, CV_GRAY2RGB);
+    #else
+    cvtColor(img_, draw_image_, cv::COLOR_GRAY2RGB);
+    #endif
     const int numPatchesPlot = 10;
     draw_patches_ = cv::Mat::zeros(numPatchesPlot*(patchSize_*pow(2,nLevels_-1)+4),3*(patchSize_*pow(2,nLevels_-1)+4),CV_8UC1);
 
