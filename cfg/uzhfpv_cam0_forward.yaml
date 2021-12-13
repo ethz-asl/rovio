@@ -1,0 +1,15 @@
+###### Camera Calibration File For Cam 0 of UZH FPV Indoor Forward Datasets ######
+image_width: 752
+image_height: 480
+camera_name: cam0
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [278.66723066149086, 0.0,319.75221200593535, 
+         0.0, 278.48991409740296, 241.96858910358173, 
+         0.0, 0.0, 1.0]
+distortion_model: equidistant
+distortion_coefficients:
+  rows: 1
+  cols: 4
+  data:  [-0.013721808247486035, 0.020727425669427896, -0.012786476702685545, 0.0025242267320687625]

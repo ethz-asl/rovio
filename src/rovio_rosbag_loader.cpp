@@ -101,6 +101,7 @@ int main(int argc, char** argv){
   rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
   rovioNode.makeTest();
   double resetTrigger = 0.0;
+  double startTime = 0.0;
   nh_private.param("record_odometry", rovioNode.forceOdometryPublishing_, rovioNode.forceOdometryPublishing_);
   nh_private.param("record_pose_with_covariance_stamped", rovioNode.forcePoseWithCovariancePublishing_, rovioNode.forcePoseWithCovariancePublishing_);
   nh_private.param("record_transform", rovioNode.forceTransformPublishing_, rovioNode.forceTransformPublishing_);
@@ -110,6 +111,7 @@ int main(int argc, char** argv){
   nh_private.param("record_markers", rovioNode.forceMarkersPublishing_, rovioNode.forceMarkersPublishing_);
   nh_private.param("record_patch", rovioNode.forcePatchPublishing_, rovioNode.forcePatchPublishing_);
   nh_private.param("reset_trigger", resetTrigger, resetTrigger);
+  nh_private.param("start_time", startTime, startTime);
 
   std::cout << "Recording";
   if(rovioNode.forceOdometryPublishing_) std::cout << ", odometry";
@@ -177,8 +179,13 @@ int main(int argc, char** argv){
 
 
   bool isTriggerInitialized = false;
+  double firstMessageTime = -1.0;
   double lastTriggerTime = 0.0;
   for(rosbag::View::iterator it = view.begin();it != view.end() && ros::ok();it++){
+    const double messageTime = it->getTime().toSec();
+    if (firstMessageTime < 0) firstMessageTime = messageTime;
+    if (messageTime - firstMessageTime < startTime) continue;
+
     if(it->getTopic() == imu_topic_name){
       sensor_msgs::Imu::ConstPtr imuMsg = it->instantiate<sensor_msgs::Imu>();
       if (imuMsg != NULL) rovioNode.imuCallback(imuMsg);
