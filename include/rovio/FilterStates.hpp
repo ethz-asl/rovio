@@ -591,8 +591,19 @@ class FilterState: public LWF::FilterState<State<nMax,nLevels,patchSize,nCam,nPo
   void initWithAccelerometer(const V3D& fMeasInit){
     V3D unitZ(0,0,1);
     if(fMeasInit.norm()>1e-6){
-      state_.qWM().setFromVectors(fMeasInit,unitZ);
-    } else {
+		if(fMeasInit.z() >= 0.0){
+			// normal imu orientaiton, setFromVectors valid
+			state_.qWM().setFromVectors(fMeasInit,unitZ);
+		}else{
+			// upside down initalization (to be tested)
+			// TODO: Calculate proper pitch/rol
+			state_.qWM().x() = 1.0;
+			state_.qWM().y() = 0.0;
+			state_.qWM().z() = 0.0;
+			state_.qWM().w() = 0.0;
+			std::cout << "-- Filter: Accelerometer upside down, performing dummy init." << std::endl;		
+		}
+	}else {
       state_.qWM().setIdentity();
     }
   }
