@@ -4,5 +4,8 @@
   <param name="filter_config" value="$(find rovio)/cfg/rovio.info"/>
   <param name="camera0_config" value="$(find rovio)/cfg/euroc_cam0.yaml"/>
   <param name="camera1_config" value="$(find rovio)/cfg/euroc_cam1.yaml"/>
+  <remap from="imu0" to="/imu0" />
+  <remap from="cam0/image_raw" to="/cam0/image_raw" />
+  <remap from="cam1/image_raw" to="/cam0/image_raw" />
   </node>
 </launch>
