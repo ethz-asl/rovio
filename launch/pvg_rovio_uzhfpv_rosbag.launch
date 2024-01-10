@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<launch>
+  <arg name="bag_name"/>
+
+  <!-- what configuration mode we are in  -->
+  <!-- 0: indoor forward facing  -->
+  <!-- 1: indoor 45 degree downward facing  -->
+  <!-- 2: outdoor forward facing  -->
+  <!-- 3: outdoor 45 degree downward facing  -->
+  <arg name="sensor_config"   default="0" />
+  
+  <node pkg="rovio" type="rovio_rosbag_loader" name="rovio" output="screen" required="true">
+  <param name="rosbag_filename" value="$(arg bag_name)"/>
+  <param name="imu_topic_name" value="/snappy_imu"/>
+  <param name="cam0_topic_name" value="/snappy_cam/stereo_l"/>
+  
+  <!-- Choose camera and config based on sensor config choice -->
+  <!-- Indoor forward -->
+  <param name="filter_config" if="$(eval arg('sensor_config') == 0)" value="$(find rovio)/cfg/pvg_rovio_uzhfpv_forward.info"/>
+  <param name="camera0_config" if="$(eval arg('sensor_config') == 0)" value="$(find rovio)/cfg/uzhfpv_cam0_forward.yaml"/>
+  <!-- Indoor 45 -->
+  <param name="filter_config" if="$(eval arg('sensor_config') == 1)" value="$(find rovio)/cfg/pvg_rovio_uzhfpv_45.info"/>
+  <param name="camera0_config" if="$(eval arg('sensor_config') == 1)" value="$(find rovio)/cfg/uzhfpv_cam0_45.yaml"/>
+
+
+  <param name="record_odometry" value="true" />
+  <param name="record_pose_with_covariance_stamped" value="true" />
+  <param name="record_transform" value="true" />
+  <param name="record_extrinsics" value="true" />
+  <param name="record_imu_bias" value="true" />
+  <param name="record_pcl" value="true" />
+  <param name="record_markers" value="true" />
+  <param name="record_patch" value="true" />
+  </node>
+</launch>

@@ -587,7 +587,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     assert(filterState.t_ == meas.aux().imgTime_);
     for(int i=0;i<mtState::nCam_;i++){
       if(doFrameVisualisation_){
+      #if (CV_MAJOR_VERSION <= 3)
         cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
+      #else
+        cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], cv::COLOR_GRAY2RGB);
+      #endif
       }
     }
     filterState.imgTime_ = filterState.t_;

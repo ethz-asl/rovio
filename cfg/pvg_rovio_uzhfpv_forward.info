@@ -1,0 +1,14 @@
+; You can partially override parameter set in this file by creating your own subset of parameter in a separate info-file and include it with:
+Camera0
+{
+	CalibrationFile ;										Camera-Calibration file for intrinsics
+	qCM_x  0.489332;										X-entry of IMU to Camera quaterion (Hamilton)
+	qCM_y  -0.503339;										Y-entry of IMU to Camera quaterion (Hamilton)
+	qCM_z  0.51065;											Z-entry of IMU to Camera quaterion (Hamilton)
+	qCM_w   -0.496427;										W-entry of IMU to Camera quaterion (Hamilton)
+	MrMC_x 0.00110212;										X-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_y 0.0217014;										Y-entry of IMU to Camera vector (expressed in IMU CF) [m]
+	MrMC_z -5.92789e-05;									Z-entry of IMU to Camera vector (expressed in IMU CF) [m]
+}
+
+#include "/home/pieter/Programs/rovio_ws/src/rovio/cfg/pvg_uzhfpv_base.info"

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<launch>
+  <arg name="bag_name"/>
+  
+  <node pkg="rovio" type="rovio_rosbag_loader" name="rovio" output="screen" required="true">
+  <param name="filter_config" value="$(find rovio)/cfg/pvg_rovio.info"/>
+  <param name="camera0_config" value="$(find rovio)/cfg/euroc_cam0.yaml"/>
+  <param name="rosbag_filename" value="$(arg bag_name)"/>
+  <param name="imu_topic_name" value="/imu0"/>
+  <param name="cam0_topic_name" value="/cam0/image_raw"/>
+  <param name="start_time" value="$(arg start_time)"/>
+  
+  <param name="record_odometry" value="true" />
+  <param name="record_pose_with_covariance_stamped" value="true" />
+  <param name="record_transform" value="true" />
+  <param name="record_extrinsics" value="true" />
+  <param name="record_imu_bias" value="true" />
+  <param name="record_pcl" value="true" />
+  <param name="record_markers" value="true" />
+  <param name="record_patch" value="true" />
+  </node>
+</launch>
