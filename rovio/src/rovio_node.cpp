@@ -31,11 +31,10 @@
 
 #include <Eigen/StdVector>
 
-#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#include <ros/ros.h>
-#include <ros/package.h>
-#include <geometry_msgs/Pose.h>
+#include <rclcpp/rclcpp.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 #pragma GCC diagnostic pop
 
 #include "rovio/RovioFilter.hpp"
@@ -78,22 +77,26 @@ typedef rovio::RovioFilter<rovio::FilterState<nMax_,nLevels_,patchSize_,nCam_,nP
 
 #ifdef MAKE_SCENE
 static rovio::RovioScene<mtFilter> mRovioScene;
+std::shared_ptr<rclcpp::Node> g_node;
 
 void idleFunc(){
-  ros::spinOnce();
+  rclcpp::spin_some(g_node);
   mRovioScene.drawScene(mRovioScene.mpFilter_->safe_);
 }
 #endif
 
 int main(int argc, char** argv){
-  ros::init(argc, argv, "rovio");
-  ros::NodeHandle nh;
-  ros::NodeHandle nh_private("~");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<rclcpp::Node>("rovio");
+#ifdef MAKE_SCENE
+  g_node = node; // Link the global node for glut
+#endif
 
-  std::string rootdir = ros::package::getPath("rovio"); // Leaks memory
+  std::string rootdir = ament_index_cpp::get_package_share_directory("rovio");
   std::string filter_config = rootdir + "/cfg/rovio.info";
 
-  nh_private.param("filter_config", filter_config, filter_config);
+  node->declare_parameter("filter_config", filter_config);
+  node->get_parameter("filter_config", filter_config);
 
   // Filter
   std::shared_ptr<mtFilter> mpFilter(new mtFilter);
@@ -102,15 +105,16 @@ int main(int argc, char** argv){
   // Force the camera calibration paths to the ones from ROS parameters.
   for (unsigned int camID = 0; camID < nCam_; ++camID) {
     std::string camera_config;
-    if (nh_private.getParam("camera" + std::to_string(camID)
-                            + "_config", camera_config)) {
+    std::string param_name = "camera" + std::to_string(camID) + "_config";
+    node->declare_parameter(param_name, "");
+    if (node->get_parameter(param_name, camera_config) && !camera_config.empty()) {
       mpFilter->cameraCalibrationFile_[camID] = camera_config;
     }
   }
   mpFilter->refreshProperties();
 
   // Node
-  rovio::RovioNode<mtFilter> rovioNode(nh, nh_private, mpFilter);
+  rovio::RovioNode<mtFilter> rovioNode(node, mpFilter);
   rovioNode.makeTest();
 
 #ifdef MAKE_SCENE
@@ -122,7 +126,8 @@ int main(int argc, char** argv){
   mRovioScene.addKeyboardCB('r',[&rovioNode]() mutable {rovioNode.requestReset();});
   glutMainLoop();
 #else
-  ros::spin();
+  rclcpp::spin(node);
 #endif
+  rclcpp::shutdown();
   return 0;
 }

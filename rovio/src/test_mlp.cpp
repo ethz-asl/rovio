@@ -348,7 +348,7 @@ TEST_F(MLPTesting, levelTranformCoordinates) {
   ASSERT_EQ(pyr.centers_[3].y,0.0);
   for(int l1=0;l1<nLevels;l1++){
     for(int l2=0;l2<nLevels;l2++){
-      pyr.levelTranformCoordinates(c_,c2,l1,l2);
+      c2 = pyr.levelTranformCoordinates(c_, l1, l2);
       ASSERT_EQ(c2.get_c().x,pow(2.0,l1-l2));
       ASSERT_EQ(c2.get_c().y,pow(2.0,l1-l2));
     }
@@ -365,7 +365,7 @@ TEST_F(MLPTesting, levelTranformCoordinates) {
   ASSERT_EQ(pyr.centers_[3].y,-1.0);
   for(int l1=0;l1<nLevels;l1++){
     for(int l2=0;l2<nLevels;l2++){
-      pyr.levelTranformCoordinates(c_,c2,l1,l2);
+      c2 = pyr.levelTranformCoordinates(c_, l1, l2);
       ASSERT_EQ(c2.get_c().x,pow(2.0,l1-l2)+(pyr.centers_[l1].x-pyr.centers_[l2].x)*pow(0.5,l2));
       ASSERT_EQ(c2.get_c().y,pow(2.0,l1-l2)+(pyr.centers_[l1].y-pyr.centers_[l2].y)*pow(0.5,l2));
     }

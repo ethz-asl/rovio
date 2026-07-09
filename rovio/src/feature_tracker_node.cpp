@@ -29,9 +29,10 @@
 #include "../include/rovio/featureTracker.hpp"
 
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "FeatureTrackerNode");
-  ros::NodeHandle nh;
-  rovio::FeatureTrackerNode featureTrackerNode(nh);
-  ros::spin();
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<rclcpp::Node>("FeatureTrackerNode");
+  rovio::FeatureTrackerNode featureTrackerNode(node);
+  rclcpp::spin(node);
+  rclcpp::shutdown();
   return 0;
 }
