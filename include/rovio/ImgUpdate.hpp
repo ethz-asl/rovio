@@ -29,6 +29,8 @@
 #ifndef ROVIO_IMGUPDATE_HPP_
 #define ROVIO_IMGUPDATE_HPP_
 
+#include <vector> 
+
 #include "lightweight_filtering/common.hpp"
 #include "lightweight_filtering/Update.hpp"
 #include "lightweight_filtering/State.hpp"
@@ -209,6 +211,8 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
   bool useDirectMethod_;  /**<If true, the innovation term is based directly on pixel intensity errors.
                               If false, the reprojection error is used for the innovation term.*/
   bool doFrameVisualisation_;
+  mutable std::vector<double> nisLog_; /** Per-feature NIS, appended once per updated feature */
+  mutable std::vector<bool> nisOutlierLog_; /** Whether each nisLog_ entry was gated as an outlier */
   bool visualizePatches_;
   bool verbose_;
   bool removeNegativeFeatureAfterUpdate_;
@@ -785,6 +789,12 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
     if(isFinished){
       commonPostProcess(filterState,meas);
     } else {
+      // Record this feature's NIS first.
+      // doOutlierDetection() has already run for this feature inside
+      // Update::performUpdate, so getMahalDistance(0) is populated here.
+      nisLog_.push_back(outlierDetection.getMahalDistance(0));
+      nisOutlierLog_.push_back(outlierDetection.isOutlier(0));
+
       FeatureManager<mtState::nLevels_,mtState::patchSize_,mtState::nCam_>& f = filterState.fsm_.features_[ID];
       const int camID = f.mpCoordinates_->camID_;
       const int activeCamID = (activeCamCounter + camID)%mtState::nCam_;
